@@ -25,6 +25,7 @@ import com.invictus.kodex.github.data.DispatchInfo
 import com.invictus.kodex.github.data.GitHubRepository
 import com.invictus.kodex.github.data.WorkflowInputParser
 import com.invictus.kodex.github.install.ApkDownloader
+import com.invictus.kodex.github.notify.ArmBuildWatch
 import com.invictus.kodex.github.notify.GhBackground
 import com.invictus.kodex.github.notify.GhNotifier
 import com.invictus.kodex.github.install.ApkInspector
@@ -107,9 +108,9 @@ class GitHubToolsController(
     }
 
     /** Runs [block] in the process-wide scope with the foreground service held, so it survives leaving the screen. */
-    private fun launchTracked(block: suspend CoroutineScope.() -> Unit): Job = jobScope.launch {
-        GhBackground.begin(appContext)
-        try { block() } finally { GhBackground.end(appContext) }
+    private fun launchTracked(tracked: Boolean = true, block: suspend CoroutineScope.() -> Unit): Job = jobScope.launch {
+        if (tracked) GhBackground.begin(appContext)
+        try { block() } finally { if (tracked) GhBackground.end(appContext) }
     }
 
     private fun str(res: Int, vararg args: Any): String = appContext.getString(res, *args)
@@ -330,8 +331,8 @@ class GitHubToolsController(
     private fun dispatch(workflow: GhWorkflow, ref: String, inputs: Map<String, String>) {
         val repo = repoProvider() ?: return
         updateRun { it.copy(dispatching = true) }
-        launchTracked {
-            notifier.updateLive(str(R.string.gh_notif_dispatch_title), str(R.string.gh_notif_dispatch_text, workflow.name, ref), null)
+        // Quick action: no notification and no foreground service for it.
+        jobScope.launch {
             // Remember the newest runs first: a dispatch returns no run id, so the new run is "the one not seen before".
             val before: Set<Long> = try {
                 repo.dispatchRuns(workflow.id, ref).map { it.id }.toSet()
@@ -344,10 +345,6 @@ class GitHubToolsController(
                 repo.dispatch(workflow.id, ref, inputs)
                 updateRun { it.copy(dispatching = false, sheetOpen = false) }
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_dispatch_ok)))
-                notifier.result(
-                    GhNotifier.KIND_DISPATCH, str(R.string.gh_notif_dispatch_done_title),
-                    str(R.string.gh_notif_dispatch_text, workflow.name, ref),
-                )
                 pollForNewRun(repo, workflow.id, ref, before)
             } catch (e: CancellationException) {
                 throw e
@@ -355,10 +352,6 @@ class GitHubToolsController(
                 updateRun { it.copy(dispatching = false) }
                 onError(e)
                 emit(GhEvent.Snack(if (e is GitHubError.NotFound) GhText.Res(R.string.gh_dispatch_not_found) else describe(e)))
-                notifier.result(
-                    GhNotifier.KIND_DISPATCH, str(R.string.gh_notif_dispatch_failed_title),
-                    describe(e).resolve(appContext), ok = false,
-                )
             }
         }
     }
@@ -400,6 +393,10 @@ class GitHubToolsController(
                 val page = repo.artifacts(1)
                 artifactsPage = 2
                 _state.update { it.copy(artifacts = page.items, artifactsHasMore = page.hasMore, artifactsLoading = false) }
+                repoRefProvider()?.let { ref ->
+                    page.items.filter { ApkResolver.isArm64(it.name) }.maxOfOrNull { it.id }
+                        ?.let { ArmBuildWatch.markSeen(appContext, ref, it) }
+                }
                 resolveApk(repo, page.items)
             } catch (e: CancellationException) {
                 throw e
@@ -481,7 +478,9 @@ class GitHubToolsController(
         val s = _state.value
         if (s.transfer != null || s.installing || s.pendingSave != null) return
         _state.update { it.copy(transfer = Transfer(artifact.id, purpose, 0f, fromApkCard), ready = null) }
-        transferJob = launchTracked {
+        // Already on disk (a quick list of one small folder): nothing long-running, so no notification.
+        val alreadyDownloaded = downloader.cachedApk(artifact.id) != null
+        transferJob = launchTracked(tracked = !alreadyDownloaded) {
             var zip: File? = null
             val title = str(R.string.gh_notif_download_title, artifact.name)
             try {
@@ -589,7 +588,7 @@ class GitHubToolsController(
             if (pending.deleteAfter) pending.file.delete()
             return
         }
-        launchTracked {
+        jobScope.launch {
             try {
                 val name = withContext(Dispatchers.IO) {
                     val out = appContext.contentResolver.openOutputStream(uri, "wt") ?: throw IOException("no output stream")
@@ -597,7 +596,6 @@ class GitHubToolsController(
                     displayName(uri)
                 }
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_saved, listOf(name ?: pending.suggestedName))))
-                notifier.result(GhNotifier.KIND_SAVE, str(R.string.gh_notif_saved_title), name ?: pending.suggestedName)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -606,7 +604,6 @@ class GitHubToolsController(
                     try { DocumentsContract.deleteDocument(appContext.contentResolver, uri) } catch (ignored: Exception) { }
                 }
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_save_failed)))
-                notifier.result(GhNotifier.KIND_SAVE, str(R.string.gh_notif_save_failed_title), pending.suggestedName, ok = false)
             } finally {
                 if (pending.deleteAfter) pending.file.delete()
             }
@@ -868,9 +865,11 @@ class GitHubToolsController(
         if (items.isEmpty() || _state.value.cleanup.running) return
         val kind = _state.value.cleanup.filters.kind
         updateCleanup { it.copy(running = true, stopRequested = false, progressDone = 0, progressTotal = items.size, result = null) }
-        cleanupJob = launchTracked {
+        // Only a big cleanup gets a notification / foreground service; a few deletes are over in seconds.
+        val big = items.size >= BIG_CLEANUP
+        cleanupJob = launchTracked(tracked = big) {
             val title = str(R.string.gh_notif_cleanup_title, appContext.getString(kindName(kind)).lowercase())
-            notifier.updateLive(title, str(R.string.gh_notif_cleanup_progress, 0, items.size), 0)
+            if (big) notifier.updateLive(title, str(R.string.gh_notif_cleanup_progress, 0, items.size), 0)
             val result = CleanupRunner().run(
                 items = items,
                 shouldStop = { _state.value.cleanup.stopRequested },
@@ -883,14 +882,14 @@ class GitHubToolsController(
                 },
                 onProgress = { done, total ->
                     updateCleanup { it.copy(progressDone = done, progressTotal = total) }
-                    notifier.updateLive(title, str(R.string.gh_notif_cleanup_progress, done, total), if (total > 0) done * 100 / total else null)
+                    if (big) notifier.updateLive(title, str(R.string.gh_notif_cleanup_progress, done, total), if (total > 0) done * 100 / total else null)
                 },
             )
-            finishCleanup(kind, items, result)
+            finishCleanup(kind, items, result, notify = big)
         }
     }
 
-    private fun finishCleanup(kind: CleanupKind, attempted: List<CleanupItem>, result: CleanupResult) {
+    private fun finishCleanup(kind: CleanupKind, attempted: List<CleanupItem>, result: CleanupResult, notify: Boolean) {
         val untouched = (result.failed.map { it.item.id } + result.notAttempted.map { it.id }).toSet()
         val gone = attempted.map { it.id }.filter { it !in untouched }.toSet()
         updateCleanup { c ->
@@ -905,7 +904,7 @@ class GitHubToolsController(
         }
         recomputePlan()
         emit(GhEvent.Snack(GhText.Res(R.string.gh_cleanup_done, listOf(result.deleted, result.failed.size))))
-        notifier.result(
+        if (notify) notifier.result(
             GhNotifier.KIND_CLEANUP, str(R.string.gh_notif_cleanup_done_title),
             str(R.string.gh_notif_cleanup_done_text, result.deleted, result.failed.size), ok = result.failed.isEmpty(),
         )
@@ -923,6 +922,7 @@ class GitHubToolsController(
     }
 
     companion object {
+        private const val BIG_CLEANUP = 5
         private const val SECTION_ARTIFACTS = "artifacts"
         private const val SECTION_DEPLOYMENTS = "deployments"
         private const val POLL_TRIES = 5

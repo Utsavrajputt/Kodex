@@ -5,6 +5,7 @@ object Routes {
     const val HOME = "home"
     const val WORKSPACE = "workspace"
     const val ALL_PROJECTS = "all_projects"
+    const val ALL_APKS = "all_apks"
     const val EDITOR = "editor"
     const val SETTINGS = "settings"
     const val SETTINGS_APPEARANCE = "settings/appearance"

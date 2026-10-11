@@ -1120,6 +1120,11 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <service
+            android:name=".github.notify.ArmBuildJobService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
         <receiver
             android:name=".github.install.InstallResultReceiver"
             android:exported="false" />

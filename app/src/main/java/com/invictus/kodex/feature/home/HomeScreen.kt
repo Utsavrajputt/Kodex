@@ -123,6 +123,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onProjectOpened: () -> Unit,
     onClone: () -> Unit = {},
+    onOpenApks: () -> Unit = {},
     onViewAll: () -> Unit = {},
     modifier: Modifier = Modifier,
     projectsViewModel: ProjectsViewModel = viewModel(factory = ProjectsViewModel.Factory),
@@ -236,8 +237,8 @@ fun HomeScreen(
                             }
                             Spacer(Modifier.width(10.dp))
                         }
-                        HeaderIconButton(onClick = onClone) {
-                            Icon(XIcons.Clone, contentDescription = stringResource(R.string.home_clone))
+                        HeaderIconButton(onClick = onOpenApks) {
+                            Icon(XIcons.Download, contentDescription = stringResource(R.string.home_apks))
                         }
                         Spacer(Modifier.width(10.dp))
                         HeaderIconButton(onClick = onOpenSettings) {
@@ -346,6 +347,11 @@ fun HomeScreen(
             error = projectsState.createError,
             onCreate = { parent, name -> projectsViewModel.onEvent(ProjectsEvent.CreateProject(parent, name)) },
             onDismissError = { projectsViewModel.onEvent(ProjectsEvent.DismissCreateError) },
+            onClone = {
+                showNewSheet = false
+                projectsViewModel.onEvent(ProjectsEvent.DismissCreateError)
+                onClone()
+            },
             onDismiss = {
                 showNewSheet = false
                 projectsViewModel.onEvent(ProjectsEvent.DismissCreateError)

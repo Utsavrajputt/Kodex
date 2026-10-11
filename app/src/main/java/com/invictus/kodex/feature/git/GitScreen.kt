@@ -221,6 +221,10 @@ fun GitScreen(
                     ) {
                         Icon(XIcons.Sync, contentDescription = stringResource(R.string.git_fetch))
                     }
+                    // GitHub Manager (runs, APKs, artifacts) lives next to Fetch.
+                    IconButton(onClick = { onOpenRoute(Routes.github(projectPath)) }) {
+                        Icon(XIcons.GitHub, contentDescription = stringResource(R.string.gh_menu_github))
+                    }
                     IconButton(
                         onClick = { viewModel.onEvent(GitEvent.OpenReset) },
                         enabled = state.snapshot?.hasCommits == true,

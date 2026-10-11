@@ -110,10 +110,7 @@ fun GitHubManagerScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(stringResource(R.string.gh_title), maxLines = 1)
-                        state.repo?.let { RepoChip(it.fullName) }
-                    }
+                    Text(stringResource(R.string.gh_title), maxLines = 1)
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -178,20 +175,6 @@ internal fun handleEvent(
 }
 
 @Composable
-private fun RepoChip(name: String) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    ) {
-        Text(
-            name, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
-        )
-    }
-}
-
-@Composable
 private fun EmptyState(title: Int, body: Int, action: Int, onAction: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(32.dp),
@@ -220,7 +203,6 @@ private fun ReadyContent(
     var pendingCancel by remember { mutableStateOf<GhRun?>(null) }
     var showAllArtifacts by rememberSaveable { mutableStateOf(false) }
     var showAllDeployments by rememberSaveable { mutableStateOf(false) }
-    var confirmDeleteDownloads by remember { mutableStateOf(false) }
     var pendingArtifactDelete by remember { mutableStateOf<GhArtifact?>(null) }
     var pendingDeploymentDelete by remember { mutableStateOf<GhDeployment?>(null) }
     val tools = vm.tools
@@ -235,7 +217,7 @@ private fun ReadyContent(
     PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             state.banner?.let { b -> item(key = "banner") { BannerCard(b, onOpenGitHubSettings) } }
-            item(key = "header") { RepoHeaderCard(state) }
+            item(key = "header") { RepoHeaderCard(state, vm.projectPath) }
             item(key = "run_workflow") {
                 RunWorkflowCard(toolsState.run, state.workflows, state.repo?.defaultBranch, tools)
             }
@@ -291,7 +273,6 @@ private fun ReadyContent(
                 }
             }
             deploymentsSection(toolsState, showAllDeployments, { showAllDeployments = true }, tools) { pendingDeploymentDelete = it }
-            downloadedSection(toolsState, tools) { confirmDeleteDownloads = true }
             artifactsSection(toolsState, showAllArtifacts, { showAllArtifacts = true }, latestApkId, tools) { pendingArtifactDelete = it }
             item(key = "cleanup") {
                 OutlinedButton(onClick = tools::openCleanup, modifier = Modifier.fillMaxWidth()) {
@@ -303,15 +284,6 @@ private fun ReadyContent(
         }
     }
 
-    if (confirmDeleteDownloads) {
-        ConfirmDeleteDialog(
-            title = stringResource(R.string.gh_downloaded_delete_all_title),
-            body = stringResource(R.string.gh_downloaded_delete_all_body, toolsState.downloaded.size),
-            confirm = stringResource(R.string.action_delete),
-            onDismiss = { confirmDeleteDownloads = false },
-            onConfirm = { confirmDeleteDownloads = false; tools.deleteAllDownloaded() },
-        )
-    }
     pendingArtifactDelete?.let { a ->
         ConfirmDeleteDialog(
             title = stringResource(R.string.gh_artifact_delete_title),
@@ -411,19 +383,16 @@ private fun BannerCard(banner: GhBanner, onReconnect: () -> Unit) {
 }
 
 @Composable
-private fun RepoHeaderCard(state: GitHubManagerState) {
-    val container = (LocalContext.current.applicationContext as KodexApp).container
+private fun RepoHeaderCard(state: GitHubManagerState, projectPath: String) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (state.avatarUrl != null) {
-                AsyncImage(
-                    model = state.avatarUrl, imageLoader = container.avatarImageLoader, contentDescription = null,
-                    modifier = Modifier.size(40.dp).clip(CircleShape),
-                )
-                Spacer(Modifier.width(12.dp))
-            }
+            ProjectIcon(projectPath, size = 44.dp)
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                state.login?.let { Text(it, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold) }
+                Text(
+                    state.repo?.name.orEmpty(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
                 Text(state.repo?.fullName.orEmpty(), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 state.repo?.defaultBranch?.let {
                     Text(

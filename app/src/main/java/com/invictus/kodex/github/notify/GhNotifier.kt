@@ -25,7 +25,11 @@ class GhNotifier(context: Context) {
     init {
         if (Build.VERSION.SDK_INT >= 26) {
             val ch = NotificationChannel(CHANNEL, ctx.getString(R.string.gh_notif_channel), NotificationManager.IMPORTANCE_LOW)
-            ctx.getSystemService(NotificationManager::class.java)?.createNotificationChannel(ch)
+            val nmSys = ctx.getSystemService(NotificationManager::class.java)
+            nmSys?.createNotificationChannel(ch)
+            nmSys?.createNotificationChannel(
+                NotificationChannel(CHANNEL_BUILDS, ctx.getString(R.string.gh_notif_channel_builds), NotificationManager.IMPORTANCE_DEFAULT),
+            )
         }
     }
 
@@ -65,6 +69,18 @@ class GhNotifier(context: Context) {
         post(RESULT_BASE + kind, n)
     }
 
+    /** A new ARM64 build exists (audible channel: this is the one the user asked to hear about). */
+    fun newBuild(title: String, text: String) {
+        val n = NotificationCompat.Builder(ctx, CHANNEL_BUILDS)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setAutoCancel(true)
+            .setContentIntent(openApp())
+            .build()
+        post(RESULT_BASE + KIND_NEW_BUILD, n)
+    }
+
     private fun post(id: Int, n: Notification) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -74,6 +90,7 @@ class GhNotifier(context: Context) {
 
     companion object {
         const val CHANNEL = "gh_manager"
+        const val CHANNEL_BUILDS = "gh_new_builds"
         const val LIVE_ID = 7100
         private const val RESULT_BASE = 7200
         const val KIND_DOWNLOAD = 1
@@ -81,5 +98,6 @@ class GhNotifier(context: Context) {
         const val KIND_SAVE = 3
         const val KIND_CLEANUP = 4
         const val KIND_DISPATCH = 5
+        const val KIND_NEW_BUILD = 6
     }
 }

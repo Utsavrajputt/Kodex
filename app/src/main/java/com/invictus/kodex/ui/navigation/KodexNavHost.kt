@@ -26,6 +26,7 @@ import com.invictus.kodex.feature.editor.EditorScreen
 import com.invictus.kodex.feature.editor.EditorViewModel
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import com.invictus.kodex.github.ui.AllApksScreen
 import com.invictus.kodex.github.ui.GitHubManagerScreen
 import com.invictus.kodex.github.ui.RunLogScreen
 import com.invictus.kodex.feature.git.GitBranchesScreen
@@ -118,8 +119,12 @@ fun KodexNavHost(
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onProjectOpened = { navController.navigate(Routes.WORKSPACE) },
                 onClone = { navController.navigate(Routes.GIT_CLONE) },
+                onOpenApks = { navController.navigate(Routes.ALL_APKS) },
                 onViewAll = { navController.navigate(Routes.ALL_PROJECTS) },
             )
+        }
+        composable(Routes.ALL_APKS) {
+            AllApksScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.ALL_PROJECTS) {
             AllProjectsScreen(

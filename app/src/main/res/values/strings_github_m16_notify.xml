@@ -37,4 +37,16 @@
     <string name="gh_downloaded_deleted">Deleted %1$s</string>
     <string name="gh_downloaded_actions">Actions for %1$s</string>
     <string name="gh_downloaded_install_busy">Finish the current install or save first.</string>
+    <string name="gh_apk_downloaded_title">Downloaded APK</string>
+    <string name="gh_apk_up_to_date">This is the latest build on GitHub.</string>
+    <string name="home_apks">ARM64 builds</string>
+    <string name="apks_title">ARM64 builds</string>
+    <string name="apks_empty">No ARM64 builds found yet.</string>
+    <string name="apks_no_repos">No recent project is linked to a GitHub repository (or no token is set).</string>
+    <string name="apks_load_failed">Could not load the builds. Check your connection.</string>
+    <string name="apks_show_more">Show more</string>
+    <string name="apks_downgrade_blocked">This build is older than the installed version and cannot be installed.</string>
+    <string name="gh_notif_channel_builds">New ARM64 builds</string>
+    <string name="gh_notif_new_build_title">New ARM64 build</string>
+    <string name="gh_notif_new_build_text">%1$s is ready to download.</string>
 </resources>

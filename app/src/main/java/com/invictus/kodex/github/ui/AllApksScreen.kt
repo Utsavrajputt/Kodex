@@ -1,0 +1,166 @@
+package com.invictus.kodex.github.ui
+
+import android.text.format.Formatter
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.invictus.kodex.R
+import com.invictus.kodex.ui.icons.XIcons
+
+/** Every ARM64 build of the recent projects, newest to oldest, ten at a time. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AllApksScreen(
+    onBack: () -> Unit,
+    viewModel: AllApksViewModel = viewModel(factory = AllApksViewModel.Factory),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val snackbar = remember { SnackbarHostState() }
+
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { e ->
+            when (e) {
+                is AllApksEvent.Snack -> {
+                    snackbar.currentSnackbarData?.dismiss()
+                    snackbar.showSnackbar(context.getString(e.message, *e.args.toTypedArray()))
+                }
+                is AllApksEvent.OpenSettings -> runCatching { context.startActivity(e.intent) }
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.apks_title), maxLines = 1) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                    }
+                },
+                actions = {
+                    IconButton(onClick = viewModel::load, enabled = !state.loading) {
+                        Icon(XIcons.Refresh, contentDescription = stringResource(R.string.action_refresh))
+                    }
+                },
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbar) },
+    ) { padding ->
+        when {
+            state.loading -> Column(Modifier.padding(padding).fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator()
+            }
+            state.rows.isEmpty() -> Column(Modifier.padding(padding).fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(stringResource(state.error ?: R.string.apks_empty), style = MaterialTheme.typography.bodyLarge)
+                if (state.error == R.string.apks_load_failed) TextButton(onClick = viewModel::load) { Text(stringResource(R.string.gh_retry)) }
+            }
+            else -> LazyColumn(
+                Modifier.padding(padding).fillMaxSize(),
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(state.shown, key = { it.artifact.id }) { row ->
+                    ApkRowCard(
+                        row = row,
+                        busy = state.busyId == row.artifact.id,
+                        progress = state.progress,
+                        anyBusy = state.busyId != null,
+                        onInstall = { viewModel.install(row) },
+                        onCancel = viewModel::cancel,
+                    )
+                }
+                if (state.hasMore) {
+                    item(key = "more") {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                            TextButton(onClick = viewModel::showMore) {
+                                Text(stringResource(R.string.apks_show_more))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ApkRowCard(
+    row: ApkRow,
+    busy: Boolean,
+    progress: Float?,
+    anyBusy: Boolean,
+    onInstall: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val context = LocalContext.current
+    val a = row.artifact
+    Card(Modifier.fillMaxWidth().alpha(if (row.expired) 0.55f else 1f)) {
+        Column(Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "${row.appName} arm64", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    Muted(
+                        listOf(
+                            Formatter.formatShortFileSize(context, a.sizeBytes),
+                            a.createdAt?.let { relative(it) }.orEmpty(),
+                            if (row.expired) stringResource(R.string.gh_artifact_expired_label) else "",
+                        ).filter { it.isNotBlank() }.joinToString(" • "),
+                    )
+                }
+                if (!row.expired && !busy) {
+                    Button(onClick = onInstall, enabled = !anyBusy) { Text(stringResource(R.string.gh_install)) }
+                }
+            }
+            if (busy) {
+                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (progress == null) LinearProgressIndicator(Modifier.weight(1f))
+                    else LinearProgressIndicator(progress = { progress }, modifier = Modifier.weight(1f))
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
+                }
+            }
+        }
+    }
+}

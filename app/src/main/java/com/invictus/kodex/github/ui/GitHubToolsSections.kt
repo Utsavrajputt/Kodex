@@ -167,31 +167,68 @@ fun ApkCard(
     tools: GitHubToolsController,
     onRunShortcut: () -> Unit,
 ) {
+    // The newest APK that is already on the device comes first: it is what the user wants to install.
+    val newest = state.downloaded.firstOrNull()
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
+            if (newest != null) {
+                DownloadedTop(newest, state, tools)
+                Spacer(Modifier.height(8.dp))
+            }
             when (val apk = state.apk) {
                 ApkCardState.Loading -> {
-                    CardTitle(R.string.gh_apk_title)
+                    if (newest == null) CardTitle(R.string.gh_apk_title)
                     LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp))
                 }
                 ApkCardState.None -> {
-                    CardTitle(R.string.gh_apk_title)
-                    Muted(stringResource(R.string.gh_apk_none))
+                    if (newest == null) {
+                        CardTitle(R.string.gh_apk_title)
+                        Muted(stringResource(R.string.gh_apk_none))
+                    }
                     TextButton(onClick = onRunShortcut) { Text(stringResource(R.string.gh_run_action_label)) }
                 }
                 is ApkCardState.AllExpired -> {
-                    CardTitle(R.string.gh_apk_title)
-                    val date = apk.newestAt?.let { dateOf(it) }
-                    Muted(if (date != null) stringResource(R.string.gh_apk_expired_on, date) else stringResource(R.string.gh_apk_expired))
+                    if (newest == null) {
+                        CardTitle(R.string.gh_apk_title)
+                        val date = apk.newestAt?.let { dateOf(it) }
+                        Muted(if (date != null) stringResource(R.string.gh_apk_expired_on, date) else stringResource(R.string.gh_apk_expired))
+                    }
                     TextButton(onClick = onRunShortcut) { Text(stringResource(R.string.gh_run_action_label)) }
                 }
                 is ApkCardState.Error -> {
-                    CardTitle(R.string.gh_apk_title)
+                    if (newest == null) CardTitle(R.string.gh_apk_title)
                     Text(apk.message.resolve(LocalContext.current), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     TextButton(onClick = tools::loadArtifactsAndApk) { Text(stringResource(R.string.gh_retry)) }
                 }
-                is ApkCardState.Found -> FoundApk(apk, state, tools)
+                is ApkCardState.Found ->
+                    if (newest != null && newest.artifactId == apk.candidate.artifact.id) {
+                        Muted(stringResource(R.string.gh_apk_up_to_date))
+                    } else {
+                        FoundApk(apk, state, tools)
+                    }
             }
+        }
+    }
+}
+
+/** The newest APK kept on the device: Install / Save / Delete, no new download needed. */
+@Composable
+private fun DownloadedTop(d: DownloadedApk, state: GitHubToolsState, tools: GitHubToolsController) {
+    val context = LocalContext.current
+    val busy = state.transfer != null || state.installing || state.pendingSave != null
+    CardTitle(apkTitle(d.label))
+    Muted(
+        listOf(
+            Formatter.formatShortFileSize(context, d.sizeBytes),
+            relative(Instant.ofEpochMilli(d.modifiedAt)),
+        ).joinToString(" • "),
+    )
+    Spacer(Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(onClick = { tools.installDownloaded(d) }, enabled = !busy) { Text(stringResource(R.string.gh_install)) }
+        OutlinedButton(onClick = { tools.saveDownloaded(d) }, enabled = !busy) { Text(stringResource(R.string.gh_save_to_folder)) }
+        IconButton(onClick = { tools.deleteDownloaded(d) }, enabled = !state.installing) {
+            Icon(XIcons.Delete, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -200,7 +237,7 @@ fun ApkCard(
 private fun FoundApk(found: ApkCardState.Found, state: GitHubToolsState, tools: GitHubToolsController) {
     val context = LocalContext.current
     val a = found.candidate.artifact
-    CardTitle(if (found.candidate.universal) R.string.gh_apk_title_universal else R.string.gh_apk_title)
+    CardTitle(apkTitle(a.name))
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Pill(if (found.candidate.universal) "universal" else "arm64-v8a")
         Muted(
@@ -420,72 +457,6 @@ private fun ArtifactRow(
     }
 }
 
-// ---- Downloaded APKs (kept on disk: last 3 + 24 h) ------------------------------------------------
-
-fun LazyListScope.downloadedSection(
-    state: GitHubToolsState,
-    tools: GitHubToolsController,
-    onDeleteAll: () -> Unit,
-) {
-    if (state.downloaded.isEmpty()) return
-    item(key = "downloaded_header") {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                stringResource(R.string.gh_downloaded_title),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onDeleteAll, enabled = !state.installing) {
-                Text(stringResource(R.string.gh_downloaded_delete_all), color = MaterialTheme.colorScheme.error)
-            }
-        }
-        Muted(stringResource(R.string.gh_downloaded_hint))
-    }
-    items(state.downloaded, key = { "downloaded_${it.file.name}" }) { d ->
-        DownloadedRow(d, busy = state.transfer != null || state.installing || state.pendingSave != null, tools = tools)
-    }
-}
-
-@Composable
-private fun DownloadedRow(d: DownloadedApk, busy: Boolean, tools: GitHubToolsController) {
-    val context = LocalContext.current
-    var menu by remember { mutableStateOf(false) }
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(d.label, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Muted(
-                    listOf(
-                        Formatter.formatShortFileSize(context, d.sizeBytes),
-                        relative(Instant.ofEpochMilli(d.modifiedAt)),
-                    ).joinToString(" • "),
-                )
-            }
-            TextButton(onClick = { tools.installDownloaded(d) }, enabled = !busy) { Text(stringResource(R.string.gh_install)) }
-            Box {
-                IconButton(onClick = { menu = true }) {
-                    Icon(XIcons.MoreVert, contentDescription = stringResource(R.string.gh_downloaded_actions, d.label))
-                }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.gh_save_to_folder)) },
-                        leadingIcon = { Icon(XIcons.Save, contentDescription = null) },
-                        enabled = !busy,
-                        onClick = { menu = false; tools.saveDownloaded(d) },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) },
-                        leadingIcon = { Icon(XIcons.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                        
-                        onClick = { menu = false; tools.deleteDownloaded(d) },
-                    )
-                }
-            }
-        }
-    }
-}
-
 // ---- Deployments section (plan 6.1 card 5 / 7.4) -----------------------------------------------
 
 fun LazyListScope.deploymentsSection(
@@ -558,8 +529,11 @@ private fun DeploymentRow(d: GhDeployment, busy: Boolean, onDelete: () -> Unit) 
 // ---- shared small pieces ------------------------------------------------------------------------
 
 @Composable
-private fun CardTitle(res: Int) {
-    Text(stringResource(res), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+private fun CardTitle(res: Int) = CardTitle(stringResource(res))
+
+@Composable
+private fun CardTitle(text: String) {
+    Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(4.dp))
 }
 

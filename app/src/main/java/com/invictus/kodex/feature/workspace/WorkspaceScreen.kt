@@ -381,15 +381,6 @@ private fun WorkspaceTopBar(
                             onEvent(FileTreeEvent.CollapseAll)
                         },
                     )
-                    // M15: always shown; the manager itself explains a missing repo / remote / token.
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.gh_menu_github)) },
-                        leadingIcon = { Icon(XIcons.Cloud, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            onOpenGitHub()
-                        },
-                    )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.action_settings)) },
                         leadingIcon = { Icon(XIcons.Settings, contentDescription = null) },

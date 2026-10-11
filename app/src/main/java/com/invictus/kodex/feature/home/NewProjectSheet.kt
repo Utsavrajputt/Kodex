@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -15,6 +17,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,6 +54,7 @@ fun NewProjectSheet(
     error: UiText?,
     onCreate: (parent: File, name: String) -> Unit,
     onDismissError: () -> Unit,
+    onClone: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var name by rememberSaveable { mutableStateOf("") }
@@ -112,6 +116,11 @@ fun NewProjectSheet(
             }
             Button(onClick = submit, enabled = name.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.new_project_create))
+            }
+            OutlinedButton(onClick = onClone, modifier = Modifier.fillMaxWidth()) {
+                Icon(XIcons.Clone, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.home_clone))
             }
         }
     }

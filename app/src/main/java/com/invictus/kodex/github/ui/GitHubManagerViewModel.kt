@@ -17,6 +17,7 @@ import com.invictus.kodex.github.data.GitHubProjectResolver
 import com.invictus.kodex.github.data.GitHubRepository
 import com.invictus.kodex.github.data.GitHubResolution
 import com.invictus.kodex.github.data.RunStatusFilter
+import com.invictus.kodex.github.notify.ArmBuildWatch
 import com.invictus.kodex.github.prefs.GitHubPrefs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -33,7 +34,7 @@ import java.io.File
 
 /** State holder for the per-project GitHub Manager (plan section 3 / 6). */
 class GitHubManagerViewModel(
-    private val projectPath: String,
+    val projectPath: String,
     private val resolver: GitHubProjectResolver,
     private val repoFactory: (GhRepoRef) -> GitHubRepository,
     private val prefs: GitHubPrefs,
@@ -69,6 +70,7 @@ class GitHubManagerViewModel(
     private var resumed = false
 
     init {
+        ArmBuildWatch.schedule(appContext)
         viewModelScope.launch {
             prefs.sectionExpanded(projectPath, SECTION_RUNS).collect { v -> _state.update { it.copy(runsExpanded = v) } }
         }
