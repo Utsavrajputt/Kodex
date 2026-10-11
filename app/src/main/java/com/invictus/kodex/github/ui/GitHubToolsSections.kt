@@ -204,6 +204,13 @@ private fun PickerButton(
 
 // ---- Latest APK card (plan 6.1 card 3 / 8.3 / 8.4) ----------------------------------------------
 
+/** The card is only worth showing with a build to install, a downloaded APK, or an error with Retry; "none yet" / expired / loading hide it. */
+internal fun apkCardVisible(state: GitHubToolsState): Boolean {
+    if (state.apk is ApkCardState.Found || state.apk is ApkCardState.Error) return true
+    val repoArtifactIds = state.artifacts.mapTo(HashSet()) { it.id }
+    return state.downloaded.any { it.artifactId in repoArtifactIds }
+}
+
 @Composable
 fun ApkCard(
     state: GitHubToolsState,
@@ -515,7 +522,7 @@ private fun ArtifactRow(a: GhArtifact, state: GitHubToolsState, tools: GitHubToo
                         GhTileButton(
                             icon = XIcons.Download,
                             description = stringResource(R.string.gh_apk_download),
-                            container = p.tileFill, tint = p.accent, borderColor = p.tileBorder,
+                            container = p.tileFill, tint = p.accent,
                             enabled = !busy, size = 40.dp, iconSize = 22.dp,
                             onClick = { if (ApkResolver.isApkArtifact(a.name)) tools.installFromArtifact(a) else tools.saveArtifact(a) },
                         )

@@ -88,7 +88,7 @@ internal fun ghPalette(): GhPalette {
             onSuccess = Color(0xFF06210F),
             danger = Color(0xFFFF6B6B),
             onDanger = Color(0xFF2B0505),
-            tileFill = Color(0xFF101C3A),
+            tileFill = Color(0xFF172648),
             tileBorder = Color(0xFF4F8BFF).copy(alpha = 0.30f),
         )
     } else {

@@ -114,7 +114,6 @@ fun GitHubManagerScreen(
     }
 
     val pal = ghPalette()
-    var overflow by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.background(pal.screen),
@@ -141,20 +140,11 @@ fun GitHubManagerScreen(
                 },
                 actions = {
                     if (state.gate == GitHubGate.Ready) {
+                        IconButton(onClick = { viewModel.tools.openCleanup() }) {
+                            Icon(XIcons.DeleteSweep, contentDescription = stringResource(R.string.gh_cleanup_title))
+                        }
                         IconButton(onClick = viewModel::refresh) {
                             Icon(XIcons.Refresh, contentDescription = stringResource(R.string.action_refresh))
-                        }
-                        Box {
-                            IconButton(onClick = { overflow = true }) {
-                                Icon(XIcons.MoreVert, contentDescription = stringResource(R.string.action_more))
-                            }
-                            DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.gh_cleanup_title)) },
-                                    leadingIcon = { Icon(XIcons.DeleteSweep, contentDescription = null) },
-                                    onClick = { overflow = false; viewModel.tools.openCleanup() },
-                                )
-                            }
                         }
                     }
                 },
@@ -253,7 +243,9 @@ private fun ReadyContent(
                     BuildingCard(live, onOpen = { onOpenRunLog(live.run.id) }, onCancel = { pendingCancel = live.run })
                 }
             }
-            item(key = "apk") { ApkCard(toolsState, tools, onRunShortcut, vm.projectPath, state.repo?.owner) }
+            if (apkCardVisible(toolsState)) {
+                item(key = "apk") { ApkCard(toolsState, tools, onRunShortcut, vm.projectPath, state.repo?.owner) }
+            }
             item(key = "runs_header") {
                 Row(
                     Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp),
@@ -425,14 +417,16 @@ private fun RepoHeaderCard(state: GitHubManagerState, projectPath: String) {
 
 @Composable
 internal fun SectionHeader(title: String, expanded: Boolean, onToggle: () -> Unit) {
+    val p = ghPalette()
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 8.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = p.onCard, modifier = Modifier.weight(1f))
         Icon(
             if (expanded) XIcons.KeyboardArrowUp else XIcons.KeyboardArrowDown,
             contentDescription = stringResource(if (expanded) R.string.gh_collapse else R.string.gh_expand),
+            tint = p.onCard,
         )
     }
 }
