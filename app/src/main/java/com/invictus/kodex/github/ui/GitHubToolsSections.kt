@@ -82,15 +82,12 @@ fun RunWorkflowCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
-        Column(Modifier.padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(XIcons.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                Text(stringResource(R.string.gh_run_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.height(12.dp))
+        Column(Modifier.padding(12.dp)) {
+            Text(stringResource(R.string.gh_run_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PickerButton(
                     label = workflow?.name ?: stringResource(R.string.gh_run_pick_workflow),
@@ -126,7 +123,7 @@ fun RunWorkflowCard(
                 FilledIconButton(
                     onClick = { if (workflow != null && ref != null) tools.onRunPressed(workflow, ref) },
                     enabled = canRun,
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(40.dp),
                 ) {
                     if (state.dispatching) {
                         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -163,7 +160,7 @@ private fun PickerButton(
             onClick = { open = true },
             enabled = enabled,
             shape = CircleShape,
-            modifier = Modifier.fillMaxWidth().height(48.dp),
+            modifier = Modifier.fillMaxWidth().height(40.dp),
             contentPadding = PaddingValues(horizontal = 12.dp),
         ) {
             Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
@@ -194,10 +191,10 @@ fun ApkCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer),
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val title = when {
                 found != null -> apkBuildName(found.candidate.artifact.name, found.candidate.artifact.shortSha)
                 local != null -> apkTitle(local.label)
@@ -216,29 +213,18 @@ fun ApkCard(
                     timeAgoOrDate(Instant.ofEpochMilli(local.modifiedAt)),
                 )
                 else -> emptyList()
-            }.filter { it.isNotBlank() }
+            }.filter { it.isNotBlank() }.joinToString(" \u2022 ")
 
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Surface(shape = CircleShape, color = cs.primary, contentColor = cs.onPrimary, modifier = Modifier.size(48.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            if (local != null) XIcons.Save else XIcons.CloudDownload,
-                            contentDescription = null, modifier = Modifier.size(24.dp),
-                        )
-                    }
-                }
+            Column {
                 Text(
-                    title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                    title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
-            }
-            if (facts.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    facts.forEach { f ->
-                        Surface(shape = CircleShape, color = cs.onPrimaryContainer.copy(alpha = 0.12f), contentColor = cs.onPrimaryContainer) {
-                            Text(f, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
-                        }
-                    }
+                if (facts.isNotBlank()) {
+                    Text(
+                        facts, style = MaterialTheme.typography.bodySmall,
+                        color = cs.onPrimaryContainer.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
 
@@ -247,20 +233,16 @@ fun ApkCard(
                     val a = found.candidate.artifact
                     val transfer = state.transfer?.takeIf { it.fromApkCard && it.artifactId == a.id }
                     val ready = state.ready?.takeIf { it.fromApkCard && it.artifactId == a.id }
+                    // Freshly downloaded but not yet listed: same buttons, no details panel.
+                    val justDownloaded = ready?.let { DownloadedApk(it.artifactId, it.artifactName, it.file, it.file.length(), System.currentTimeMillis()) }
                     when {
                         transfer != null -> TransferRow(transfer, onCancel = tools::cancelTransfer)
-                        ready != null -> ReadyApkBody(
-                            ready = ready,
-                            installing = state.installing,
-                            onInstall = tools::onInstallTapped,
-                            onSave = tools::saveReadyApk,
-                            onDismiss = tools::dismissReady,
-                        )
                         local != null -> ApkActions(local, state.installing, busy, tools)
+                        justDownloaded != null -> ApkActions(justDownloaded, state.installing, busy, tools)
                         else -> Button(
                             onClick = { tools.downloadApk(found.candidate) },
                             enabled = state.transfer == null,
-                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            modifier = Modifier.fillMaxWidth().height(44.dp),
                         ) {
                             Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
@@ -280,7 +262,7 @@ fun ApkCard(
                     Text(msg, style = MaterialTheme.typography.bodyMedium, color = if (apk is ApkCardState.Error) cs.error else cs.onPrimaryContainer)
                     FilledTonalButton(
                         onClick = if (apk is ApkCardState.Error) tools::loadArtifactsAndApk else onRunShortcut,
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
                     ) {
                         Text(stringResource(if (apk is ApkCardState.Error) R.string.gh_retry else R.string.gh_run_action_label))
                     }
@@ -297,23 +279,23 @@ private fun ApkActions(d: DownloadedApk, installing: Boolean, busy: Boolean, too
         Button(
             onClick = { tools.installDownloaded(d) },
             enabled = !busy,
-            modifier = Modifier.weight(1f).height(52.dp),
+            modifier = Modifier.weight(1f).height(44.dp),
         ) {
-            Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
+            Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
             Text(stringResource(R.string.gh_install), style = MaterialTheme.typography.labelLarge)
         }
         FilledTonalIconButton(
             onClick = { tools.saveDownloaded(d) },
             enabled = !busy,
-            modifier = Modifier.size(52.dp),
+            modifier = Modifier.size(44.dp),
         ) {
             Icon(XIcons.Folder, contentDescription = stringResource(R.string.gh_save_to_folder))
         }
         FilledTonalIconButton(
             onClick = { tools.deleteDownloaded(d) },
             enabled = !installing,
-            modifier = Modifier.size(52.dp),
+            modifier = Modifier.size(44.dp),
             colors = IconButtonDefaults.filledTonalIconButtonColors(
                 containerColor = MaterialTheme.colorScheme.errorContainer,
                 contentColor = MaterialTheme.colorScheme.onErrorContainer,
@@ -383,131 +365,6 @@ fun ReadyApkBody(
             }
             OutlinedButton(onClick = onSave) { Text(stringResource(R.string.gh_save_to_folder)) }
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.gh_close)) }
-        }
-    }
-}
-
-// ---- Artifacts section (plan 6.1 card 6 / 8.5) -----------------------------------------------
-
-fun LazyListScope.artifactsSection(
-    state: GitHubToolsState,
-    showAll: Boolean,
-    onShowAll: () -> Unit,
-    latestId: Long?,
-    tools: GitHubToolsController,
-    onDelete: (GhArtifact) -> Unit,
-) {
-    item(key = "artifacts_header") {
-        SectionHeader(
-            title = stringResource(R.string.gh_artifacts_title),
-            expanded = state.artifactsExpanded,
-            onToggle = { tools.setArtifactsExpanded(!state.artifactsExpanded) },
-        )
-    }
-    if (!state.artifactsExpanded) return
-    when {
-        state.artifactsLoading -> item(key = "artifacts_loading") {
-            LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp))
-        }
-        state.artifactsError != null && state.artifacts.isEmpty() -> item(key = "artifacts_error") {
-            ErrorBlock(state.artifactsError.resolve(LocalContext.current), tools::loadArtifactsAndApk)
-        }
-        state.artifacts.isEmpty() -> item(key = "artifacts_empty") {
-            Muted(stringResource(R.string.gh_artifacts_empty), Modifier.padding(16.dp))
-        }
-        else -> {
-            val visible = if (showAll) state.artifacts else state.artifacts.take(COLLAPSED_COUNT)
-            items(visible, key = { "artifact_${it.id}" }) { a ->
-                ArtifactRow(
-                    a = a,
-                    isLatest = a.id == latestId,
-                    busy = a.id in state.busyArtifactIds,
-                    transfer = state.transfer?.takeIf { it.artifactId == a.id && !it.fromApkCard },
-                    anyTransfer = state.transfer != null || state.pendingSave != null || state.installing,
-                    tools = tools,
-                    onDelete = { onDelete(a) },
-                )
-            }
-            item(key = "artifacts_more") {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    if (!showAll && state.artifacts.size > COLLAPSED_COUNT) {
-                        TextButton(onClick = onShowAll) { Text(stringResource(R.string.gh_show_all, state.artifacts.size)) }
-                    } else if (state.artifactsHasMore) {
-                        if (state.artifactsLoadingMore) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                        else TextButton(onClick = tools::loadMoreArtifacts) { Text(stringResource(R.string.gh_load_more)) }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ArtifactRow(
-    a: GhArtifact,
-    isLatest: Boolean,
-    busy: Boolean,
-    transfer: Transfer?,
-    anyTransfer: Boolean,
-    tools: GitHubToolsController,
-    onDelete: () -> Unit,
-) {
-    val context = LocalContext.current
-    val now = remember { Instant.now() }
-    val expired = a.isExpiredAt(now)
-    var menu by remember { mutableStateOf(false) }
-    Card(Modifier.fillMaxWidth().alpha(if (expired) 0.55f else 1f)) {
-        Column(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(a.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                        if (isLatest) Pill(stringResource(R.string.gh_artifact_latest))
-                    }
-                    Muted(
-                        listOf(
-                            Formatter.formatShortFileSize(context, a.sizeBytes),
-                            a.branch.orEmpty(),
-                            a.shortSha,
-                            if (expired) stringResource(R.string.gh_artifact_expired_label)
-                            else a.expiresAt?.let { stringResource(R.string.gh_artifact_expires, relative(it)) }.orEmpty(),
-                        ).filter { it.isNotBlank() }.joinToString(" • "),
-                    )
-                }
-                if (busy) {
-                    CircularProgressIndicator(Modifier.padding(12.dp).size(24.dp), strokeWidth = 2.dp)
-                } else {
-                    Box {
-                        IconButton(onClick = { menu = true }) {
-                            Icon(XIcons.MoreVert, contentDescription = stringResource(R.string.gh_artifact_actions, a.name))
-                        }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            if (!expired && ArtifactZip.looksLikeApk(a.name)) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.gh_install)) },
-                                    leadingIcon = { Icon(XIcons.Download, contentDescription = null) },
-                                    enabled = !anyTransfer,
-                                    onClick = { menu = false; tools.installFromArtifact(a) },
-                                )
-                            }
-                            if (!expired) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.gh_save_to_folder)) },
-                                    leadingIcon = { Icon(XIcons.Save, contentDescription = null) },
-                                    enabled = !anyTransfer,
-                                    onClick = { menu = false; tools.saveArtifact(a) },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) },
-                                leadingIcon = { Icon(XIcons.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                                onClick = { menu = false; onDelete() },
-                            )
-                        }
-                    }
-                }
-            }
-            if (transfer != null) TransferRow(transfer, onCancel = tools::cancelTransfer)
         }
     }
 }
@@ -590,13 +447,6 @@ internal fun Muted(text: String, modifier: Modifier = Modifier) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-}
-
-@Composable
-private fun Pill(text: String) {
-    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
-        Text(text, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp), maxLines = 1)
-    }
 }
 
 internal fun dateOf(i: Instant): String =

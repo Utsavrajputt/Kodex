@@ -32,6 +32,7 @@
 
     <!-- Runs -->
     <string name="gh_runs_title">Workflow runs</string>
+    <string name="gh_view_all">View all</string>
     <string name="gh_runs_empty">No workflow runs match.</string>
     <string name="gh_filter_all">All</string>
     <string name="gh_filter_failed">Failed</string>

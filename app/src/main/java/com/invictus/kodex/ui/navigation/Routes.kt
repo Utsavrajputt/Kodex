@@ -29,6 +29,7 @@ object Routes {
     const val GIT_ONBOARDING = "git_onboarding/{projectPath}"
     const val CODE_SEARCH = "code_search/{projectPath}"
     const val GITHUB = "github/{projectPath}"
+    const val GITHUB_RUNS = "github_runs/{projectPath}"
     const val GITHUB_RUN_LOG = "github_run_log/{projectPath}/{runId}"
 
     /** Encoded deep-link style route for a project's Source Control screen. */
@@ -50,5 +51,6 @@ object Routes {
     fun codeSearch(p: String) = "code_search/${android.net.Uri.encode(p)}"
 
     fun github(p: String) = "github/${android.net.Uri.encode(p)}"
+    fun githubRuns(p: String) = "github_runs/${android.net.Uri.encode(p)}"
     fun githubRunLog(p: String, runId: Long) = "github_run_log/${android.net.Uri.encode(p)}/$runId"
 }

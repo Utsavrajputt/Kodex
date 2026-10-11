@@ -28,6 +28,7 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.invictus.kodex.github.ui.AllApksScreen
 import com.invictus.kodex.github.ui.GitHubManagerScreen
+import com.invictus.kodex.github.ui.GitHubRunsScreen
 import com.invictus.kodex.github.ui.RunLogScreen
 import com.invictus.kodex.feature.git.GitBranchesScreen
 import com.invictus.kodex.feature.git.GitCloneScreen
@@ -310,9 +311,20 @@ fun KodexNavHost(
                     projectPath = path,
                     onBack = { navController.popBackStack() },
                     onOpenRunLog = { runId -> navController.navigate(Routes.githubRunLog(path, runId)) },
+                    onOpenAllRuns = { navController.navigate(Routes.githubRuns(path)) },
                     onOpenRemotes = { navController.navigate(Routes.gitRemotes(path)) },
                     onGitSetup = { navController.navigate(Routes.gitOnboarding(path)) },
                     onOpenGitHubSettings = { navController.navigate(Routes.SETTINGS_GITHUB) },
+                )
+            }
+        }
+        composable(Routes.GITHUB_RUNS) { entry ->
+            val path = entry.arguments?.getString("projectPath")
+            if (path != null) {
+                GitHubRunsScreen(
+                    projectPath = path,
+                    onBack = { navController.popBackStack() },
+                    onOpenRunLog = { runId -> navController.navigate(Routes.githubRunLog(path, runId)) },
                 )
             }
         }

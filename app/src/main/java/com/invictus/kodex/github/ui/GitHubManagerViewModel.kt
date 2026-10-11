@@ -41,6 +41,8 @@ class GitHubManagerViewModel(
     private val tokens: GitHubTokenProvider,
     private val profiles: GitHubProfileRepository,
     appContext: Context,
+    /** The "all runs" screen: only runs + workflows, none of the APK / artifact / profile loading. */
+    private val lite: Boolean = false,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(GitHubManagerState())
@@ -70,7 +72,7 @@ class GitHubManagerViewModel(
     private var resumed = false
 
     init {
-        ArmBuildWatch.schedule(appContext)
+        if (!lite) ArmBuildWatch.schedule(appContext)
         viewModelScope.launch {
             prefs.sectionExpanded(projectPath, SECTION_RUNS).collect { v -> _state.update { it.copy(runsExpanded = v) } }
         }
@@ -79,7 +81,7 @@ class GitHubManagerViewModel(
 
     /** Re-detect on every return to the screen (Remotes / Settings may have changed the answer). */
     fun onResume() {
-        tools.onResume()
+        if (!lite) tools.onResume()
         if (!resumed) { resumed = true; return }
         if (_state.value.gate != GitHubGate.Resolving) load()
     }
@@ -96,7 +98,8 @@ class GitHubManagerViewModel(
                     // Returning from Remotes/Settings with nothing changed: keep what is on screen.
                     if (!changed && repository != null && _state.value.gate == GitHubGate.Ready) return@launch
                     if (changed || repository == null) repository = repoFactory(resolution.repo)
-                    val filters = if (changed || _state.value.gate != GitHubGate.Ready) prefs.runFilters(projectPath)
+                    // Filters live only on the "all runs" screen and are not remembered between visits.
+                    val filters = if (changed || _state.value.gate != GitHubGate.Ready) GitHubPrefs.RunFilters()
                     else _state.value.filters
                     _state.update {
                         it.copy(
@@ -106,10 +109,10 @@ class GitHubManagerViewModel(
                             banner = null,
                         )
                     }
-                    loadProfile()
+                    if (!lite) loadProfile()
                     loadOverview()
                     loadRuns(reset = true)
-                    tools.onRepoReady(changed)
+                    if (!lite) tools.onRepoReady(changed)
                 }
             }
         }
@@ -154,7 +157,7 @@ class GitHubManagerViewModel(
         _state.update { it.copy(refreshing = true) }
         loadOverview()
         loadRuns(reset = true)
-        tools.refresh()
+        if (!lite) tools.refresh()
     }
 
     fun loadMore() {
@@ -207,7 +210,6 @@ class GitHubManagerViewModel(
     private fun updateFilters(f: GitHubPrefs.RunFilters) {
         if (f == _state.value.filters) return
         _state.update { it.copy(filters = f, runs = emptyList(), hasMore = false) }
-        viewModelScope.launch { prefs.setRunFilters(projectPath, f) }
         loadRuns(reset = true)
     }
 
@@ -316,7 +318,7 @@ class GitHubManagerViewModel(
         private const val REFRESH_AFTER_MS = 1_500L
         const val COPY_LABEL = "GitHub run error"
 
-        fun factory(projectPath: String) = viewModelFactory {
+        fun factory(projectPath: String, lite: Boolean = false) = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as KodexApp
                 val c = app.container
@@ -328,6 +330,7 @@ class GitHubManagerViewModel(
                     tokens = c.gitHubTokenProvider,
                     profiles = c.gitHubProfileRepository,
                     appContext = app.applicationContext,
+                    lite = lite,
                 )
             }
         }

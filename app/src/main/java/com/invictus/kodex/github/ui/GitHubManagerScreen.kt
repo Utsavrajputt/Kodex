@@ -88,6 +88,7 @@ fun GitHubManagerScreen(
     projectPath: String,
     onBack: () -> Unit,
     onOpenRunLog: (Long) -> Unit,
+    onOpenAllRuns: () -> Unit,
     onOpenRemotes: () -> Unit,
     onGitSetup: () -> Unit,
     onOpenGitHubSettings: () -> Unit,
@@ -148,7 +149,7 @@ fun GitHubManagerScreen(
                     action = R.string.gh_empty_no_token_action, onAction = onOpenGitHubSettings,
                 )
                 GitHubGate.Ready -> {
-                    ReadyContent(state, toolsState, viewModel, onOpenRunLog, onOpenGitHubSettings)
+                    ReadyContent(state, toolsState, viewModel, onOpenRunLog, onOpenAllRuns, onOpenGitHubSettings)
                     GitHubToolsHost(toolsState, viewModel.tools, state.workflows, state.repo?.defaultBranch)
                 }
             }
@@ -197,26 +198,23 @@ private fun ReadyContent(
     toolsState: GitHubToolsState,
     vm: GitHubManagerViewModel,
     onOpenRunLog: (Long) -> Unit,
+    onOpenAllRuns: () -> Unit,
     onOpenGitHubSettings: () -> Unit,
 ) {
-    var showAll by rememberSaveable { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<GhRun?>(null) }
     var pendingCancel by remember { mutableStateOf<GhRun?>(null) }
-    var showAllArtifacts by rememberSaveable { mutableStateOf(false) }
     var showAllDeployments by rememberSaveable { mutableStateOf(false) }
-    var pendingArtifactDelete by remember { mutableStateOf<GhArtifact?>(null) }
     var pendingDeploymentDelete by remember { mutableStateOf<GhDeployment?>(null) }
     val tools = vm.tools
-    val latestApkId = (toolsState.apk as? ApkCardState.Found)?.candidate?.artifact?.id
     val onRunShortcut = {
         val wf = tools.effectiveWorkflow(state.workflows, toolsState.run.selectedWorkflowId)
         val ref = toolsState.run.selectedBranch ?: state.repo?.defaultBranch
         if (wf != null && ref != null) tools.onRunPressed(wf, ref)
     }
-    val visible = if (showAll) state.runs else state.runs.take(COLLAPSED_COUNT)
+    val visible = state.runs.take(RECENT_COUNT)
 
     PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             state.banner?.let { b -> item(key = "banner") { BannerCard(b, onOpenGitHubSettings) } }
             item(key = "header") { RepoHeaderCard(state, vm.projectPath) }
             item(key = "run_workflow") {
@@ -224,14 +222,21 @@ private fun ReadyContent(
             }
             item(key = "apk") { ApkCard(toolsState, tools, onRunShortcut) }
             item(key = "runs_header") {
-                SectionHeader(
-                    title = stringResource(R.string.gh_runs_title),
-                    expanded = state.runsExpanded,
-                    onToggle = { vm.setRunsExpanded(!state.runsExpanded) },
-                )
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.gh_runs_title),
+                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = onOpenAllRuns) {
+                        Text(stringResource(R.string.gh_view_all))
+                        Icon(XIcons.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                }
             }
-            if (state.runsExpanded) {
-                item(key = "filters") { RunFilters(state, vm) }
                 when {
                     state.runsLoading -> item(key = "loading") { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
                     state.runsError != null && state.runs.isEmpty() -> item(key = "error") {
@@ -258,23 +263,9 @@ private fun ReadyContent(
                                 onDelete = { pendingDelete = run },
                             )
                         }
-                        item(key = "more") {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                                if (!showAll && state.runs.size > COLLAPSED_COUNT) {
-                                    TextButton(onClick = { showAll = true }) {
-                                        Text(stringResource(R.string.gh_show_all, state.runs.size))
-                                    }
-                                } else if (state.hasMore) {
-                                    if (state.loadingMore) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                                    else TextButton(onClick = vm::loadMore) { Text(stringResource(R.string.gh_load_more)) }
-                                }
-                            }
-                        }
                     }
                 }
-            }
             deploymentsSection(toolsState, showAllDeployments, { showAllDeployments = true }, tools) { pendingDeploymentDelete = it }
-            artifactsSection(toolsState, showAllArtifacts, { showAllArtifacts = true }, latestApkId, tools) { pendingArtifactDelete = it }
             item(key = "cleanup") {
                 OutlinedButton(onClick = tools::openCleanup, modifier = Modifier.fillMaxWidth()) {
                     Icon(XIcons.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -285,15 +276,6 @@ private fun ReadyContent(
         }
     }
 
-    pendingArtifactDelete?.let { a ->
-        ConfirmDeleteDialog(
-            title = stringResource(R.string.gh_artifact_delete_title),
-            body = stringResource(R.string.gh_artifact_delete_body, a.name),
-            confirm = stringResource(R.string.action_delete),
-            onDismiss = { pendingArtifactDelete = null },
-            onConfirm = { pendingArtifactDelete = null; tools.deleteArtifact(a) },
-        )
-    }
     pendingDeploymentDelete?.let { d ->
         ConfirmDeleteDialog(
             title = stringResource(R.string.gh_deployment_delete_title),
@@ -387,31 +369,22 @@ private fun BannerCard(banner: GhBanner, onReconnect: () -> Unit) {
 private fun RepoHeaderCard(state: GitHubManagerState, projectPath: String) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            ProjectIcon(projectPath, size = 56.dp)
-            Spacer(Modifier.width(16.dp))
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            ProjectIcon(projectPath, size = 40.dp)
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    state.repo?.name.orEmpty(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                    state.repo?.name.orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    state.repo?.fullName.orEmpty(), style = MaterialTheme.typography.bodyMedium,
+                    listOfNotNull(state.repo?.fullName, state.repo?.defaultBranch).joinToString(" \u2022 "),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
-                state.repo?.defaultBranch?.let {
-                    Spacer(Modifier.height(6.dp))
-                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
-                        Text(
-                            stringResource(R.string.gh_default_branch, it),
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        )
-                    }
-                }
             }
             state.rateLimit?.takeIf { it.isLow() }?.let {
                 Surface(shape = CircleShape, color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
@@ -440,7 +413,7 @@ internal fun SectionHeader(title: String, expanded: Boolean, onToggle: () -> Uni
 }
 
 @Composable
-private fun RunFilters(state: GitHubManagerState, vm: GitHubManagerViewModel) {
+internal fun RunFilters(state: GitHubManagerState, vm: GitHubManagerViewModel) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         RunStatusFilter.entries.forEach { f ->
             FilterChip(
@@ -480,7 +453,7 @@ private fun RunFilters(state: GitHubManagerState, vm: GitHubManagerViewModel) {
 }
 
 private val IntrinsicWidthCap = 140.dp
-private const val COLLAPSED_COUNT = 5
+private const val RECENT_COUNT = 3
 
 @Composable
 internal fun ErrorBlock(message: String, onRetry: () -> Unit) {
@@ -492,7 +465,7 @@ internal fun ErrorBlock(message: String, onRetry: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun RunRow(
+internal fun RunRow(
     run: GhRun,
     workflowName: String,
     busy: Boolean,
@@ -508,7 +481,7 @@ private fun RunRow(
     val statusText = stringResource(label)
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Row(
@@ -523,7 +496,7 @@ private fun RunRow(
                         if (run.isFailed) onCopyError() else menu = true
                     },
                 )
-                .padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+                .padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {

@@ -133,7 +133,14 @@ class GitHubToolsController(
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_apk_invalid)))
                 return@launch
             }
-            _state.update { it.copy(ready = ReadyApk(d.artifactId, d.label, d.file, inspected, fromApkCard = false)) }
+            if (InstallDecision.isBlocked(inspected.kind)) {
+                emit(GhEvent.Snack(GhText.Res(R.string.gh_ready_downgrade)))
+                return@launch
+            }
+            // Straight to the system installer: no details dialog. The system still asks for its own confirmation.
+            _state.update { it.copy(ready = ReadyApk(d.artifactId, d.label, d.file, inspected, fromApkCard = false, silent = true)) }
+            if (!installer.canRequestInstalls()) _state.update { it.copy(installDialog = InstallDialog.UnknownSources) }
+            else startInstall()
         }
     }
 

@@ -98,7 +98,7 @@ fun GitHubToolsHost(
     }
 
     // An APK started from an artifact row (the APK card shows its own ready state inline).
-    state.ready?.takeIf { !it.fromApkCard }?.let { ready ->
+    state.ready?.takeIf { !it.fromApkCard && !it.silent }?.let { ready ->
         AlertDialog(
             onDismissRequest = tools::dismissReady,
             title = { Text(ready.artifactName, maxLines = 2, overflow = TextOverflow.Ellipsis) },
