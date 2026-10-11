@@ -220,7 +220,7 @@ private fun ReadyContent(
             item(key = "run_workflow") {
                 RunWorkflowCard(toolsState.run, state.workflows, state.repo?.defaultBranch, tools)
             }
-            item(key = "apk") { ApkCard(toolsState, tools, onRunShortcut) }
+            item(key = "apk") { ApkCard(toolsState, tools, onRunShortcut, vm.projectPath) }
             item(key = "runs_header") {
                 Row(
                     Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp),
@@ -266,13 +266,6 @@ private fun ReadyContent(
                     }
                 }
             deploymentsSection(toolsState, showAllDeployments, { showAllDeployments = true }, tools) { pendingDeploymentDelete = it }
-            item(key = "cleanup") {
-                OutlinedButton(onClick = tools::openCleanup, modifier = Modifier.fillMaxWidth()) {
-                    Icon(XIcons.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.gh_cleanup_title))
-                }
-            }
         }
     }
 

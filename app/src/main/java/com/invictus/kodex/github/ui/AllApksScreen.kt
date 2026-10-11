@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -110,9 +113,12 @@ fun AllApksScreen(
                     ApkRowCard(
                         row = row,
                         busy = state.busyId == row.artifact.id,
+                        downloaded = row.artifact.id in state.downloaded,
                         progress = state.progress,
                         anyBusy = state.busyId != null,
+                        onDownload = { viewModel.download(row) },
                         onInstall = { viewModel.install(row) },
+                        onDelete = { viewModel.delete(row) },
                         onCancel = viewModel::cancel,
                     )
                 }
@@ -138,34 +144,47 @@ fun AllApksScreen(
 private fun ApkRowCard(
     row: ApkRow,
     busy: Boolean,
+    downloaded: Boolean,
     progress: Float?,
     anyBusy: Boolean,
+    onDownload: () -> Unit,
     onInstall: () -> Unit,
+    onDelete: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val context = LocalContext.current
     val cs = MaterialTheme.colorScheme
     val a = row.artifact
     Card(
-        modifier = Modifier.fillMaxWidth().alpha(if (row.expired) 0.55f else 1f),
-        shape = RoundedCornerShape(28.dp),
+        modifier = Modifier.fillMaxWidth().alpha(if (row.expired && !downloaded) 0.55f else 1f),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer),
     ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column {
-                Text(
-                    "${row.appName.replace(' ', '-')}-arm64-${a.shortSha}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    listOf(
-                        Formatter.formatShortFileSize(context, a.sizeBytes),
-                        a.createdAt?.let { timeAgoOrDate(it) }.orEmpty(),
-                        if (row.expired) stringResource(R.string.gh_artifact_expired_label) else "",
-                    ).filter { it.isNotBlank() }.joinToString(" \u2022 "),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = cs.onPrimaryContainer.copy(alpha = 0.75f),
-                )
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ProjectIcon(row.projectPath, size = 44.dp)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        apkBuildName(a.name, a.shortSha), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        listOf(
+                            Formatter.formatShortFileSize(context, a.sizeBytes),
+                            a.createdAt?.let { timeAgoOrDate(it) }.orEmpty(),
+                            if (row.expired && !downloaded) stringResource(R.string.gh_artifact_expired_label) else "",
+                        ).filter { it.isNotBlank() }.joinToString(" \u2022 "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onPrimaryContainer.copy(alpha = 0.75f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                // Not on the device yet: a Download button (not expired builds only).
+                if (!downloaded && !busy && !row.expired) {
+                    FilledIconButton(onClick = onDownload, enabled = !anyBusy, modifier = Modifier.size(44.dp)) {
+                        Icon(XIcons.Download, contentDescription = stringResource(R.string.gh_apk_download))
+                    }
+                }
             }
             if (busy) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -174,9 +193,18 @@ private fun ApkRowCard(
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
                 }
-            } else if (!row.expired) {
-                Button(onClick = onInstall, enabled = !anyBusy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                    Text(stringResource(R.string.gh_install), style = MaterialTheme.typography.labelLarge)
+            } else if (downloaded) {
+                // On the device: Install, plus Delete.
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = onInstall, enabled = !anyBusy, modifier = Modifier.weight(1f).height(44.dp)) {
+                        Text(stringResource(R.string.gh_install), style = MaterialTheme.typography.labelLarge)
+                    }
+                    FilledTonalIconButton(
+                        onClick = onDelete, enabled = !anyBusy, modifier = Modifier.size(44.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = cs.errorContainer, contentColor = cs.onErrorContainer,
+                        ),
+                    ) { Icon(XIcons.Delete, contentDescription = stringResource(R.string.action_delete)) }
                 }
             }
         }

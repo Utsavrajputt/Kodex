@@ -81,6 +81,19 @@ class GhNotifier(context: Context) {
         post(RESULT_BASE + KIND_NEW_BUILD, n)
     }
 
+    /** A watched build finished (audible channel). One notification per run. */
+    fun buildDone(runId: Long, title: String, text: String, ok: Boolean) {
+        val n = NotificationCompat.Builder(ctx, CHANNEL_BUILDS)
+            .setSmallIcon(if (ok) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .setContentIntent(openApp())
+            .build()
+        post(RESULT_BASE + 100 + (runId % 1000).toInt(), n)
+    }
+
     private fun post(id: Int, n: Notification) {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED

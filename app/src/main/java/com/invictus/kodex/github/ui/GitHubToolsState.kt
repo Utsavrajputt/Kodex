@@ -51,8 +51,6 @@ data class Transfer(
     val progress: Float?,
     /** True for the APK card, so the card (not a row) shows the progress. */
     val fromApkCard: Boolean,
-    /** Install was started straight from the Install button: no details dialog / inline body is shown. */
-    val silent: Boolean = false,
 )
 
 /** An APK that was downloaded, extracted and inspected, waiting for the user's tap. */
@@ -62,6 +60,8 @@ data class ReadyApk(
     val file: File,
     val inspect: InspectResult,
     val fromApkCard: Boolean,
+    /** Install was started straight from the Install button: no details dialog / inline body is shown. */
+    val silent: Boolean = false,
 )
 
 sealed interface ApkCardState {

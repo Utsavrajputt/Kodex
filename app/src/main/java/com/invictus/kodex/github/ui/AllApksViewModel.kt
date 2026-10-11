@@ -75,6 +75,8 @@ data class ApkRow(
     val repo: GhRepoRef,
     val appName: String,
     val expired: Boolean,
+    /** Project folder of this repo (for the app icon). */
+    val projectPath: String = "",
 )
 
 data class AllApksState(
@@ -86,6 +88,8 @@ data class AllApksState(
     /** Artifact id of the row that is downloading, with 0..1 progress (null = unknown size). */
     val busyId: Long? = null,
     val progress: Float? = null,
+    /** Artifact ids whose APK is already on the device (row shows Install + Delete instead of Download). */
+    val downloaded: Set<Long> = emptySet(),
 ) {
     val shown: List<ApkRow> get() = rows.take(visible)
     val hasMore: Boolean get() = visible < rows.size
@@ -123,7 +127,15 @@ class AllApksViewModel(
 
     init {
         ArmBuildWatch.schedule(appContext)
+        refreshDownloaded()
         load()
+    }
+
+    private fun refreshDownloaded() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ids = downloader.listCached().map { it.artifactId }.toSet()
+            _state.update { it.copy(downloaded = ids) }
+        }
     }
 
     fun load() {
@@ -131,9 +143,12 @@ class AllApksViewModel(
         viewModelScope.launch {
             try {
                 val recents = projects.recents.first().take(MAX_PROJECTS)
-                val repos = coroutineScope {
-                    recents.map { async(Dispatchers.IO) { resolver.resolve(it.file.path) } }.awaitAll()
-                }.mapNotNull { (it as? GitHubResolution.Ready)?.repo }.distinctBy { "${it.owner}/${it.name}".lowercase() }
+                val found = coroutineScope {
+                    recents.map { async(Dispatchers.IO) { it.file.path to resolver.resolve(it.file.path) } }.awaitAll()
+                }.mapNotNull { (path, r) -> (r as? GitHubResolution.Ready)?.repo?.let { it to path } }
+                    .distinctBy { (repo, _) -> "${repo.owner}/${repo.name}".lowercase() }
+                val repos = found.map { it.first }
+                val pathOf = found.associate { (repo, path) -> repo to path }
 
                 val rows = coroutineScope {
                     repos.map { repo ->
@@ -141,7 +156,7 @@ class AllApksViewModel(
                             try {
                                 repoFactory(repo).artifacts(1).items
                                     .filter { ApkResolver.isArm64(it.name) }
-                                    .map { toRow(it, repo) }
+                                    .map { toRow(it, repo, pathOf[repo].orEmpty()) }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: GitHubError) {
@@ -165,13 +180,27 @@ class AllApksViewModel(
 
     fun showMore() = _state.update { it.copy(visible = it.visible + AllApksState.PAGE) }
 
-    private fun toRow(a: GhArtifact, repo: GhRepoRef): ApkRow {
-        return ApkRow(a, repo, apkAppName(a.name).ifEmpty { repo.name.replaceFirstChar { it.uppercase() } }, a.isExpiredAt(Instant.now()))
+    private fun toRow(a: GhArtifact, repo: GhRepoRef, projectPath: String): ApkRow {
+        return ApkRow(a, repo, apkAppName(a.name).ifEmpty { repo.name.replaceFirstChar { it.uppercase() } }, a.isExpiredAt(Instant.now()), projectPath)
     }
 
     // ---- install -------------------------------------------------------------------------
 
-    fun install(row: ApkRow) {
+    /** Download only: the APK is kept on the device and the row switches to Install / Delete. */
+    fun download(row: ApkRow) = start(row, installAfter = false)
+
+    fun install(row: ApkRow) = start(row, installAfter = true)
+
+    fun delete(row: ApkRow) {
+        if (_state.value.busyId != null) return
+        viewModelScope.launch(Dispatchers.IO) {
+            downloader.cachedApk(row.artifact.id)?.let { downloader.delete(it) }
+            refreshDownloaded()
+            _events.tryEmit(AllApksEvent.Snack(R.string.gh_downloaded_deleted, listOf(apkBuildName(row.artifact.name, row.artifact.shortSha))))
+        }
+    }
+
+    private fun start(row: ApkRow, installAfter: Boolean) {
         if (_state.value.busyId != null || row.expired) return
         _state.update { it.copy(busyId = row.artifact.id, progress = 0f) }
         transferJob = GhBackground.scope.launch {
@@ -200,6 +229,10 @@ class AllApksViewModel(
                         apk.delete()
                         _events.tryEmit(AllApksEvent.Snack(R.string.gh_apk_invalid))
                     }
+                    !installAfter -> notifier.result(
+                        GhNotifier.KIND_DOWNLOAD, appContext.getString(R.string.gh_notif_download_done_title),
+                        appContext.getString(R.string.gh_notif_download_done_text, row.artifact.name),
+                    )
                     InstallDecision.isBlocked(inspected.kind) -> _events.tryEmit(AllApksEvent.Snack(R.string.apks_downgrade_blocked))
                     !installer.canRequestInstalls() -> _events.tryEmit(AllApksEvent.OpenSettings(installer.unknownSourcesIntent()))
                     else -> {
@@ -224,6 +257,7 @@ class AllApksViewModel(
             } finally {
                 _state.update { it.copy(busyId = null, progress = null) }
                 withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { downloader.cleanOld() }
+                refreshDownloaded()
                 GhBackground.end(appContext)
             }
         }

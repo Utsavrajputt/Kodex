@@ -18,6 +18,7 @@ import com.invictus.kodex.github.data.GitHubRepository
 import com.invictus.kodex.github.data.GitHubResolution
 import com.invictus.kodex.github.data.RunStatusFilter
 import com.invictus.kodex.github.notify.ArmBuildWatch
+import com.invictus.kodex.github.notify.RunCompletionWatch
 import com.invictus.kodex.github.prefs.GitHubPrefs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -40,7 +41,7 @@ class GitHubManagerViewModel(
     private val prefs: GitHubPrefs,
     private val tokens: GitHubTokenProvider,
     private val profiles: GitHubProfileRepository,
-    appContext: Context,
+    private val appContext: Context,
     /** The "all runs" screen: only runs + workflows, none of the APK / artifact / profile loading. */
     private val lite: Boolean = false,
 ) : ViewModel() {
@@ -180,6 +181,8 @@ class GitHubManagerViewModel(
             try {
                 val result = repo.runs(page, filters.status, filters.workflowId)
                 page = result.page + 1
+                // Announce the moment any queued / running build finishes (also when the app is in the background).
+                _state.value.repo?.let { ref -> result.items.filter { it.isActive }.forEach { RunCompletionWatch.watch(appContext, ref, it) } }
                 _state.update {
                     it.copy(
                         runs = if (reset) result.items else (it.runs + result.items).distinctBy { r -> r.id },

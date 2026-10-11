@@ -177,6 +177,7 @@ fun ApkCard(
     state: GitHubToolsState,
     tools: GitHubToolsController,
     onRunShortcut: () -> Unit,
+    projectPath: String,
 ) {
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
@@ -215,16 +216,19 @@ fun ApkCard(
                 else -> emptyList()
             }.filter { it.isNotBlank() }.joinToString(" \u2022 ")
 
-            Column {
-                Text(
-                    title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                if (facts.isNotBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ProjectIcon(projectPath, size = 44.dp)
+                Column(Modifier.weight(1f)) {
                     Text(
-                        facts, style = MaterialTheme.typography.bodySmall,
-                        color = cs.onPrimaryContainer.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
+                    if (facts.isNotBlank()) {
+                        Text(
+                            facts, style = MaterialTheme.typography.bodySmall,
+                            color = cs.onPrimaryContainer.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
 
@@ -378,6 +382,8 @@ fun LazyListScope.deploymentsSection(
     tools: GitHubToolsController,
     onDelete: (GhDeployment) -> Unit,
 ) {
+    // Only shown when the repo actually has deployments.
+    if (state.deployments.isEmpty()) return
     item(key = "deployments_header") {
         SectionHeader(
             title = stringResource(R.string.gh_deployments_title),

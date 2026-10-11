@@ -33,6 +33,13 @@
     <!-- Runs -->
     <string name="gh_runs_title">Workflow runs</string>
     <string name="gh_view_all">View all</string>
+    <string name="gh_notif_run_title">Build #%1$d running</string>
+    <string name="gh_notif_run_text">You will get a notification when it finishes.</string>
+    <string name="gh_notif_done_title">Build #%1$d complete</string>
+    <string name="gh_notif_done_text">%1$s is ready to download.</string>
+    <string name="gh_notif_done_text_plain">The APK is ready to download.</string>
+    <string name="gh_notif_failed_title">Build #%1$d failed</string>
+    <string name="gh_notif_failed_text">Tap to open the app and check the log.</string>
     <string name="gh_runs_empty">No workflow runs match.</string>
     <string name="gh_filter_all">All</string>
     <string name="gh_filter_failed">Failed</string>
