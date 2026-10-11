@@ -111,4 +111,24 @@ class ApkResolverTest {
     @Test fun latestBuildEmptyWithoutArm64() {
         assertTrue(ApkResolver.latestBuild(listOf(art(1, "kodex-universal-aaa", 1))).isEmpty())
     }
+
+    @Test fun newestBuildKeepsEveryLiveArtifactOfTheLatestRun() {
+        val list = listOf(
+            art(1, "Xmd-lite-arm64-v8a-new", 1, run = 500), art(2, "Xmd-full-armeabi-v7a-new", 1, run = 500),
+            art(3, "Xmd-full-arm64-v8a-old", 5, run = 400), art(4, "Xmd-lite-arm64-v8a-new2", 1, run = 500, expired = true),
+        )
+        assertEquals(listOf(1L, 2L), ApkResolver.newestBuild(list, now).map { it.id }.sorted())
+    }
+
+    @Test fun buildOfUsesTheAnchorsRun() {
+        val list = listOf(art(1, "a-arm64-v8a-x", 1, run = 7), art(2, "a-universal-x", 1, run = 7), art(3, "a-universal-y", 2, run = 8))
+        assertEquals(listOf(1L, 2L), ApkResolver.buildOf(list, list[0]).map { it.id })
+    }
+
+    @Test fun apkArtifactDetection() {
+        assertTrue(ApkResolver.isApkArtifact("Xmd-full-armeabi-v7a-abc1234"))
+        assertTrue(ApkResolver.isApkArtifact("kodex-universal-abc1234"))
+        assertTrue(ApkResolver.isApkArtifact("app-debug.apk"))
+        assertEquals(false, ApkResolver.isApkArtifact("build-logs"))
+    }
 }

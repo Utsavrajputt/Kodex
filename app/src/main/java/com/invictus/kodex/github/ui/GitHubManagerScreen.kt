@@ -232,8 +232,7 @@ private fun ReadyContent(
 ) {
     var pendingDelete by remember { mutableStateOf<GhRun?>(null) }
     var pendingCancel by remember { mutableStateOf<GhRun?>(null) }
-    var showAllDeployments by rememberSaveable { mutableStateOf(false) }
-    var pendingDeploymentDelete by remember { mutableStateOf<GhDeployment?>(null) }
+    var pendingArtifactDelete by remember { mutableStateOf<GhArtifact?>(null) }
     val tools = vm.tools
     val onRunShortcut = {
         val wf = tools.effectiveWorkflow(state.workflows, toolsState.run.selectedWorkflowId)
@@ -301,17 +300,17 @@ private fun ReadyContent(
                         }
                     }
                 }
-            deploymentsSection(toolsState, showAllDeployments, { showAllDeployments = true }, tools) { pendingDeploymentDelete = it }
+            artifactsSection(toolsState, tools) { pendingArtifactDelete = it }
         }
     }
 
-    pendingDeploymentDelete?.let { d ->
+    pendingArtifactDelete?.let { art ->
         ConfirmDeleteDialog(
-            title = stringResource(R.string.gh_deployment_delete_title),
-            body = stringResource(R.string.gh_deployment_delete_body, d.environment, d.ref),
+            title = stringResource(R.string.gh_artifact_delete_title),
+            body = stringResource(R.string.gh_artifact_delete_body, art.name),
             confirm = stringResource(R.string.action_delete),
-            onDismiss = { pendingDeploymentDelete = null },
-            onConfirm = { pendingDeploymentDelete = null; tools.deleteDeployment(d) },
+            onDismiss = { pendingArtifactDelete = null },
+            onConfirm = { pendingArtifactDelete = null; tools.deleteArtifact(art) },
         )
     }
 

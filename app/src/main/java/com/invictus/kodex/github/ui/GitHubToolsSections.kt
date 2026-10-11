@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import com.invictus.kodex.R
 import com.invictus.kodex.github.api.GhArtifact
 import com.invictus.kodex.github.data.ApkCandidate
+import com.invictus.kodex.github.data.ApkResolver
 import com.invictus.kodex.github.api.GhDeployment
 import com.invictus.kodex.github.api.GhWorkflow
 import com.invictus.kodex.github.install.ArtifactZip
@@ -221,10 +222,10 @@ fun ApkCard(
     val busy = state.transfer?.paused == false || state.installing || state.pendingSave != null
 
     GhCard(p.apkCard, p.apkBorder) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             when {
                 found != null -> found.variants.forEachIndexed { index, a ->
-                    if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(p.onCard.copy(alpha = 0.12f)))
+                    if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(p.onCard.copy(alpha = 0.18f)))
                     ApkVariant(a, found.candidate.universal, state, tools, projectPath, ownerLogin, busy)
                 }
                 fallbackLocal != null -> {
@@ -416,76 +417,102 @@ fun ReadyApkBody(
     }
 }
 
-// ---- Deployments section (plan 6.1 card 5 / 7.4) -----------------------------------------------
+// ---- Artifacts section: the rest of the latest build (the ARM64 ones are in the APK card) -------
 
-fun LazyListScope.deploymentsSection(
+/** Live artifacts of the latest build that the APK card does not already show (armeabi, universal, ...). */
+internal fun extraArtifacts(state: GitHubToolsState, now: Instant = Instant.now()): List<GhArtifact> {
+    val found = state.apk as? ApkCardState.Found
+    val build = found?.let { ApkResolver.buildOf(state.artifacts, it.candidate.artifact) }
+        ?: ApkResolver.newestBuild(state.artifacts, now)
+    val cardIds: Set<Long> = found?.variants?.map { it.id }?.toSet() ?: emptySet()
+    return build
+        .filter { !it.isExpiredAt(now) && it.id !in cardIds && !ApkResolver.isArm64(it.name) }
+        .sortedBy { it.name.lowercase() }
+}
+
+fun LazyListScope.artifactsSection(
     state: GitHubToolsState,
-    showAll: Boolean,
-    onShowAll: () -> Unit,
     tools: GitHubToolsController,
-    onDelete: (GhDeployment) -> Unit,
+    onDelete: (GhArtifact) -> Unit,
 ) {
-    // Only shown when the repo actually has deployments.
-    if (state.deployments.isEmpty()) return
-    item(key = "deployments_header") {
+    val extras = extraArtifacts(state)
+    if (extras.isEmpty()) return
+    item(key = "artifacts_header") {
         SectionHeader(
-            title = stringResource(R.string.gh_deployments_title),
-            expanded = state.deploymentsExpanded,
-            onToggle = { tools.setDeploymentsExpanded(!state.deploymentsExpanded) },
+            title = stringResource(R.string.gh_artifacts_title),
+            expanded = state.artifactsExpanded,
+            onToggle = { tools.setArtifactsExpanded(!state.artifactsExpanded) },
         )
     }
-    if (!state.deploymentsExpanded) return
-    when {
-        state.deploymentsLoading -> item(key = "deployments_loading") {
-            LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp))
-        }
-        state.deploymentsError != null && state.deployments.isEmpty() -> item(key = "deployments_error") {
-            ErrorBlock(state.deploymentsError.resolve(LocalContext.current), tools::loadDeployments)
-        }
-        state.deployments.isEmpty() -> item(key = "deployments_empty") {
-            Muted(stringResource(R.string.gh_deployments_empty), Modifier.padding(16.dp))
-        }
-        else -> {
-            val visible = if (showAll) state.deployments else state.deployments.take(COLLAPSED_COUNT)
-            items(visible, key = { "deployment_${it.id}" }) { d ->
-                DeploymentRow(d, busy = d.id in state.busyDeploymentIds, onDelete = { onDelete(d) })
-            }
-            if (!showAll && state.deployments.size > COLLAPSED_COUNT) {
-                item(key = "deployments_more") {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                        TextButton(onClick = onShowAll) { Text(stringResource(R.string.gh_show_all, state.deployments.size)) }
-                    }
-                }
-            }
-        }
+    if (!state.artifactsExpanded) return
+    items(extras, key = { "artifact_${it.id}" }) { a ->
+        ArtifactRow(a, state, tools, onDelete = { onDelete(a) })
     }
 }
 
+/** Compact row: name + size/time, Download (or Install once it is on the device) and Delete. */
 @Composable
-private fun DeploymentRow(d: GhDeployment, busy: Boolean, onDelete: () -> Unit) {
+private fun ArtifactRow(a: GhArtifact, state: GitHubToolsState, tools: GitHubToolsController, onDelete: () -> Unit) {
+    val p = ghPalette()
+    val context = LocalContext.current
+    val local = state.downloaded.firstOrNull { it.artifactId == a.id }
+    val transfer = state.transfer?.takeIf { !it.fromApkCard && it.artifactId == a.id }
+    val busy = state.transfer?.paused == false || state.installing || state.pendingSave != null
+    val deleting = a.id in state.busyArtifactIds
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = ghPalette().runCard),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = p.runCard),
     ) {
-        Row(Modifier.padding(start = 14.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(d.environment.ifBlank { "deployment" }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Muted(
-                    listOf(d.ref, d.shortSha, d.latestState.orEmpty(), d.createdAt?.let { relative(it) }.orEmpty())
-                        .filter { it.isNotBlank() }.joinToString(" • "),
-                )
-            }
-            if (busy) {
-                CircularProgressIndicator(Modifier.padding(12.dp).size(24.dp), strokeWidth = 2.dp)
-            } else {
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        XIcons.Delete,
-                        contentDescription = stringResource(R.string.gh_deployment_delete_desc, d.environment),
-                        tint = MaterialTheme.colorScheme.error,
+        Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        a.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                        color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        listOf(Formatter.formatShortFileSize(context, a.sizeBytes), a.createdAt?.let { timeAgoOrDate(it) }.orEmpty())
+                            .filter { it.isNotBlank() }.joinToString(" \u2022 "),
+                        style = MaterialTheme.typography.bodySmall, color = p.onCardMuted, maxLines = 1,
                     )
                 }
+                when {
+                    deleting -> CircularProgressIndicator(Modifier.padding(10.dp).size(22.dp), strokeWidth = 2.dp)
+                    else -> {
+                        if (local != null) {
+                            TextButton(
+                                onClick = { tools.installDownloaded(local) }, enabled = !busy,
+                                colors = ButtonDefaults.textButtonColors(contentColor = p.accent),
+                            ) { Text(stringResource(R.string.gh_install)) }
+                        } else if (transfer == null) {
+                            IconButton(
+                                onClick = {
+                                    if (ApkResolver.isApkArtifact(a.name)) tools.installFromArtifact(a) else tools.saveArtifact(a)
+                                },
+                                enabled = !busy, modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(XIcons.Download, contentDescription = stringResource(R.string.gh_apk_download), tint = p.accent, modifier = Modifier.size(22.dp))
+                            }
+                        }
+                        IconButton(onClick = onDelete, enabled = !busy, modifier = Modifier.size(40.dp)) {
+                            Icon(
+                                XIcons.Delete, contentDescription = stringResource(R.string.action_delete),
+                                tint = p.danger, modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            if (transfer != null) {
+                TransferStatus(
+                    downloaded = transfer.downloaded, total = transfer.total, etaSeconds = transfer.etaSeconds, paused = transfer.paused,
+                    onPauseResume = if (transfer.paused) tools::resumeTransfer else tools::pauseTransfer,
+                    onCancel = tools::cancelTransfer,
+                    accent = p.accent, track = p.onCard.copy(alpha = 0.12f), textColor = p.onCardMuted,
+                    modifier = Modifier.padding(end = 8.dp),
+                    canPause = (transfer.progress ?: 0f) < 1f,
+                )
             }
         }
     }

@@ -181,7 +181,6 @@ class GitHubToolsController(
         }
         loadBranches(reset = true)
         loadArtifactsAndApk()
-        loadDeployments()
     }
 
     /** The gate left Ready (not git / no remote / no token). */
@@ -193,7 +192,6 @@ class GitHubToolsController(
     fun refresh() {
         loadBranches(reset = true)
         loadArtifactsAndApk()
-        loadDeployments()
     }
 
     /** Back from system settings / the installer. */
@@ -715,6 +713,8 @@ class GitHubToolsController(
         _state.update { it.copy(installing = true) }
         scope.launch {
             try {
+                // The package installer may replace this very app (killing the process): leave no stale bar behind.
+                notifier.clearLive()
                 installer.install(r.file)
             } catch (e: CancellationException) {
                 throw e

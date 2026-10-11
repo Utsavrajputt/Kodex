@@ -1,6 +1,7 @@
 package com.invictus.kodex.github.ui
 
 import android.text.format.Formatter
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -104,7 +105,7 @@ fun AllApksScreen(
             else -> LazyColumn(
                 Modifier.padding(padding).fillMaxSize(),
                 contentPadding = PaddingValues(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 items(state.builds, key = { it.key }) { build ->
                     BuildCard(
@@ -142,10 +143,11 @@ private fun BuildCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer),
+        border = BorderStroke(1.dp, cs.onPrimaryContainer.copy(alpha = 0.22f)),
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             build.variants.forEachIndexed { index, row ->
-                if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(cs.onPrimaryContainer.copy(alpha = 0.12f)))
+                if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(cs.onPrimaryContainer.copy(alpha = 0.2f)))
                 ApkVariantBlock(
                     row = row,
                     transfer = transfer?.takeIf { it.artifactId == row.artifact.id },

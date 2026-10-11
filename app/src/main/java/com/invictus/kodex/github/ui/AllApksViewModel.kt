@@ -275,6 +275,7 @@ class AllApksViewModel(
                         }
                     }
                     downloadDone = true
+                    notifier.updateLive(title, appContext.getString(R.string.gh_notif_download_preparing), null)
                     downloader.extract(zip, row.artifact)
                 }
                 val inspected = withContext(Dispatchers.IO) { inspector.inspect(apk) }
@@ -294,6 +295,8 @@ class AllApksViewModel(
                             GhNotifier.KIND_DOWNLOAD, appContext.getString(R.string.gh_notif_download_done_title),
                             appContext.getString(R.string.gh_notif_download_done_text, row.artifact.name),
                         )
+                        // The package installer may replace this very app (killing the process): leave no stale bar behind.
+                        notifier.clearLive()
                         installer.install(apk)
                     }
                 }

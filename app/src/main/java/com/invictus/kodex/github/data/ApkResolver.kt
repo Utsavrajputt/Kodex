@@ -48,6 +48,21 @@ object ApkResolver {
         return arm.filter { sameBuild(it, newest) }.sortedBy { it.name.lowercase() }
     }
 
+    private val APK_NAME = Regex("(?i)(-arm64-v8a|-armeabi-v7a|-universal|-x86_64|-x86)(-|$)|\\.apk$")
+
+    /** An artifact that carries an installable APK (named after its ABI), as opposed to logs, reports, ... */
+    fun isApkArtifact(name: String) = APK_NAME.containsMatchIn(name)
+
+    /** Every artifact of the same build (run, else commit) as [anchor], whatever its name. */
+    fun buildOf(artifacts: List<GhArtifact>, anchor: GhArtifact): List<GhArtifact> = artifacts.filter { sameBuild(it, anchor) }
+
+    /** Every live artifact of the newest build in [artifacts], whatever its name. */
+    fun newestBuild(artifacts: List<GhArtifact>, now: Instant): List<GhArtifact> {
+        val live = artifacts.filter { !it.isExpiredAt(now) }
+        val newest = live.maxWithOrNull(compareBy<GhArtifact>({ it.createdAt ?: Instant.EPOCH }, { it.id })) ?: return emptyList()
+        return live.filter { sameBuild(it, newest) }
+    }
+
     fun isArm64(name: String) = ARM64.matches(name)
     fun isUniversal(name: String) = UNIVERSAL.matches(name)
 

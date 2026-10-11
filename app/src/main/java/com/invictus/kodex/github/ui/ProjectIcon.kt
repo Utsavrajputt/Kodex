@@ -3,6 +3,7 @@ package com.invictus.kodex.github.ui
 import android.content.Context
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -32,7 +33,17 @@ import java.io.File
  */
 object ProjectIconLoader {
     private val DENSITIES = listOf("xxxhdpi", "xxhdpi", "xhdpi", "hdpi", "mdpi")
-    private val NAMES = listOf("ic_launcher", "ic_launcher_round", "ic_launcher_foreground")
+    // Not "ic_launcher_foreground": an adaptive foreground has a wide transparent margin and looks tiny.
+    private val NAMES = listOf("ic_launcher", "ic_launcher_round")
+    private val ICON_DIRS = listOf("mipmap", "drawable")
+    private val MANIFEST_ICON = Regex("android:icon\\s*=\\s*\"@(?:mipmap|drawable)/([A-Za-z0-9_]+)\"")
+
+    /** The launcher icon name the app's own manifest declares (`android:icon="@mipmap/xmd"` -> "xmd"). */
+    private fun manifestIconName(res: File): String? = runCatching {
+        val manifest = File(res.parentFile, "AndroidManifest.xml")
+        if (!manifest.isFile || manifest.length() > 512 * 1024) null
+        else MANIFEST_ICON.find(manifest.readText())?.groupValues?.get(1)
+    }.getOrNull()
     private val EXTENSIONS = listOf("png", "webp", "jpg")
 
     /** `res` folders worth checking: the usual spots, then one level of module folders. */
@@ -50,8 +61,10 @@ object ProjectIconLoader {
     fun findIconFile(projectPath: String): File? {
         val root = File(projectPath)
         for (res in resDirs(root)) {
-            for (name in NAMES) for (density in DENSITIES) for (ext in EXTENSIONS) {
-                val f = File(res, "mipmap-$density/$name.$ext")
+            // The icon the manifest names comes first, so a project that calls it "xmd" (not "ic_launcher") still resolves.
+            val names = (listOfNotNull(manifestIconName(res)) + NAMES).distinct()
+            for (name in names) for (dir in ICON_DIRS) for (density in DENSITIES) for (ext in EXTENSIONS) {
+                val f = File(res, "$dir-$density/$name.$ext")
                 if (f.isFile && f.length() > 0) return f
             }
         }
@@ -133,15 +146,20 @@ fun ProjectIcon(projectPath: String, size: Dp, modifier: Modifier = Modifier, co
         }
     }
     when (val st = icon) {
-        IconState.Loading -> Unit
-        is IconState.Found -> Image(bitmap = st.bitmap, contentDescription = null, modifier = modifier.size(size).clip(shape))
+        // Reserve the space while loading so the row does not jump (or look smaller) when the icon arrives.
+        IconState.Loading -> Spacer(modifier.size(size))
+        is IconState.Found -> Image(
+            bitmap = st.bitmap, contentDescription = null, contentScale = ContentScale.Crop,
+            modifier = modifier.size(size).clip(shape),
+        )
         IconState.Missing -> {
             val kodex by produceState<ImageBitmap?>(null) {
                 value = withContext(Dispatchers.IO) { runCatching { ProjectIconLoader.kodexIcon(context) }.getOrNull() }
             }
             val fallback = kodex?.let { BitmapPainter(it) } ?: ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
             if (ownerLogin.isNullOrBlank()) {
-                kodex?.let { Image(bitmap = it, contentDescription = null, modifier = modifier.size(size).clip(shape)) }
+                kodex?.let { Image(bitmap = it, contentDescription = null, contentScale = ContentScale.Crop, modifier = modifier.size(size).clip(shape)) }
+                    ?: Spacer(modifier.size(size))
             } else {
                 val loader = (context as KodexApp).container.avatarImageLoader
                 AsyncImage(
