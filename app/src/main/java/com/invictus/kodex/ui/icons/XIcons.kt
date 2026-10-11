@@ -94,6 +94,29 @@ object XIcons {
         icon("Comment", "M21.99,4c0,-1.1 -0.89,-2 -1.99,-2H4c-1.1,0 -2,0.9 -2,2v12c0,1.1 0.9,2 2,2h14l4,4 -0.01,-18z")
     }
 
+    // GitHub screen glyphs (Material paths).
+    /** Material "android": the robot head used in the workflow picker. */
+    val Android: ImageVector by lazy {
+        icon(
+            "Android",
+            "M17.6,9.48l1.84,-3.18c0.16,-0.31 0.04,-0.69 -0.26,-0.85c-0.29,-0.15 -0.65,-0.06 -0.83,0.22l-1.88,3.24c-2.86,-1.21 -6.08,-1.21 -8.94,0L5.65,5.67c-0.19,-0.29 -0.58,-0.38 -0.87,-0.2C4.5,5.65 4.41,6.01 4.56,6.3L6.4,9.48C3.3,11.25 1.28,14.44 1,18h22C22.72,14.44 20.7,11.25 17.6,9.48zM7,15.25c-0.69,0 -1.25,-0.56 -1.25,-1.25c0,-0.69 0.56,-1.25 1.25,-1.25S8.25,13.31 8.25,14C8.25,14.69 7.69,15.25 7,15.25zM17,15.25c-0.69,0 -1.25,-0.56 -1.25,-1.25c0,-0.69 0.56,-1.25 1.25,-1.25s1.25,0.56 1.25,1.25C18.25,14.69 17.69,15.25 17,15.25z",
+        )
+    }
+    /** Material "call_split": branch glyph for the branch picker. */
+    val Branch: ImageVector by lazy {
+        icon(
+            "Branch",
+            "M14,4l2.29,2.29l-2.88,2.88l1.42,1.42l2.88,-2.88L20,10V4H14zM10,4H4v6l2.29,-2.29l4.71,4.7V20h2v-8.41l-5.29,-5.3L10,4z",
+        )
+    }
+    /** Material "delete_sweep": bin with sweep lines, for Clean up (close to the old trash, clearly different). */
+    val DeleteSweep: ImageVector by lazy {
+        icon(
+            "DeleteSweep",
+            "M15,16h4v2h-4zM15,8h7v2h-7zM15,12h6v2h-6zM3,18c0,1.1 0.9,2 2,2h6c1.1,0 2,-0.9 2,-2L13,8L3,8v10zM14,5h-3l-1,-1L6,4L5,5L2,5v2h12z",
+        )
+    }
+
     // M15 GitHub Manager: run status glyphs (Material paths). Status is shown as glyph + text, never colour alone.
     val CheckCircle: ImageVector by lazy {
         icon("CheckCircle", "M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM10,17l-5,-5 1.41,-1.41L10,14.17l7.59,-7.59L19,8l-9,9z")

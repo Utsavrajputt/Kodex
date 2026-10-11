@@ -16,7 +16,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilledTonalButton
@@ -70,6 +75,7 @@ fun RunWorkflowCard(
     defaultBranch: String?,
     tools: GitHubToolsController,
 ) {
+    val p = ghPalette()
     val workflow = tools.effectiveWorkflow(workflows, state.selectedWorkflowId)
     val ref = state.selectedBranch ?: defaultBranch
     LaunchedEffect(workflow?.id, ref) {
@@ -80,17 +86,17 @@ fun RunWorkflowCard(
     val canRun = workflow != null && ref != null && !state.dispatching &&
         (supported == true || info is DispatchInfoState.Failed)
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Text(stringResource(R.string.gh_run_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    GhCard(p.card, p.cardBorder) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
+            Text(
+                stringResource(R.string.gh_run_title),
+                style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = p.onCard,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PickerButton(
                     label = workflow?.name ?: stringResource(R.string.gh_run_pick_workflow),
+                    leading = XIcons.Android,
                     enabled = workflows.isNotEmpty(),
                     modifier = Modifier.weight(1f),
                 ) { close ->
@@ -103,6 +109,7 @@ fun RunWorkflowCard(
                 }
                 PickerButton(
                     label = ref ?: stringResource(R.string.gh_run_pick_branch),
+                    leading = XIcons.Branch,
                     enabled = ref != null || state.branches.isNotEmpty(),
                     modifier = Modifier.weight(0.8f),
                 ) { close ->
@@ -120,15 +127,27 @@ fun RunWorkflowCard(
                         )
                     }
                 }
-                FilledIconButton(
-                    onClick = { if (workflow != null && ref != null) tools.onRunPressed(workflow, ref) },
-                    enabled = canRun,
-                    modifier = Modifier.size(40.dp),
+                // Soft halo ring around the play button.
+                Box(
+                    Modifier.size(60.dp).clip(CircleShape).background(p.accent.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    if (state.dispatching) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(XIcons.PlayArrow, contentDescription = stringResource(R.string.gh_run_action))
+                    FilledIconButton(
+                        onClick = { if (workflow != null && ref != null) tools.onRunPressed(workflow, ref) },
+                        enabled = canRun,
+                        modifier = Modifier.size(52.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = p.accent,
+                            contentColor = p.onInstall,
+                            disabledContainerColor = p.accent.copy(alpha = 0.35f),
+                            disabledContentColor = p.onInstall.copy(alpha = 0.6f),
+                        ),
+                    ) {
+                        if (state.dispatching) {
+                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = p.onInstall)
+                        } else {
+                            Icon(XIcons.PlayArrow, contentDescription = stringResource(R.string.gh_run_action), modifier = Modifier.size(28.dp))
+                        }
                     }
                 }
             }
@@ -140,8 +159,8 @@ fun RunWorkflowCard(
                 else -> null
             }
             if (note != null) {
-                Spacer(Modifier.height(4.dp))
-                Text(stringResource(note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(6.dp))
+                Text(stringResource(note), style = MaterialTheme.typography.bodySmall, color = p.onCardMuted)
             }
         }
     }
@@ -150,21 +169,35 @@ fun RunWorkflowCard(
 @Composable
 private fun PickerButton(
     label: String,
+    leading: ImageVector,
     enabled: Boolean,
     modifier: Modifier,
     content: @Composable (close: () -> Unit) -> Unit,
 ) {
+    val p = ghPalette()
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
         OutlinedButton(
             onClick = { open = true },
             enabled = enabled,
             shape = CircleShape,
-            modifier = Modifier.fillMaxWidth().height(40.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp),
+            border = BorderStroke(1.dp, p.pickerBorder),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = p.onCard,
+                disabledContentColor = p.onCard.copy(alpha = 0.4f),
+            ),
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp),
         ) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-            Icon(XIcons.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(leading, contentDescription = null, modifier = Modifier.size(20.dp), tint = p.onCardMuted)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                label, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(Modifier.width(4.dp))
+            Icon(XIcons.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(20.dp))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) { content { open = false } }
     }
@@ -180,6 +213,7 @@ fun ApkCard(
     projectPath: String,
 ) {
     val cs = MaterialTheme.colorScheme
+    val p = ghPalette()
     val context = LocalContext.current
     // Only ONE APK is ever shown: the latest successful run's artifact. If it is already on the device the
     // card offers Install / Save / Delete, otherwise Download. An older downloaded file is only a fallback when
@@ -190,12 +224,8 @@ fun ApkCard(
     val local = if (latestId != null) state.downloaded.firstOrNull { it.artifactId == latestId } else state.downloaded.firstOrNull()
     val busy = state.transfer != null || state.installing || state.pendingSave != null
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer),
-    ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    GhCard(p.apkCard, p.apkBorder) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             val title = when {
                 found != null -> apkBuildName(found.candidate.artifact.name, found.candidate.artifact.shortSha)
                 local != null -> apkTitle(local.label)
@@ -217,16 +247,16 @@ fun ApkCard(
             }.filter { it.isNotBlank() }.joinToString(" \u2022 ")
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ProjectIcon(projectPath, size = 44.dp)
+                ProjectIcon(projectPath, size = 56.dp, corner = 16.dp)
                 Column(Modifier.weight(1f)) {
                     Text(
-                        title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                        color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                     if (facts.isNotBlank()) {
                         Text(
                             facts, style = MaterialTheme.typography.bodySmall,
-                            color = cs.onPrimaryContainer.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -243,19 +273,22 @@ fun ApkCard(
                         transfer != null -> TransferRow(transfer, onCancel = tools::cancelTransfer)
                         local != null -> ApkActions(local, state.installing, busy, tools)
                         justDownloaded != null -> ApkActions(justDownloaded, state.installing, busy, tools)
-                        else -> Button(
+                        else -> GhPrimaryButton(
                             onClick = { tools.downloadApk(found.candidate) },
                             enabled = state.transfer == null,
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.gh_apk_download), style = MaterialTheme.typography.labelLarge)
+                            Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(24.dp), tint = p.onInstall)
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                stringResource(R.string.gh_apk_download),
+                                style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = p.onInstall,
+                            )
                         }
                     }
                 }
                 local != null -> ApkActions(local, state.installing, busy, tools)
-                apk == ApkCardState.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                apk == ApkCardState.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth(), color = p.accent, trackColor = p.onCard.copy(alpha = 0.12f))
                 else -> {
                     val msg = when (apk) {
                         is ApkCardState.Error -> apk.message.resolve(context)
@@ -263,10 +296,11 @@ fun ApkCard(
                             ?: stringResource(R.string.gh_apk_expired)
                         else -> stringResource(R.string.gh_apk_none)
                     }
-                    Text(msg, style = MaterialTheme.typography.bodyMedium, color = if (apk is ApkCardState.Error) cs.error else cs.onPrimaryContainer)
+                    Text(msg, style = MaterialTheme.typography.bodyMedium, color = if (apk is ApkCardState.Error) p.danger else p.onCard)
                     FilledTonalButton(
                         onClick = if (apk is ApkCardState.Error) tools::loadArtifactsAndApk else onRunShortcut,
-                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = p.neutralAction, contentColor = p.onNeutralAction),
                     ) {
                         Text(stringResource(if (apk is ApkCardState.Error) R.string.gh_retry else R.string.gh_run_action_label))
                     }
@@ -276,53 +310,58 @@ fun ApkCard(
     }
 }
 
-/** APK already on the device: big Install, plus Save-to-folder and a clearly separate Delete. */
+/** APK already on the device: big Install, plus open-folder (save) and a clearly separate Delete. */
 @Composable
 private fun ApkActions(d: DownloadedApk, installing: Boolean, busy: Boolean, tools: GitHubToolsController) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(
+    val p = ghPalette()
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        GhPrimaryButton(
             onClick = { tools.installDownloaded(d) },
             enabled = !busy,
-            modifier = Modifier.weight(1f).height(44.dp),
+            modifier = Modifier.weight(1f),
         ) {
-            Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(stringResource(R.string.gh_install), style = MaterialTheme.typography.labelLarge)
+            if (installing) {
+                CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = p.onInstall)
+            } else {
+                Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(24.dp), tint = p.onInstall)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    stringResource(R.string.gh_install),
+                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = p.onInstall,
+                )
+            }
         }
-        FilledTonalIconButton(
-            onClick = { tools.saveDownloaded(d) },
+        GhCircleButton(
+            icon = XIcons.Folder,
+            description = stringResource(R.string.gh_save_to_folder),
+            container = p.neutralAction, tint = p.onNeutralAction,
             enabled = !busy,
-            modifier = Modifier.size(44.dp),
-        ) {
-            Icon(XIcons.Folder, contentDescription = stringResource(R.string.gh_save_to_folder))
-        }
-        FilledTonalIconButton(
-            onClick = { tools.deleteDownloaded(d) },
+            onClick = { tools.saveDownloaded(d) },
+        )
+        GhCircleButton(
+            icon = XIcons.Delete,
+            description = stringResource(R.string.action_delete),
+            container = p.dangerAction, tint = p.onDangerAction,
             enabled = !installing,
-            modifier = Modifier.size(44.dp),
-            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer,
-            ),
-        ) {
-            Icon(XIcons.Delete, contentDescription = stringResource(R.string.action_delete))
-        }
+            onClick = { tools.deleteDownloaded(d) },
+        )
     }
 }
 
 @Composable
 private fun TransferRow(t: Transfer, onCancel: () -> Unit) {
+    val pal = ghPalette()
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
                 stringResource(if (t.purpose == TransferPurpose.Install) R.string.gh_transfer_downloading else R.string.gh_transfer_preparing_save),
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall, color = pal.onCard,
             )
             val p = t.progress
-            if (p == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp))
-            else LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+            if (p == null) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp), color = pal.accent, trackColor = pal.onCard.copy(alpha = 0.12f))
+            else LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), color = pal.accent, trackColor = pal.onCard.copy(alpha = 0.12f))
         }
-        TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
+        TextButton(onClick = onCancel, colors = ButtonDefaults.textButtonColors(contentColor = pal.accent)) { Text(stringResource(R.string.action_cancel)) }
     }
 }
 
@@ -420,8 +459,12 @@ fun LazyListScope.deploymentsSection(
 
 @Composable
 private fun DeploymentRow(d: GhDeployment, busy: Boolean, onDelete: () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = ghPalette().runCard),
+    ) {
+        Row(Modifier.padding(start = 14.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(d.environment.ifBlank { "deployment" }, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Muted(

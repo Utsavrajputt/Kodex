@@ -65,12 +65,12 @@ object ProjectIconLoader {
 }
 
 @Composable
-fun ProjectIcon(projectPath: String, size: Dp, modifier: Modifier = Modifier) {
+fun ProjectIcon(projectPath: String, size: Dp, modifier: Modifier = Modifier, corner: Dp = 10.dp) {
     val context = LocalContext.current.applicationContext
     val icon by produceState<ImageBitmap?>(null, projectPath) {
         value = withContext(Dispatchers.IO) { runCatching { ProjectIconLoader.load(context, projectPath) }.getOrNull() }
     }
     icon?.let {
-        Image(bitmap = it, contentDescription = null, modifier = modifier.size(size).clip(RoundedCornerShape(10.dp)))
+        Image(bitmap = it, contentDescription = null, modifier = modifier.size(size).clip(RoundedCornerShape(corner)))
     }
 }

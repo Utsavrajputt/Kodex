@@ -2,6 +2,7 @@ package com.invictus.kodex.github.ui
 
 import android.text.format.DateUtils
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -108,11 +110,26 @@ fun GitHubManagerScreen(
         viewModel.events.collect { event -> handleEvent(event, context, snackbar, scope) }
     }
 
+    val pal = ghPalette()
+    var overflow by remember { mutableStateOf(false) }
+
     Scaffold(
+        modifier = Modifier.background(pal.screen),
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                    titleContentColor = pal.onCard,
+                    navigationIconContentColor = pal.onCard,
+                    actionIconContentColor = pal.onCard,
+                ),
                 title = {
-                    Text(stringResource(R.string.gh_title), maxLines = 1)
+                    Text(
+                        stringResource(R.string.gh_title), maxLines = 1,
+                        style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold,
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -124,8 +141,17 @@ fun GitHubManagerScreen(
                         IconButton(onClick = viewModel::refresh) {
                             Icon(XIcons.Refresh, contentDescription = stringResource(R.string.action_refresh))
                         }
-                        IconButton(onClick = { viewModel.tools.openCleanup() }) {
-                            Icon(XIcons.Delete, contentDescription = stringResource(R.string.gh_cleanup_title))
+                        Box {
+                            IconButton(onClick = { overflow = true }) {
+                                Icon(XIcons.MoreVert, contentDescription = stringResource(R.string.action_more))
+                            }
+                            DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.gh_cleanup_title)) },
+                                    leadingIcon = { Icon(XIcons.DeleteSweep, contentDescription = null) },
+                                    onClick = { overflow = false; viewModel.tools.openCleanup() },
+                                )
+                            }
                         }
                     }
                 },
@@ -214,7 +240,7 @@ private fun ReadyContent(
     val visible = state.runs.take(RECENT_COUNT)
 
     PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             state.banner?.let { b -> item(key = "banner") { BannerCard(b, onOpenGitHubSettings) } }
             item(key = "header") { RepoHeaderCard(state, vm.projectPath) }
             item(key = "run_workflow") {
@@ -223,15 +249,16 @@ private fun ReadyContent(
             item(key = "apk") { ApkCard(toolsState, tools, onRunShortcut, vm.projectPath) }
             item(key = "runs_header") {
                 Row(
-                    Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp),
+                    Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         stringResource(R.string.gh_runs_title),
-                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                        color = ghPalette().onCard,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = onOpenAllRuns) {
+                    TextButton(onClick = onOpenAllRuns, colors = ButtonDefaults.textButtonColors(contentColor = ghPalette().accent)) {
                         Text(stringResource(R.string.gh_view_all))
                         Icon(XIcons.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
@@ -360,23 +387,20 @@ private fun BannerCard(banner: GhBanner, onReconnect: () -> Unit) {
 
 @Composable
 private fun RepoHeaderCard(state: GitHubManagerState, projectPath: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            ProjectIcon(projectPath, size = 40.dp)
-            Spacer(Modifier.width(12.dp))
+    val p = ghPalette()
+    GhCard(p.card, p.cardBorder) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            ProjectIcon(projectPath, size = 56.dp, corner = 16.dp)
+            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    state.repo?.name.orEmpty(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    state.repo?.name.orEmpty(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
+                    color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     listOfNotNull(state.repo?.fullName, state.repo?.defaultBranch).joinToString(" \u2022 "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
             state.rateLimit?.takeIf { it.isLow() }?.let {
@@ -470,12 +494,14 @@ internal fun RunRow(
 ) {
     var menu by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
-    val (icon, label, tint) = statusVisuals(run.display)
+    val pal = ghPalette()
+    val (icon, label, tint) = statusVisuals(run.display, pal)
     val statusText = stringResource(label)
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = pal.runCard, contentColor = pal.onCard),
+        border = androidx.compose.foundation.BorderStroke(1.dp, pal.cardBorder),
     ) {
         Row(
             Modifier
@@ -489,22 +515,26 @@ internal fun RunRow(
                         if (run.isFailed) onCopyError() else menu = true
                     },
                 )
-                .padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 2.dp),
+                .padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
-                Text(statusText, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+            Column(Modifier.width(72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                StatusBadge(run.display, icon, tint, pal)
+                Spacer(Modifier.height(4.dp))
+                Text(statusText, style = MaterialTheme.typography.labelMedium, color = tint, maxLines = 1)
             }
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
-                Text("#${run.runNumber} $workflowName", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "#${run.runNumber} $workflowName", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                    color = pal.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
                 if (run.commitMessage.isNotBlank()) {
-                    Text(run.commitMessage, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(run.commitMessage, style = MaterialTheme.typography.bodyMedium, color = pal.onCard.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text(
-                    runSubtitle(run), style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    runSubtitle(run), style = MaterialTheme.typography.bodyMedium,
+                    color = pal.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
             if (busy) {
@@ -512,7 +542,7 @@ internal fun RunRow(
             } else {
                 Box {
                     IconButton(onClick = { menu = true }) {
-                        Icon(XIcons.MoreVert, contentDescription = stringResource(R.string.gh_run_actions, run.runNumber))
+                        Icon(XIcons.MoreVert, contentDescription = stringResource(R.string.gh_run_actions, run.runNumber), tint = pal.onCard)
                     }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(
@@ -556,13 +586,32 @@ internal fun RunRow(
 }
 
 @Composable
-private fun statusVisuals(s: RunDisplayStatus): Triple<ImageVector, Int, Color> = when (s) {
-    RunDisplayStatus.Success -> Triple(XIcons.CheckCircle, R.string.gh_status_success, Color(0xFF2E7D32))
-    RunDisplayStatus.Failed -> Triple(XIcons.ErrorCircle, R.string.gh_status_failed, MaterialTheme.colorScheme.error)
-    RunDisplayStatus.Running -> Triple(XIcons.Sync, R.string.gh_status_running, MaterialTheme.colorScheme.primary)
-    RunDisplayStatus.Queued -> Triple(XIcons.Schedule, R.string.gh_status_queued, MaterialTheme.colorScheme.onSurfaceVariant)
-    RunDisplayStatus.Cancelled -> Triple(XIcons.CancelCircle, R.string.gh_status_cancelled, MaterialTheme.colorScheme.onSurfaceVariant)
-    RunDisplayStatus.Skipped -> Triple(XIcons.RemoveCircle, R.string.gh_status_skipped, MaterialTheme.colorScheme.onSurfaceVariant)
+private fun statusVisuals(s: RunDisplayStatus, pal: GhPalette): Triple<ImageVector, Int, Color> = when (s) {
+    RunDisplayStatus.Success -> Triple(XIcons.Check, R.string.gh_status_success, pal.success)
+    RunDisplayStatus.Failed -> Triple(XIcons.Close, R.string.gh_status_failed, pal.danger)
+    RunDisplayStatus.Running -> Triple(XIcons.Sync, R.string.gh_status_running, pal.accent)
+    RunDisplayStatus.Queued -> Triple(XIcons.Schedule, R.string.gh_status_queued, pal.onCardMuted)
+    RunDisplayStatus.Cancelled -> Triple(XIcons.CancelCircle, R.string.gh_status_cancelled, pal.onCardMuted)
+    RunDisplayStatus.Skipped -> Triple(XIcons.RemoveCircle, R.string.gh_status_skipped, pal.onCardMuted)
+}
+
+/** Solid round badge for finished runs (check / cross); plain tinted glyph for the in-between states. */
+@Composable
+private fun StatusBadge(status: RunDisplayStatus, icon: ImageVector, tint: Color, pal: GhPalette) {
+    when (status) {
+        RunDisplayStatus.Success, RunDisplayStatus.Failed -> Box(
+            Modifier.size(40.dp).clip(CircleShape).background(tint),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon, contentDescription = null, modifier = Modifier.size(24.dp),
+                tint = if (status == RunDisplayStatus.Success) pal.onSuccess else pal.onDanger,
+            )
+        }
+        else -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(32.dp))
+        }
+    }
 }
 
 private fun runSubtitle(run: GhRun): String {
