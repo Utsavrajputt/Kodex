@@ -81,6 +81,9 @@ data class PendingSave(
     val launched: Boolean = false,
 )
 
+/** A kept APK from an earlier download, listed in the Downloaded APKs section. */
+data class DownloadedApk(val artifactId: Long, val label: String, val file: File, val sizeBytes: Long, val modifiedAt: Long)
+
 enum class InstallDialog { UnknownSources, SelfInstall }
 
 data class CleanupState(
@@ -130,6 +133,8 @@ data class GitHubToolsState(
     val deploymentsError: GhText? = null,
     val deploymentsExpanded: Boolean = true,
     val busyDeploymentIds: Set<Long> = emptySet(),
+
+    val downloaded: List<DownloadedApk> = emptyList(),
 
     val cleanup: CleanupState = CleanupState(),
 )

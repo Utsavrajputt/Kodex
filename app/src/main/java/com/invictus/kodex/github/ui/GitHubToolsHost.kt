@@ -253,6 +253,7 @@ private fun InputField(input: WorkflowInput, value: String, error: Boolean, onCh
 private fun CleanupSheet(c: CleanupState, workflows: List<GhWorkflow>, tools: GitHubToolsController) {
     val context = LocalContext.current
     var confirm by remember { mutableStateOf(false) }
+    // Swiping the sheet away only hides it: a running cleanup continues in the background.
     ModalBottomSheet(
         onDismissRequest = tools::closeCleanup,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),

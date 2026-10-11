@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- M16 follow-up: notifications for every GitHub process + the "Downloaded APKs" list. English only. -->
+<resources>
+    <string name="gh_notif_channel">GitHub Manager</string>
+    <string name="gh_notif_working_title">GitHub Manager</string>
+    <string name="gh_notif_working_text">Working…</string>
+
+    <string name="gh_notif_download_title">Downloading %1$s</string>
+    <string name="gh_notif_download_progress">%1$d%%</string>
+    <string name="gh_notif_download_preparing">Unpacking…</string>
+    <string name="gh_notif_download_done_title">Download complete</string>
+    <string name="gh_notif_download_done_text">%1$s is ready. Open Kodex to install it.</string>
+    <string name="gh_notif_download_failed_title">Download failed</string>
+
+    <string name="gh_notif_install_ok_title">App installed</string>
+    <string name="gh_notif_install_ok_text">The new version was installed.</string>
+    <string name="gh_notif_install_failed_title">Install failed</string>
+
+    <string name="gh_notif_saved_title">APK saved</string>
+    <string name="gh_notif_save_failed_title">Could not save the file</string>
+
+    <string name="gh_notif_cleanup_title">Cleaning up %1$s</string>
+    <string name="gh_notif_cleanup_progress">%1$d of %2$d done</string>
+    <string name="gh_notif_cleanup_done_title">Cleanup finished</string>
+    <string name="gh_notif_cleanup_done_text">%1$d deleted, %2$d failed</string>
+
+    <string name="gh_notif_dispatch_title">Starting workflow</string>
+    <string name="gh_notif_dispatch_text">%1$s on %2$s</string>
+    <string name="gh_notif_dispatch_done_title">Workflow started</string>
+    <string name="gh_notif_dispatch_failed_title">Workflow could not be started</string>
+
+    <string name="gh_downloaded_title">Downloaded APKs</string>
+    <string name="gh_downloaded_hint">Kept on this device: the last 3 downloads, and anything newer than 24 hours.</string>
+    <string name="gh_downloaded_delete_all">Delete all</string>
+    <string name="gh_downloaded_delete_all_title">Delete all downloaded APKs?</string>
+    <string name="gh_downloaded_delete_all_body">%1$d file(s) will be removed from this device. The builds on GitHub are not affected.</string>
+    <string name="gh_downloaded_deleted">Deleted %1$s</string>
+    <string name="gh_downloaded_actions">Actions for %1$s</string>
+    <string name="gh_downloaded_install_busy">Finish the current install or save first.</string>
+</resources>

@@ -420,6 +420,72 @@ private fun ArtifactRow(
     }
 }
 
+// ---- Downloaded APKs (kept on disk: last 3 + 24 h) ------------------------------------------------
+
+fun LazyListScope.downloadedSection(
+    state: GitHubToolsState,
+    tools: GitHubToolsController,
+    onDeleteAll: () -> Unit,
+) {
+    if (state.downloaded.isEmpty()) return
+    item(key = "downloaded_header") {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.gh_downloaded_title),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onDeleteAll, enabled = !state.installing) {
+                Text(stringResource(R.string.gh_downloaded_delete_all), color = MaterialTheme.colorScheme.error)
+            }
+        }
+        Muted(stringResource(R.string.gh_downloaded_hint))
+    }
+    items(state.downloaded, key = { "downloaded_${it.file.name}" }) { d ->
+        DownloadedRow(d, busy = state.transfer != null || state.installing || state.pendingSave != null, tools = tools)
+    }
+}
+
+@Composable
+private fun DownloadedRow(d: DownloadedApk, busy: Boolean, tools: GitHubToolsController) {
+    val context = LocalContext.current
+    var menu by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(d.label, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Muted(
+                    listOf(
+                        Formatter.formatShortFileSize(context, d.sizeBytes),
+                        relative(Instant.ofEpochMilli(d.modifiedAt)),
+                    ).joinToString(" • "),
+                )
+            }
+            TextButton(onClick = { tools.installDownloaded(d) }, enabled = !busy) { Text(stringResource(R.string.gh_install)) }
+            Box {
+                IconButton(onClick = { menu = true }) {
+                    Icon(XIcons.MoreVert, contentDescription = stringResource(R.string.gh_downloaded_actions, d.label))
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.gh_save_to_folder)) },
+                        leadingIcon = { Icon(XIcons.Save, contentDescription = null) },
+                        enabled = !busy,
+                        onClick = { menu = false; tools.saveDownloaded(d) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(XIcons.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        
+                        onClick = { menu = false; tools.deleteDownloaded(d) },
+                    )
+                }
+            }
+        }
+    }
+}
+
 // ---- Deployments section (plan 6.1 card 5 / 7.4) -----------------------------------------------
 
 fun LazyListScope.deploymentsSection(

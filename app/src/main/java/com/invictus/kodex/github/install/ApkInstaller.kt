@@ -9,6 +9,8 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import com.invictus.kodex.R
+import com.invictus.kodex.github.notify.GhNotifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -110,11 +112,22 @@ class InstallResultReceiver : BroadcastReceiver() {
                     runCatching { context.startActivity(it) }
                 }
             }
-            PackageInstaller.STATUS_SUCCESS -> InstallEvents.emit(InstallResult.Success)
+            PackageInstaller.STATUS_SUCCESS -> {
+                InstallEvents.emit(InstallResult.Success)
+                GhNotifier(context).result(
+                    GhNotifier.KIND_INSTALL, context.getString(R.string.gh_notif_install_ok_title),
+                    context.getString(R.string.gh_notif_install_ok_text),
+                )
+            }
             PackageInstaller.STATUS_FAILURE_ABORTED -> InstallEvents.emit(InstallResult.Cancelled)
-            else -> InstallEvents.emit(
-                InstallResult.Failed(intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)),
-            )
+            else -> {
+                val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                InstallEvents.emit(InstallResult.Failed(message))
+                GhNotifier(context).result(
+                    GhNotifier.KIND_INSTALL, context.getString(R.string.gh_notif_install_failed_title),
+                    message ?: context.getString(R.string.gh_notif_install_failed_title), ok = false,
+                )
+            }
         }
     }
 }

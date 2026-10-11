@@ -125,18 +125,8 @@ fun GitHubManagerScreen(
                         IconButton(onClick = viewModel::refresh) {
                             Icon(XIcons.Refresh, contentDescription = stringResource(R.string.action_refresh))
                         }
-                        var menuOpen by remember { mutableStateOf(false) }
-                        Box {
-                            IconButton(onClick = { menuOpen = true }) {
-                                Icon(XIcons.MoreVert, contentDescription = stringResource(R.string.gh_more))
-                            }
-                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.gh_cleanup_title)) },
-                                    leadingIcon = { Icon(XIcons.Delete, contentDescription = null) },
-                                    onClick = { menuOpen = false; viewModel.tools.openCleanup() },
-                                )
-                            }
+                        IconButton(onClick = { viewModel.tools.openCleanup() }) {
+                            Icon(XIcons.Delete, contentDescription = stringResource(R.string.gh_cleanup_title))
                         }
                     }
                 },
@@ -230,6 +220,7 @@ private fun ReadyContent(
     var pendingCancel by remember { mutableStateOf<GhRun?>(null) }
     var showAllArtifacts by rememberSaveable { mutableStateOf(false) }
     var showAllDeployments by rememberSaveable { mutableStateOf(false) }
+    var confirmDeleteDownloads by remember { mutableStateOf(false) }
     var pendingArtifactDelete by remember { mutableStateOf<GhArtifact?>(null) }
     var pendingDeploymentDelete by remember { mutableStateOf<GhDeployment?>(null) }
     val tools = vm.tools
@@ -300,6 +291,7 @@ private fun ReadyContent(
                 }
             }
             deploymentsSection(toolsState, showAllDeployments, { showAllDeployments = true }, tools) { pendingDeploymentDelete = it }
+            downloadedSection(toolsState, tools) { confirmDeleteDownloads = true }
             artifactsSection(toolsState, showAllArtifacts, { showAllArtifacts = true }, latestApkId, tools) { pendingArtifactDelete = it }
             item(key = "cleanup") {
                 OutlinedButton(onClick = tools::openCleanup, modifier = Modifier.fillMaxWidth()) {
@@ -311,6 +303,15 @@ private fun ReadyContent(
         }
     }
 
+    if (confirmDeleteDownloads) {
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.gh_downloaded_delete_all_title),
+            body = stringResource(R.string.gh_downloaded_delete_all_body, toolsState.downloaded.size),
+            confirm = stringResource(R.string.action_delete),
+            onDismiss = { confirmDeleteDownloads = false },
+            onConfirm = { confirmDeleteDownloads = false; tools.deleteAllDownloaded() },
+        )
+    }
     pendingArtifactDelete?.let { a ->
         ConfirmDeleteDialog(
             title = stringResource(R.string.gh_artifact_delete_title),

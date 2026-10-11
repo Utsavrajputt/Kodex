@@ -25,6 +25,8 @@ import com.invictus.kodex.github.data.DispatchInfo
 import com.invictus.kodex.github.data.GitHubRepository
 import com.invictus.kodex.github.data.WorkflowInputParser
 import com.invictus.kodex.github.install.ApkDownloader
+import com.invictus.kodex.github.notify.GhBackground
+import com.invictus.kodex.github.notify.GhNotifier
 import com.invictus.kodex.github.install.ApkInspector
 import com.invictus.kodex.github.install.ApkInstaller
 import com.invictus.kodex.github.install.ArtifactZip
@@ -37,6 +39,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,11 +68,14 @@ class GitHubToolsController(
     private val onError: (GitHubError) -> Unit,
     private val onRunsChanged: () -> Unit,
     private val clock: () -> Instant = { Instant.now() },
+    /** Long jobs (download, cleanup, dispatch) run here so they outlive the screen. */
+    private val jobScope: CoroutineScope = GhBackground.scope,
 ) {
     private val _state = MutableStateFlow(GitHubToolsState())
     val state: StateFlow<GitHubToolsState> = _state.asStateFlow()
 
-    private val downloader = ApkDownloader(appContext.cacheDir)
+    private val downloader = ApkDownloader(appContext.filesDir)
+    private val notifier = GhNotifier(appContext)
     private val inspector = ApkInspector(appContext)
     private val installer = ApkInstaller(appContext)
 
@@ -96,8 +102,63 @@ class GitHubToolsController(
         scope.launch {
             InstallEvents.results.collect { onInstallResult(it) }
         }
-        // Leftovers of an earlier process (".part" files, stale APKs) never survive a start.
-        scope.launch(Dispatchers.IO) { downloader.cleanOld() }
+        // Retention (last 3 APKs + 24 h) and stale temp files; then show what is kept.
+        scope.launch(Dispatchers.IO) { downloader.cleanOld(); refreshDownloadedNow() }
+    }
+
+    /** Runs [block] in the process-wide scope with the foreground service held, so it survives leaving the screen. */
+    private fun launchTracked(block: suspend CoroutineScope.() -> Unit): Job = jobScope.launch {
+        GhBackground.begin(appContext)
+        try { block() } finally { GhBackground.end(appContext) }
+    }
+
+    private fun str(res: Int, vararg args: Any): String = appContext.getString(res, *args)
+
+    // ---- downloaded APKs (kept on disk) --------------------------------------------------
+
+    private fun refreshDownloadedNow() {
+        val list = downloader.listCached().map { DownloadedApk(it.artifactId, it.label, it.file, it.sizeBytes, it.modifiedAt) }
+        _state.update { it.copy(downloaded = list) }
+    }
+
+    fun refreshDownloaded() { scope.launch(Dispatchers.IO) { refreshDownloadedNow() } }
+
+    fun installDownloaded(d: DownloadedApk) {
+        val s = _state.value
+        if (s.transfer != null || s.installing || s.pendingSave != null) { emit(GhEvent.Snack(GhText.Res(R.string.gh_downloaded_install_busy))); return }
+        scope.launch {
+            val inspected = withContext(Dispatchers.IO) { inspector.inspect(d.file) }
+            if (inspected == null) {
+                emit(GhEvent.Snack(GhText.Res(R.string.gh_apk_invalid)))
+                return@launch
+            }
+            _state.update { it.copy(ready = ReadyApk(d.artifactId, d.label, d.file, inspected, fromApkCard = false)) }
+        }
+    }
+
+    fun saveDownloaded(d: DownloadedApk) {
+        val s = _state.value
+        if (s.transfer != null || s.installing || s.pendingSave != null) { emit(GhEvent.Snack(GhText.Res(R.string.gh_downloaded_install_busy))); return }
+        _state.update { it.copy(pendingSave = PendingSave(d.file, "${safeFileName(d.label)}.apk", MIME_APK, deleteAfter = false)) }
+    }
+
+    fun deleteDownloaded(d: DownloadedApk) {
+        if (_state.value.installing) return
+        scope.launch(Dispatchers.IO) {
+            downloader.delete(d.file)
+            _state.update { st -> if (st.ready?.file == d.file) st.copy(ready = null) else st }
+            refreshDownloadedNow()
+            emit(GhEvent.Snack(GhText.Res(R.string.gh_downloaded_deleted, listOf(d.label))))
+        }
+    }
+
+    fun deleteAllDownloaded() {
+        if (_state.value.installing) return
+        scope.launch(Dispatchers.IO) {
+            downloader.deleteAllApks()
+            _state.update { it.copy(ready = null) }
+            refreshDownloadedNow()
+        }
     }
 
     // ---- lifecycle -------------------------------------------------------------------
@@ -108,6 +169,7 @@ class GitHubToolsController(
             cancelJobs()
             dispatchCache.clear()
             _state.update { GitHubToolsState(artifactsExpanded = it.artifactsExpanded, deploymentsExpanded = it.deploymentsExpanded) }
+            refreshDownloaded()
         }
         loadBranches(reset = true)
         loadArtifactsAndApk()
@@ -129,6 +191,7 @@ class GitHubToolsController(
     /** Back from system settings / the installer. */
     fun onResume() {
         val s = _state.value
+        refreshDownloaded()
         if (s.installing) _state.update { it.copy(installing = false) }
         if (s.installDialog == InstallDialog.UnknownSources && installer.canRequestInstalls()) {
             _state.update { it.copy(installDialog = null) }
@@ -136,12 +199,11 @@ class GitHubToolsController(
         }
     }
 
-    fun onCleared() {
-        _state.value.ready?.file?.delete()
-    }
+    /** The screen is gone. Downloads are kept on disk and long jobs keep running in the background. */
+    fun onCleared() = Unit
 
     private fun cancelJobs() {
-        listOf(infoJob, pollJob, artifactsJob, deploymentsJob, transferJob, scanJob, cleanupJob).forEach { it?.cancel() }
+        listOf(infoJob, pollJob, artifactsJob, deploymentsJob, scanJob).forEach { it?.cancel() }
     }
 
     fun setArtifactsExpanded(v: Boolean) { scope.launch { prefs.setSectionExpanded(projectPath, SECTION_ARTIFACTS, v) } }
@@ -268,7 +330,8 @@ class GitHubToolsController(
     private fun dispatch(workflow: GhWorkflow, ref: String, inputs: Map<String, String>) {
         val repo = repoProvider() ?: return
         updateRun { it.copy(dispatching = true) }
-        scope.launch {
+        launchTracked {
+            notifier.updateLive(str(R.string.gh_notif_dispatch_title), str(R.string.gh_notif_dispatch_text, workflow.name, ref), null)
             // Remember the newest runs first: a dispatch returns no run id, so the new run is "the one not seen before".
             val before: Set<Long> = try {
                 repo.dispatchRuns(workflow.id, ref).map { it.id }.toSet()
@@ -281,6 +344,10 @@ class GitHubToolsController(
                 repo.dispatch(workflow.id, ref, inputs)
                 updateRun { it.copy(dispatching = false, sheetOpen = false) }
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_dispatch_ok)))
+                notifier.result(
+                    GhNotifier.KIND_DISPATCH, str(R.string.gh_notif_dispatch_done_title),
+                    str(R.string.gh_notif_dispatch_text, workflow.name, ref),
+                )
                 pollForNewRun(repo, workflow.id, ref, before)
             } catch (e: CancellationException) {
                 throw e
@@ -288,6 +355,10 @@ class GitHubToolsController(
                 updateRun { it.copy(dispatching = false) }
                 onError(e)
                 emit(GhEvent.Snack(if (e is GitHubError.NotFound) GhText.Res(R.string.gh_dispatch_not_found) else describe(e)))
+                notifier.result(
+                    GhNotifier.KIND_DISPATCH, str(R.string.gh_notif_dispatch_failed_title),
+                    describe(e).resolve(appContext), ok = false,
+                )
             }
         }
     }
@@ -409,23 +480,40 @@ class GitHubToolsController(
         val repo = repoProvider() ?: return
         val s = _state.value
         if (s.transfer != null || s.installing || s.pendingSave != null) return
-        s.ready?.file?.delete()
         _state.update { it.copy(transfer = Transfer(artifact.id, purpose, 0f, fromApkCard), ready = null) }
-        transferJob = scope.launch {
+        transferJob = launchTracked {
             var zip: File? = null
+            val title = str(R.string.gh_notif_download_title, artifact.name)
             try {
+                // Already downloaded earlier (e.g. before a self-install restarted the app): no new download.
+                val cached = withContext(Dispatchers.IO) { downloader.cachedApk(artifact.id) }
+                if (cached != null) {
+                    when (purpose) {
+                        TransferPurpose.Install -> prepareInstallFromApk(cached, artifact, fromApkCard)
+                        TransferPurpose.Save -> _state.update {
+                            it.copy(pendingSave = PendingSave(cached, "${safeFileName(artifact.name)}.apk", MIME_APK, deleteAfter = false))
+                        }
+                    }
+                    return@launchTracked
+                }
+                notifier.updateLive(title, str(R.string.gh_notif_download_progress, 0), 0)
                 var last = -1f
                 val file = downloader.downloadZip(repo, artifact) { bytes ->
                     val p = if (artifact.sizeBytes > 0) (bytes.toFloat() / artifact.sizeBytes).coerceIn(0f, 1f) else null
                     if (p == null || p - last >= 0.01f) {
                         last = p ?: last
                         _state.update { st -> st.transfer?.let { t -> st.copy(transfer = t.copy(progress = p)) } ?: st }
+                        notifier.updateLive(title, p?.let { str(R.string.gh_notif_download_progress, (it * 100).toInt()) } ?: "", p?.let { (it * 100).toInt() })
                     }
                 }
                 zip = file
+                notifier.updateLive(title, str(R.string.gh_notif_download_preparing), null)
                 when (purpose) {
                     TransferPurpose.Install -> prepareInstall(file, artifact, fromApkCard)
                     TransferPurpose.Save -> prepareSave(file, artifact)
+                }
+                if (purpose == TransferPurpose.Install) {
+                    notifier.result(GhNotifier.KIND_DOWNLOAD, str(R.string.gh_notif_download_done_title), str(R.string.gh_notif_download_done_text, artifact.name))
                 }
             } catch (e: CancellationException) {
                 zip?.delete()
@@ -434,13 +522,18 @@ class GitHubToolsController(
                 zip?.delete()
                 onError(e)
                 emit(GhEvent.Snack(transferError(e)))
+                notifier.result(GhNotifier.KIND_DOWNLOAD, str(R.string.gh_notif_download_failed_title), transferError(e).resolve(appContext), ok = false)
             } catch (e: ArtifactZipException) {
+                zip?.delete()
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_apk_invalid)))
+                notifier.result(GhNotifier.KIND_DOWNLOAD, str(R.string.gh_notif_download_failed_title), str(R.string.gh_apk_invalid), ok = false)
             } catch (e: IOException) {
                 zip?.delete()
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_disk_error)))
+                notifier.result(GhNotifier.KIND_DOWNLOAD, str(R.string.gh_notif_download_failed_title), str(R.string.gh_disk_error), ok = false)
             } finally {
                 _state.update { it.copy(transfer = null) }
+                withContext(NonCancellable + Dispatchers.IO) { downloader.cleanOld(); refreshDownloadedNow() }
             }
         }
     }
@@ -454,7 +547,10 @@ class GitHubToolsController(
     }
 
     private suspend fun prepareInstall(zip: File, artifact: GhArtifact, fromApkCard: Boolean) {
-        val apk = downloader.extract(zip)
+        prepareInstallFromApk(downloader.extract(zip, artifact), artifact, fromApkCard)
+    }
+
+    private suspend fun prepareInstallFromApk(apk: File, artifact: GhArtifact, fromApkCard: Boolean) {
         val inspected = withContext(Dispatchers.IO) { inspector.inspect(apk) }
         if (inspected == null) {
             apk.delete()
@@ -467,7 +563,7 @@ class GitHubToolsController(
     private suspend fun prepareSave(zip: File, artifact: GhArtifact) {
         val base = safeFileName(artifact.name)
         val pending = if (withContext(Dispatchers.IO) { ArtifactZip.containsApk(zip) }) {
-            PendingSave(downloader.extract(zip), "$base.apk", MIME_APK, deleteAfter = true)
+            PendingSave(downloader.extract(zip, artifact), "$base.apk", MIME_APK, deleteAfter = false)
         } else {
             PendingSave(zip, "$base.zip", MIME_ZIP, deleteAfter = true)
         }
@@ -493,7 +589,7 @@ class GitHubToolsController(
             if (pending.deleteAfter) pending.file.delete()
             return
         }
-        scope.launch {
+        launchTracked {
             try {
                 val name = withContext(Dispatchers.IO) {
                     val out = appContext.contentResolver.openOutputStream(uri, "wt") ?: throw IOException("no output stream")
@@ -501,6 +597,7 @@ class GitHubToolsController(
                     displayName(uri)
                 }
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_saved, listOf(name ?: pending.suggestedName))))
+                notifier.result(GhNotifier.KIND_SAVE, str(R.string.gh_notif_saved_title), name ?: pending.suggestedName)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -509,6 +606,7 @@ class GitHubToolsController(
                     try { DocumentsContract.deleteDocument(appContext.contentResolver, uri) } catch (ignored: Exception) { }
                 }
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_save_failed)))
+                notifier.result(GhNotifier.KIND_SAVE, str(R.string.gh_notif_save_failed_title), pending.suggestedName, ok = false)
             } finally {
                 if (pending.deleteAfter) pending.file.delete()
             }
@@ -525,7 +623,6 @@ class GitHubToolsController(
     // ---- install ------------------------------------------------------------------------
 
     fun dismissReady() {
-        _state.value.ready?.file?.delete()
         _state.update { it.copy(ready = null) }
     }
 
@@ -571,7 +668,6 @@ class GitHubToolsController(
         _state.update { it.copy(installing = false) }
         when (result) {
             InstallResult.Success -> {
-                s.ready?.file?.delete()
                 _state.update { it.copy(ready = null) }
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_install_ok)))
             }
@@ -667,12 +763,18 @@ class GitHubToolsController(
     private fun updateCleanup(block: (CleanupState) -> CleanupState) = _state.update { it.copy(cleanup = block(it.cleanup)) }
 
     fun openCleanup() {
+        // A cleanup running in the background: just show its progress again.
+        if (_state.value.cleanup.running) { updateCleanup { it.copy(open = true) }; return }
         updateCleanup { CleanupState(open = true) }
         scanCleanup()
     }
 
+    /** Swipe / back / Done. A running cleanup keeps going in the background (see notification). */
     fun closeCleanup() {
-        if (_state.value.cleanup.running) return
+        if (_state.value.cleanup.running) {
+            updateCleanup { it.copy(open = false) }
+            return
+        }
         scanJob?.cancel()
         updateCleanup { CleanupState() }
     }
@@ -766,7 +868,9 @@ class GitHubToolsController(
         if (items.isEmpty() || _state.value.cleanup.running) return
         val kind = _state.value.cleanup.filters.kind
         updateCleanup { it.copy(running = true, stopRequested = false, progressDone = 0, progressTotal = items.size, result = null) }
-        cleanupJob = scope.launch {
+        cleanupJob = launchTracked {
+            val title = str(R.string.gh_notif_cleanup_title, appContext.getString(kindName(kind)).lowercase())
+            notifier.updateLive(title, str(R.string.gh_notif_cleanup_progress, 0, items.size), 0)
             val result = CleanupRunner().run(
                 items = items,
                 shouldStop = { _state.value.cleanup.stopRequested },
@@ -777,7 +881,10 @@ class GitHubToolsController(
                         CleanupKind.Deployments -> repo.deleteDeployment(item.id)
                     }
                 },
-                onProgress = { done, total -> updateCleanup { it.copy(progressDone = done, progressTotal = total) } },
+                onProgress = { done, total ->
+                    updateCleanup { it.copy(progressDone = done, progressTotal = total) }
+                    notifier.updateLive(title, str(R.string.gh_notif_cleanup_progress, done, total), if (total > 0) done * 100 / total else null)
+                },
             )
             finishCleanup(kind, items, result)
         }
@@ -798,11 +905,21 @@ class GitHubToolsController(
         }
         recomputePlan()
         emit(GhEvent.Snack(GhText.Res(R.string.gh_cleanup_done, listOf(result.deleted, result.failed.size))))
+        notifier.result(
+            GhNotifier.KIND_CLEANUP, str(R.string.gh_notif_cleanup_done_title),
+            str(R.string.gh_notif_cleanup_done_text, result.deleted, result.failed.size), ok = result.failed.isEmpty(),
+        )
         when (kind) {
             CleanupKind.Runs -> onRunsChanged()
             CleanupKind.Artifacts -> loadArtifactsAndApk()
             CleanupKind.Deployments -> loadDeployments()
         }
+    }
+
+    private fun kindName(k: CleanupKind): Int = when (k) {
+        CleanupKind.Runs -> R.string.gh_kind_runs
+        CleanupKind.Deployments -> R.string.gh_kind_deployments
+        CleanupKind.Artifacts -> R.string.gh_kind_artifacts
     }
 
     companion object {

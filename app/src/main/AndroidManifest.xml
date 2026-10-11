@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- GitHub Manager: install the APK built by Actions (always after an explicit tap). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- GitHub Manager: keep downloads / cleanups alive while the app is in the background. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:name=".KodexApp"
@@ -1112,6 +1115,11 @@
         </activity>
 
         <!-- GitHub Manager: PackageInstaller status callback + the cache dir share used as fallback. -->
+        <service
+            android:name=".github.notify.GhWorkService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <receiver
             android:name=".github.install.InstallResultReceiver"
             android:exported="false" />
