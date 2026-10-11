@@ -42,6 +42,7 @@
     <string name="gh_notif_failed_text">Tap to open the app and check the log.</string>
     <string name="gh_runs_empty">No workflow runs match.</string>
     <string name="gh_filter_all">All</string>
+    <string name="gh_filter_success">Success</string>
     <string name="gh_filter_failed">Failed</string>
     <string name="gh_filter_running">Running</string>
     <string name="gh_filter_cancelled">Cancelled</string>

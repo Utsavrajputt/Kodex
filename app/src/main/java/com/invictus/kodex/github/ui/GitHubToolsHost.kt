@@ -108,10 +108,10 @@ fun GitHubToolsHost(
                     installing = state.installing,
                     onInstall = tools::onInstallTapped,
                     onSave = tools::saveReadyApk,
-                    onDismiss = tools::dismissReady,
                 )
             },
             confirmButton = {},
+            dismissButton = { TextButton(onClick = tools::dismissReady) { Text(stringResource(R.string.gh_close)) } },
         )
     }
 

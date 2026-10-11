@@ -380,14 +380,13 @@ private fun ApkActions(d: DownloadedApk, installing: Boolean, busy: Boolean, too
     }
 }
 
-/** Verified APK waiting for the user's tap (plan 8.4): facts, warnings, Install / Save / Close. */
+/** Verified APK waiting for the user's tap (plan 8.4): facts, warnings, Install / Save (Close is the dialog button). */
 @Composable
 fun ReadyApkBody(
     ready: ReadyApk,
     installing: Boolean,
     onInstall: () -> Unit,
     onSave: () -> Unit,
-    onDismiss: () -> Unit,
 ) {
     val r = ready.inspect
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -415,14 +414,25 @@ fun ReadyApkBody(
         if (r.isSelf) {
             Muted(stringResource(R.string.gh_ready_self_note))
         }
-        Spacer(Modifier.height(4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onInstall, enabled = !installing && !InstallDecision.isBlocked(r.kind)) {
+        Spacer(Modifier.height(8.dp))
+        // Equal-width pills on one row; Close lives in the dialog's own button slot so nothing wraps.
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(
+                onClick = onInstall,
+                enabled = !installing && !InstallDecision.isBlocked(r.kind),
+                modifier = Modifier.weight(1f).height(44.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp),
+            ) {
                 if (installing) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                else Text(stringResource(R.string.gh_install))
+                else Text(stringResource(R.string.gh_install), maxLines = 1, softWrap = false)
             }
-            OutlinedButton(onClick = onSave) { Text(stringResource(R.string.gh_save_to_folder)) }
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.gh_close)) }
+            OutlinedButton(
+                onClick = onSave,
+                modifier = Modifier.weight(1f).height(44.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp),
+            ) {
+                Text(stringResource(R.string.gh_save_to_folder), maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
 }

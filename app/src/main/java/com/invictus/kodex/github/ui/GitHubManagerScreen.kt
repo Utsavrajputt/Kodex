@@ -3,6 +3,7 @@ package com.invictus.kodex.github.ui
 import android.text.format.DateUtils
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -433,31 +435,34 @@ internal fun SectionHeader(title: String, expanded: Boolean, onToggle: () -> Uni
 
 @Composable
 internal fun RunFilters(state: GitHubManagerState, vm: GitHubManagerViewModel) {
+    val p = ghPalette()
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         RunStatusFilter.entries.forEach { f ->
-            FilterChip(
+            val (label, dot) = when (f) {
+                RunStatusFilter.All -> R.string.gh_filter_all to p.accent
+                RunStatusFilter.Success -> R.string.gh_filter_success to p.success
+                RunStatusFilter.Running -> R.string.gh_filter_running to p.accent
+                RunStatusFilter.Failed -> R.string.gh_filter_failed to p.danger
+                RunStatusFilter.Cancelled -> R.string.gh_filter_cancelled to p.onCardMuted
+            }
+            RunFilterChip(
+                label = stringResource(label),
+                dot = dot,
                 selected = state.filters.status == f,
                 onClick = { vm.setStatusFilter(f) },
-                label = {
-                    Text(
-                        stringResource(
-                            when (f) {
-                                RunStatusFilter.All -> R.string.gh_filter_all
-                                RunStatusFilter.Failed -> R.string.gh_filter_failed
-                                RunStatusFilter.Running -> R.string.gh_filter_running
-                                RunStatusFilter.Cancelled -> R.string.gh_filter_cancelled
-                            },
-                        ),
-                    )
-                },
             )
         }
         var menu by remember { mutableStateOf(false) }
         val current = state.workflows.firstOrNull { it.id == state.filters.workflowId }
         Box {
-            OutlinedButton(onClick = { menu = true }) {
-                Text(current?.name ?: stringResource(R.string.gh_filter_workflow), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(IntrinsicWidthCap))
-            }
+            RunFilterChip(
+                label = current?.name ?: stringResource(R.string.gh_filter_workflow),
+                dot = null,
+                selected = current != null,
+                onClick = { menu = true },
+                trailing = XIcons.KeyboardArrowDown,
+                maxLabelWidth = IntrinsicWidthCap,
+            )
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.gh_filter_all_workflows)) },
@@ -467,6 +472,44 @@ internal fun RunFilters(state: GitHubManagerState, vm: GitHubManagerViewModel) {
                     DropdownMenuItem(text = { Text(w.name) }, onClick = { menu = false; vm.setWorkflowFilter(w.id) })
                 }
             }
+        }
+    }
+}
+
+/** Pill filter: optional coloured status dot + label; selected = accent tint fill and border, else dark fill and dim border. */
+@Composable
+private fun RunFilterChip(
+    label: String,
+    dot: Color?,
+    selected: Boolean,
+    onClick: () -> Unit,
+    trailing: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    maxLabelWidth: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp.Unspecified,
+) {
+    val p = ghPalette()
+    val shape = androidx.compose.foundation.shape.CircleShape
+    Row(
+        Modifier
+            .height(38.dp)
+            .clip(shape)
+            .background(if (selected) p.accent.copy(alpha = 0.22f) else p.runCard)
+            .border(1.dp, if (selected) p.accent.copy(alpha = 0.7f) else p.pickerBorder, shape)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (dot != null) {
+            Box(Modifier.size(8.dp).clip(shape).background(dot))
+        }
+        Text(
+            label, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
+            color = p.onCard,
+            modifier = if (maxLabelWidth != androidx.compose.ui.unit.Dp.Unspecified) Modifier.widthIn(max = maxLabelWidth) else Modifier,
+        )
+        if (trailing != null) {
+            Icon(trailing, contentDescription = null, tint = p.onCardMuted, modifier = Modifier.size(18.dp))
         }
     }
 }

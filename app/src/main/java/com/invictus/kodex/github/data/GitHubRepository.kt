@@ -14,7 +14,7 @@ import java.io.File
 
 /** What the Runs section filters by (plan 6.1 card 4). */
 enum class RunStatusFilter(val apiStatus: String?) {
-    All(null), Failed("failure"), Running("in_progress"), Cancelled("cancelled")
+    All(null), Success("success"), Running("in_progress"), Failed("failure"), Cancelled("cancelled")
 }
 
 /** Result of loading a run's logs (plan 6.3 / 8.1). */
