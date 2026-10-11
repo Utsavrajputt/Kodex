@@ -65,6 +65,10 @@ internal fun apkTitle(artifactName: String): String {
     return "${apkAppName(artifactName)} $abi".trim()
 }
 
+/** "kodex-arm64-v8a-3514671" + sha -> "Kodex-arm64-92886fe" (app name, ABI, commit). */
+internal fun apkBuildName(artifactName: String, shortSha: String): String =
+    listOf(apkTitle(artifactName).replace(' ', '-'), shortSha).filter { it.isNotBlank() }.joinToString("-")
+
 /** One ARM64 build in the combined list: "<App> arm64". */
 data class ApkRow(
     val artifact: GhArtifact,

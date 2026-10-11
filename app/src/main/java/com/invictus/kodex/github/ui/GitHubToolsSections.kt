@@ -199,7 +199,7 @@ fun ApkCard(
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             val title = when {
-                found != null -> apkTitle(found.candidate.artifact.name)
+                found != null -> apkBuildName(found.candidate.artifact.name, found.candidate.artifact.shortSha)
                 local != null -> apkTitle(local.label)
                 else -> stringResource(R.string.gh_apk_title)
             }
@@ -207,17 +207,16 @@ fun ApkCard(
                 found != null -> {
                     val a = found.candidate.artifact
                     listOf(
-                        if (found.candidate.universal) "universal" else "arm64-v8a",
                         Formatter.formatShortFileSize(context, a.sizeBytes),
-                        a.createdAt?.let { relative(it) }.orEmpty(),
+                        a.createdAt?.let { timeAgoOrDate(it) }.orEmpty(),
                     )
                 }
                 local != null -> listOf(
                     Formatter.formatShortFileSize(context, local.sizeBytes),
-                    relative(Instant.ofEpochMilli(local.modifiedAt)),
+                    timeAgoOrDate(Instant.ofEpochMilli(local.modifiedAt)),
                 )
                 else -> emptyList()
-            }.filter { it.isNotBlank() }.joinToString(" \u2022 ")
+            }.filter { it.isNotBlank() }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Surface(shape = CircleShape, color = cs.primary, contentColor = cs.onPrimary, modifier = Modifier.size(48.dp)) {
@@ -228,17 +227,17 @@ fun ApkCard(
                         )
                     }
                 }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                    if (facts.isNotBlank()) {
-                        Text(
-                            facts, style = MaterialTheme.typography.bodyMedium,
-                            color = cs.onPrimaryContainer.copy(alpha = 0.75f),
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        )
+                Text(
+                    title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                )
+            }
+            if (facts.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    facts.forEach { f ->
+                        Surface(shape = CircleShape, color = cs.onPrimaryContainer.copy(alpha = 0.12f), contentColor = cs.onPrimaryContainer) {
+                            Text(f, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                        }
                     }
                 }
             }
@@ -602,6 +601,17 @@ private fun Pill(text: String) {
 
 internal fun dateOf(i: Instant): String =
     java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(i.toEpochMilli()))
+
+/** "Just now" / "8 minutes ago" / "3 hours ago" for the first day, then the plain date. */
+internal fun timeAgoOrDate(i: Instant): String {
+    val age = System.currentTimeMillis() - i.toEpochMilli()
+    return when {
+        age < DateUtils.MINUTE_IN_MILLIS -> "Just now"
+        age < DateUtils.DAY_IN_MILLIS ->
+            DateUtils.getRelativeTimeSpanString(i.toEpochMilli(), System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+        else -> dateOf(i)
+    }
+}
 
 internal fun relative(i: Instant): String =
     DateUtils.getRelativeTimeSpanString(i.toEpochMilli(), System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()

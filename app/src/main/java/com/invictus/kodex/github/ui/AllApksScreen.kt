@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -57,6 +60,7 @@ fun AllApksScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
+    var expanded by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { e ->
@@ -101,8 +105,8 @@ fun AllApksScreen(
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Only the latest build is shown; older ones are intentionally hidden.
-                items(state.rows.take(1), key = { it.artifact.id }) { row ->
+                // Latest build first; "View more" reveals the older ones.
+                items(if (expanded) state.shown else state.rows.take(1), key = { it.artifact.id }) { row ->
                     ApkRowCard(
                         row = row,
                         busy = state.busyId == row.artifact.id,
@@ -111,6 +115,19 @@ fun AllApksScreen(
                         onInstall = { viewModel.install(row) },
                         onCancel = viewModel::cancel,
                     )
+                }
+                if (!expanded && state.rows.size > 1) {
+                    item(key = "view_more") {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                            TextButton(onClick = { expanded = true }) { Text(stringResource(R.string.apks_show_more)) }
+                        }
+                    }
+                } else if (expanded && state.hasMore) {
+                    item(key = "more") {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                            TextButton(onClick = viewModel::showMore) { Text(stringResource(R.string.apks_show_more)) }
+                        }
+                    }
                 }
             }
         }
@@ -137,13 +154,13 @@ private fun ApkRowCard(
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Column {
                 Text(
-                    "${row.appName} arm64", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                    "${row.appName.replace(' ', '-')}-arm64-${a.shortSha}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     listOf(
                         Formatter.formatShortFileSize(context, a.sizeBytes),
-                        a.createdAt?.let { relative(it) }.orEmpty(),
+                        a.createdAt?.let { timeAgoOrDate(it) }.orEmpty(),
                         if (row.expired) stringResource(R.string.gh_artifact_expired_label) else "",
                     ).filter { it.isNotBlank() }.joinToString(" \u2022 "),
                     style = MaterialTheme.typography.bodyMedium,
