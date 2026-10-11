@@ -6,11 +6,13 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.invictus.kodex.MainActivity
 import com.invictus.kodex.R
 
 /**
@@ -33,9 +35,22 @@ class GhNotifier(context: Context) {
         }
     }
 
-    private fun openApp(): PendingIntent? {
-        val intent = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName) ?: return null
-        return PendingIntent.getActivity(ctx, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    /**
+     * Opens the app. With a [projectPath] the tap lands on that project's GitHub screen: an explicit intent to
+     * MainActivity (singleTask) so the extra reaches onNewIntent even when the app is only sitting in recents.
+     */
+    private fun openApp(projectPath: String? = null): PendingIntent? {
+        val intent = if (projectPath != null) {
+            Intent(ctx, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(EXTRA_OPEN_GITHUB, projectPath)
+        } else {
+            ctx.packageManager.getLaunchIntentForPackage(ctx.packageName) ?: return null
+        }
+        return PendingIntent.getActivity(
+            ctx, projectPath?.hashCode() ?: 0, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
     }
 
     /** The ongoing notification. [progress] 0..100, or null for an indeterminate bar. */
@@ -70,26 +85,26 @@ class GhNotifier(context: Context) {
     }
 
     /** A new ARM64 build exists (audible channel: this is the one the user asked to hear about). */
-    fun newBuild(title: String, text: String) {
+    fun newBuild(title: String, text: String, projectPath: String? = null) {
         val n = NotificationCompat.Builder(ctx, CHANNEL_BUILDS)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(title)
             .setContentText(text)
             .setAutoCancel(true)
-            .setContentIntent(openApp())
+            .setContentIntent(openApp(projectPath))
             .build()
         post(RESULT_BASE + KIND_NEW_BUILD, n)
     }
 
     /** A watched build finished (audible channel). One notification per run. */
-    fun buildDone(runId: Long, title: String, text: String, ok: Boolean) {
+    fun buildDone(runId: Long, title: String, text: String, ok: Boolean, projectPath: String? = null) {
         val n = NotificationCompat.Builder(ctx, CHANNEL_BUILDS)
             .setSmallIcon(if (ok) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setAutoCancel(true)
-            .setContentIntent(openApp())
+            .setContentIntent(openApp(projectPath))
             .build()
         post(RESULT_BASE + 100 + (runId % 1000).toInt(), n)
     }
@@ -102,6 +117,8 @@ class GhNotifier(context: Context) {
     }
 
     companion object {
+        /** Intent extra: project whose GitHub screen the notification should open. */
+        const val EXTRA_OPEN_GITHUB = "com.invictus.kodex.extra.OPEN_GITHUB"
         const val CHANNEL = "gh_manager"
         const val CHANNEL_BUILDS = "gh_new_builds"
         const val LIVE_ID = 7100

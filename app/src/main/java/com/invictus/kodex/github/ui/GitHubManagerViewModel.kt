@@ -83,9 +83,13 @@ class GitHubManagerViewModel(
     /** Re-detect on every return to the screen (Remotes / Settings may have changed the answer). */
     fun onResume() {
         if (!lite) tools.onResume()
+        startLive()
         if (!resumed) { resumed = true; return }
         if (_state.value.gate != GitHubGate.Resolving) load()
     }
+
+    /** The screen left the foreground: stop polling GitHub (the completion watcher keeps running on its own). */
+    fun onPause() = stopLive()
 
     fun load() {
         viewModelScope.launch {
@@ -182,7 +186,7 @@ class GitHubManagerViewModel(
                 val result = repo.runs(page, filters.status, filters.workflowId)
                 page = result.page + 1
                 // Announce the moment any queued / running build finishes (also when the app is in the background).
-                _state.value.repo?.let { ref -> result.items.filter { it.isActive }.forEach { RunCompletionWatch.watch(appContext, ref, it) } }
+                _state.value.repo?.let { ref -> result.items.filter { it.isActive }.forEach { RunCompletionWatch.watch(appContext, ref, it, projectPath) } }
                 _state.update {
                     it.copy(
                         runs = if (reset) result.items else (it.runs + result.items).distinctBy { r -> r.id },
@@ -202,6 +206,61 @@ class GitHubManagerViewModel(
                         runsError = if (e is GitHubError.Offline && it.runs.isNotEmpty()) null else describe(e),
                     )
                 }
+            }
+        }
+    }
+
+    // ---- live build (progress card) ---------------------------------------------
+
+    private var liveJob: Job? = null
+
+    private fun startLive() {
+        if (lite || liveJob?.isActive == true) return
+        liveJob = viewModelScope.launch { liveLoop() }
+    }
+
+    private fun stopLive() {
+        liveJob?.cancel()
+        liveJob = null
+    }
+
+    /**
+     * While the screen is visible: follow the newest queued / running run (status + steps every few seconds)
+     * and, when nothing is running, look for a new run now and then so a build started elsewhere shows up.
+     */
+    private suspend fun liveLoop() {
+        while (true) {
+            val repo = repository
+            val s = _state.value
+            if (repo == null || s.gate != GitHubGate.Ready || s.runsLoading) { delay(LIVE_WAIT_MS); continue }
+            val active = s.runs.firstOrNull { it.isActive }
+            try {
+                if (active != null) {
+                    val latest = repo.run(active.id)
+                    if (latest.isCompleted) {
+                        _state.update { st -> st.copy(live = null, runs = st.runs.map { r -> if (r.id == latest.id) latest else r }) }
+                        delay(AFTER_DONE_MS) // artifacts show up a moment after the run completes
+                        loadRuns(reset = true)
+                        tools.loadArtifactsAndApk()
+                    } else {
+                        val progress = RunProgress.of(repo.jobs(active.id))
+                        _state.update { st ->
+                            st.copy(live = LiveBuild(latest, progress), runs = st.runs.map { r -> if (r.id == latest.id) latest else r })
+                        }
+                        delay(LIVE_ACTIVE_MS)
+                    }
+                } else {
+                    if (s.live != null) _state.update { it.copy(live = null) }
+                    delay(LIVE_IDLE_MS)
+                    val page = repo.runs(1, RunStatusFilter.All, null)
+                    val newest = page.items.firstOrNull()?.id
+                    if (page.items.any { it.isActive } || newest != _state.value.runs.firstOrNull()?.id) loadRuns(reset = true)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: GitHubError) {
+                applyBanner(e)
+                delay(LIVE_IDLE_MS)
             }
         }
     }
@@ -312,6 +371,7 @@ class GitHubManagerViewModel(
     }
 
     override fun onCleared() {
+        stopLive()
         runsJob?.cancel()
         tools.onCleared()
     }
@@ -319,6 +379,10 @@ class GitHubManagerViewModel(
     companion object {
         private const val SECTION_RUNS = "runs"
         private const val REFRESH_AFTER_MS = 1_500L
+        private const val LIVE_ACTIVE_MS = 6_000L
+        private const val LIVE_IDLE_MS = 20_000L
+        private const val LIVE_WAIT_MS = 2_000L
+        private const val AFTER_DONE_MS = 2_500L
         const val COPY_LABEL = "GitHub run error"
 
         fun factory(projectPath: String, lite: Boolean = false) = viewModelFactory {

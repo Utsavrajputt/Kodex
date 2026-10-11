@@ -13,6 +13,7 @@ import com.invictus.kodex.github.api.GhRepoRef
 import com.invictus.kodex.github.api.GitHubError
 import com.invictus.kodex.github.data.ApkResolver
 import com.invictus.kodex.github.data.GitHubResolution
+import com.invictus.kodex.github.data.RunStatusFilter
 import com.invictus.kodex.github.ui.apkTitle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +33,7 @@ import java.time.Instant
  */
 object ArmBuildWatch {
     private const val JOB_ID = 7301
-    private const val PERIOD_MS = 20L * 60 * 1000
+    private const val PERIOD_MS = 15L * 60 * 1000
     private const val PREFS = "gh_arm_watch"
     private const val MAX_PROJECTS = 12
 
@@ -63,11 +64,21 @@ object ArmBuildWatch {
         val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val recents = container.projectRepository.recents.first().take(MAX_PROJECTS)
         val repos = coroutineScope {
-            recents.map { async(Dispatchers.IO) { container.gitHubProjectResolver.resolve(it.file.path) } }.awaitAll()
-        }.mapNotNull { (it as? GitHubResolution.Ready)?.repo }.distinctBy(::key)
+            recents.map { r -> async(Dispatchers.IO) { r.file.path to container.gitHubProjectResolver.resolve(r.file.path) } }.awaitAll()
+        }.mapNotNull { (path, res) -> (res as? GitHubResolution.Ready)?.repo?.let { path to it } }.distinctBy { key(it.second) }
 
         val now = Instant.now()
-        for (repo in repos) {
+        for ((projectPath, repo) in repos) {
+            // A build may have been started from elsewhere (a push, the GitHub site): follow it so its end is announced.
+            try {
+                container.gitHubRepository(repo).runs(1, RunStatusFilter.All, null).items
+                    .filter { it.isActive }
+                    .forEach { RunCompletionWatch.watch(app, repo, it, projectPath) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: GitHubError) {
+                // Offline / rate limited: the artifact check below tries again next period.
+            }
             val newest: GhArtifact = try {
                 container.gitHubRepository(repo).artifacts(1).items
                     .filter { ApkResolver.isArm64(it.name) && !it.isExpiredAt(now) }
@@ -83,7 +94,7 @@ object ArmBuildWatch {
                 prefs.edit().putLong(k, newest.id).apply() // baseline, no notification
             } else if (newest.id > last) {
                 prefs.edit().putLong(k, newest.id).apply()
-                GhNotifier(app).newBuild(app.getString(R.string.gh_notif_new_build_title), app.getString(R.string.gh_notif_new_build_text, apkTitle(newest.name)))
+                GhNotifier(app).newBuild(app.getString(R.string.gh_notif_new_build_title), app.getString(R.string.gh_notif_new_build_text, apkTitle(newest.name)), projectPath)
             }
         }
     }

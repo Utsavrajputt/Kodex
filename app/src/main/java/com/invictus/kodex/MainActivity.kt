@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.invictus.kodex.core.external.ExternalFileResolver
+import com.invictus.kodex.github.notify.GhNotifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -38,11 +39,17 @@ class MainActivity : ComponentActivity() {
     /** File from an "Open with Kodex" intent, waiting for the nav host to open it in the editor. */
     private var externalFile by mutableStateOf<File?>(null)
 
+    /** Project whose GitHub screen a build notification asked for; consumed by the nav host. */
+    private var openGitHub by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        if (savedInstanceState == null) handleOpenIntent(intent)
+        if (savedInstanceState == null) {
+            handleOpenIntent(intent)
+            handleGitHubIntent(intent)
+        }
 
         val container = (application as KodexApp).container
         val storagePermission = container.storagePermission
@@ -80,6 +87,8 @@ class MainActivity : ComponentActivity() {
                         onFinishOnboarding = { viewModel.onEvent(MainUiEvent.CompleteOnboarding) },
                         externalFile = externalFile,
                         onExternalFileHandled = { externalFile = null },
+                        openGitHubProject = openGitHub,
+                        onOpenGitHubHandled = { openGitHub = null },
                     )
                     ThemeTransitionOverlay(transitionController)
                     if (ThemePickerState.visible) {
@@ -97,6 +106,14 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleOpenIntent(intent)
+        handleGitHubIntent(intent)
+    }
+
+    private fun handleGitHubIntent(intent: Intent?) {
+        val open = intent ?: return
+        val path = open.getStringExtra(GhNotifier.EXTRA_OPEN_GITHUB) ?: return
+        open.removeExtra(GhNotifier.EXTRA_OPEN_GITHUB)
+        openGitHub = path
     }
 
     /** ACTION_VIEW / ACTION_EDIT from a file manager or another app -> resolve off-main, then hand to the nav host. */

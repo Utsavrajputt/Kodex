@@ -61,6 +61,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -106,6 +108,7 @@ fun GitHubManagerScreen(
     val scope = rememberCoroutineScope()
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onResume() }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) { viewModel.onPause() }
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event -> handleEvent(event, context, snackbar, scope) }
     }
@@ -128,7 +131,7 @@ fun GitHubManagerScreen(
                 title = {
                     Text(
                         stringResource(R.string.gh_title), maxLines = 1,
-                        style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
                     )
                 },
                 navigationIcon = {
@@ -240,11 +243,16 @@ private fun ReadyContent(
     val visible = state.runs.take(RECENT_COUNT)
 
     PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm::refresh, modifier = Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             state.banner?.let { b -> item(key = "banner") { BannerCard(b, onOpenGitHubSettings) } }
             item(key = "header") { RepoHeaderCard(state, vm.projectPath) }
             item(key = "run_workflow") {
                 RunWorkflowCard(toolsState.run, state.workflows, state.repo?.defaultBranch, tools)
+            }
+            state.live?.let { live ->
+                item(key = "building") {
+                    BuildingCard(live, onOpen = { onOpenRunLog(live.run.id) }, onCancel = { pendingCancel = live.run })
+                }
             }
             item(key = "apk") { ApkCard(toolsState, tools, onRunShortcut, vm.projectPath) }
             item(key = "runs_header") {
@@ -254,7 +262,7 @@ private fun ReadyContent(
                 ) {
                     Text(
                         stringResource(R.string.gh_runs_title),
-                        style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
                         color = ghPalette().onCard,
                         modifier = Modifier.weight(1f),
                     )
@@ -283,6 +291,7 @@ private fun ReadyContent(
                                 run = run,
                                 workflowName = state.workflowName(run),
                                 busy = run.id in state.busyRunIds,
+                                percent = state.live?.takeIf { it.run.id == run.id && it.progress.hasSteps }?.progress?.percent,
                                 onOpen = { onOpenRunLog(run.id) },
                                 onCopyError = { vm.copyError(run) },
                                 onRerun = { failedOnly -> vm.rerun(run, failedOnly) },
@@ -389,17 +398,17 @@ private fun BannerCard(banner: GhBanner, onReconnect: () -> Unit) {
 private fun RepoHeaderCard(state: GitHubManagerState, projectPath: String) {
     val p = ghPalette()
     GhCard(p.card, p.cardBorder) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            ProjectIcon(projectPath, size = 56.dp, corner = 16.dp)
-            Spacer(Modifier.width(16.dp))
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            ProjectIcon(projectPath, size = 48.dp, corner = 14.dp)
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    state.repo?.name.orEmpty(), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold,
+                    state.repo?.name.orEmpty(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
                     color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     listOfNotNull(state.repo?.fullName, state.repo?.defaultBranch).joinToString(" \u2022 "),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -491,95 +500,101 @@ internal fun RunRow(
     onRerun: (failedOnly: Boolean) -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
+    /** Progress of the run while it is building (shown instead of the chevron). */
+    percent: Int? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
     val pal = ghPalette()
     val (icon, label, tint) = statusVisuals(run.display, pal)
     val statusText = stringResource(label)
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = pal.runCard, contentColor = pal.onCard),
-        border = androidx.compose.foundation.BorderStroke(1.dp, pal.cardBorder),
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .combinedClickable(
-                    enabled = !busy,
-                    onClick = onOpen,
-                    onLongClick = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        // Failed: copy the excerpt. Anything else: context menu, never a copy (plan 6.4).
-                        if (run.isFailed) onCopyError() else menu = true
-                    },
-                )
-                .padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    Box(Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = pal.runCard, contentColor = pal.onCard),
+            border = androidx.compose.foundation.BorderStroke(1.dp, pal.cardBorder),
         ) {
-            Column(Modifier.width(72.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                StatusBadge(run.display, icon, tint, pal)
-                Spacer(Modifier.height(4.dp))
-                Text(statusText, style = MaterialTheme.typography.labelMedium, color = tint, maxLines = 1)
-            }
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "#${run.runNumber} $workflowName", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                    color = pal.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                if (run.commitMessage.isNotBlank()) {
-                    Text(run.commitMessage, style = MaterialTheme.typography.bodyMedium, color = pal.onCard.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Text(
-                    runSubtitle(run), style = MaterialTheme.typography.bodyMedium,
-                    color = pal.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (busy) {
-                CircularProgressIndicator(Modifier.padding(12.dp).size(24.dp), strokeWidth = 2.dp)
-            } else {
-                Box {
-                    IconButton(onClick = { menu = true }) {
-                        Icon(XIcons.MoreVert, contentDescription = stringResource(R.string.gh_run_actions, run.runNumber), tint = pal.onCard)
-                    }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.gh_action_open_log)) },
-                            leadingIcon = { Icon(XIcons.Article, contentDescription = null) },
-                            onClick = { menu = false; onOpen() },
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        enabled = !busy,
+                        onClick = onOpen,
+                        onLongClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menu = true
+                        },
+                    )
+                    .padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StatusBadge(run.display, icon, tint, pal, statusText)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "#${run.runNumber} $workflowName", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                        color = pal.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    if (run.commitMessage.isNotBlank()) {
+                        Text(
+                            run.commitMessage, style = MaterialTheme.typography.bodyMedium,
+                            color = pal.onCard.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
-                        if (run.isFailed) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.gh_action_copy_error)) },
-                                leadingIcon = { Icon(XIcons.ContentCopy, contentDescription = null) },
-                                onClick = { menu = false; onCopyError() },
-                            )
-                        }
-                        if (run.canRerun) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(if (run.isFailed) R.string.gh_action_rerun_failed else R.string.gh_action_rerun)) },
-                                leadingIcon = { Icon(XIcons.Refresh, contentDescription = null) },
-                                onClick = { menu = false; onRerun(run.isFailed) },
-                            )
-                        }
-                        if (run.canCancel) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.gh_action_cancel_run)) },
-                                leadingIcon = { Icon(XIcons.CancelCircle, contentDescription = null) },
-                                onClick = { menu = false; onCancel() },
-                            )
-                        }
-                        if (run.canDelete) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) },
-                                leadingIcon = { Icon(XIcons.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                                onClick = { menu = false; onDelete() },
-                            )
-                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(XIcons.Branch, contentDescription = null, tint = pal.onCardMuted, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            runSubtitle(run), style = MaterialTheme.typography.bodySmall,
+                            color = pal.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
+                Spacer(Modifier.width(6.dp))
+                when {
+                    busy -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                    percent != null -> Text(
+                        stringResource(R.string.gh_percent, percent),
+                        style = MaterialTheme.typography.labelLarge, color = pal.onCardMuted,
+                    )
+                    else -> Icon(XIcons.ChevronRight, contentDescription = null, tint = pal.onCardMuted, modifier = Modifier.size(22.dp))
+                }
+            }
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.gh_action_open_log)) },
+                leadingIcon = { Icon(XIcons.Article, contentDescription = null) },
+                onClick = { menu = false; onOpen() },
+            )
+            if (run.isFailed) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.gh_action_copy_error)) },
+                    leadingIcon = { Icon(XIcons.ContentCopy, contentDescription = null) },
+                    onClick = { menu = false; onCopyError() },
+                )
+            }
+            if (run.canRerun) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(if (run.isFailed) R.string.gh_action_rerun_failed else R.string.gh_action_rerun)) },
+                    leadingIcon = { Icon(XIcons.Refresh, contentDescription = null) },
+                    onClick = { menu = false; onRerun(run.isFailed) },
+                )
+            }
+            if (run.canCancel) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.gh_action_cancel_run)) },
+                    leadingIcon = { Icon(XIcons.CancelCircle, contentDescription = null) },
+                    onClick = { menu = false; onCancel() },
+                )
+            }
+            if (run.canDelete) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error) },
+                    leadingIcon = { Icon(XIcons.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                    onClick = { menu = false; onDelete() },
+                )
             }
         }
     }
@@ -595,27 +610,31 @@ private fun statusVisuals(s: RunDisplayStatus, pal: GhPalette): Triple<ImageVect
     RunDisplayStatus.Skipped -> Triple(XIcons.RemoveCircle, R.string.gh_status_skipped, pal.onCardMuted)
 }
 
-/** Solid round badge for finished runs (check / cross); plain tinted glyph for the in-between states. */
+/** Solid round badge for finished runs (check / cross), a spinner while running, a plain glyph otherwise. */
 @Composable
-private fun StatusBadge(status: RunDisplayStatus, icon: ImageVector, tint: Color, pal: GhPalette) {
+private fun StatusBadge(status: RunDisplayStatus, icon: ImageVector, tint: Color, pal: GhPalette, description: String) {
+    val a11y = Modifier.semantics { contentDescription = description }
     when (status) {
         RunDisplayStatus.Success, RunDisplayStatus.Failed -> Box(
-            Modifier.size(40.dp).clip(CircleShape).background(tint),
+            Modifier.size(36.dp).clip(CircleShape).background(tint).then(a11y),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                icon, contentDescription = null, modifier = Modifier.size(24.dp),
+                icon, contentDescription = null, modifier = Modifier.size(22.dp),
                 tint = if (status == RunDisplayStatus.Success) pal.onSuccess else pal.onDanger,
             )
         }
-        else -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(32.dp))
+        RunDisplayStatus.Running -> Box(Modifier.size(36.dp).then(a11y), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(Modifier.size(30.dp), color = tint, trackColor = tint.copy(alpha = 0.2f), strokeWidth = 3.dp)
+        }
+        else -> Box(Modifier.size(36.dp).then(a11y), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(30.dp))
         }
     }
 }
 
 private fun runSubtitle(run: GhRun): String {
-    val parts = mutableListOf(run.branch, run.shortSha)
+    val parts = mutableListOf(run.branch)
     (run.createdAt ?: run.startedAt)?.let {
         parts += DateUtils.getRelativeTimeSpanString(it.toEpochMilli(), System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
     }

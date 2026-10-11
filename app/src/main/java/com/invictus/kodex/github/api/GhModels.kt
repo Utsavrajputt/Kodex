@@ -77,7 +77,21 @@ fun displayStatus(status: String, conclusion: String?): RunDisplayStatus = when 
     else -> RunDisplayStatus.Queued
 }
 
-data class GhStep(val number: Int, val name: String, val conclusion: String?)
+data class GhStep(
+    val number: Int,
+    val name: String,
+    val conclusion: String?,
+    val status: String = "",
+    val startedAt: Instant? = null,
+    val completedAt: Instant? = null,
+) {
+    val durationMs: Long?
+        get() {
+            val st = startedAt ?: return null
+            val en = completedAt ?: return null
+            return (en.toEpochMilli() - st.toEpochMilli()).coerceAtLeast(0)
+        }
+}
 
 data class GhJob(
     val id: Long,
@@ -85,7 +99,15 @@ data class GhJob(
     val status: String,
     val conclusion: String?,
     val steps: List<GhStep>,
+    val startedAt: Instant? = null,
+    val completedAt: Instant? = null,
 ) {
+    val durationMs: Long?
+        get() {
+            val st = startedAt ?: return null
+            val en = completedAt ?: return null
+            return (en.toEpochMilli() - st.toEpochMilli()).coerceAtLeast(0)
+        }
     val isFailed: Boolean get() = conclusion == "failure" || conclusion == "timed_out"
     val failedStepName: String? get() = steps.firstOrNull { it.conclusion == "failure" }?.name
 
@@ -100,9 +122,20 @@ data class GhJob(
                 steps = buildList {
                     if (steps != null) for (i in 0 until steps.length()) {
                         val s = steps.getJSONObject(i)
-                        add(GhStep(s.optInt("number"), s.optString("name"), s.str("conclusion")))
+                        add(
+                            GhStep(
+                                number = s.optInt("number"),
+                                name = s.optString("name"),
+                                conclusion = s.str("conclusion"),
+                                status = s.optString("status"),
+                                startedAt = parseInstant(s.str("started_at")),
+                                completedAt = parseInstant(s.str("completed_at")),
+                            ),
+                        )
                     }
                 },
+                startedAt = parseInstant(j.str("started_at")),
+                completedAt = parseInstant(j.str("completed_at")),
             )
         }
     }

@@ -1,5 +1,6 @@
 package com.invictus.kodex.feature.git
 
+import com.invictus.kodex.github.notify.GitPushEvents
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import com.invictus.kodex.core.git.GitTrigger
@@ -824,6 +825,7 @@ class GitViewModel(
         _uiState.update { it.copy(networkOp = action, progressTask = "") }
         val ok = when (val result = call(provider)) {
             is GitResult.Ok -> {
+                if (action == GitPendingAction.PUSH) GitPushEvents.emit(projectPath)
                 if (announce) {
                     message(
                         when (action) {

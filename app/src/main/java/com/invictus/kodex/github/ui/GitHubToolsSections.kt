@@ -87,13 +87,13 @@ fun RunWorkflowCard(
         (supported == true || info is DispatchInfoState.Failed)
 
     GhCard(p.card, p.cardBorder) {
-        Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(
                 stringResource(R.string.gh_run_title),
-                style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = p.onCard,
+                style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = p.onCard,
             )
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PickerButton(
                     label = workflow?.name ?: stringResource(R.string.gh_run_pick_workflow),
                     leading = XIcons.Android,
@@ -111,7 +111,7 @@ fun RunWorkflowCard(
                     label = ref ?: stringResource(R.string.gh_run_pick_branch),
                     leading = XIcons.Branch,
                     enabled = ref != null || state.branches.isNotEmpty(),
-                    modifier = Modifier.weight(0.8f),
+                    modifier = Modifier.weight(0.7f),
                 ) { close ->
                     val names = state.branches.ifEmpty { listOfNotNull(defaultBranch) }
                     names.forEach { b ->
@@ -127,27 +127,21 @@ fun RunWorkflowCard(
                         )
                     }
                 }
-                // Soft halo ring around the play button.
-                Box(
-                    Modifier.size(60.dp).clip(CircleShape).background(p.accent.copy(alpha = 0.16f)),
-                    contentAlignment = Alignment.Center,
+                FilledIconButton(
+                    onClick = { if (workflow != null && ref != null) tools.onRunPressed(workflow, ref) },
+                    enabled = canRun,
+                    modifier = Modifier.size(44.dp),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = p.accent,
+                        contentColor = p.onInstall,
+                        disabledContainerColor = p.accent.copy(alpha = 0.35f),
+                        disabledContentColor = p.onInstall.copy(alpha = 0.6f),
+                    ),
                 ) {
-                    FilledIconButton(
-                        onClick = { if (workflow != null && ref != null) tools.onRunPressed(workflow, ref) },
-                        enabled = canRun,
-                        modifier = Modifier.size(52.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = p.accent,
-                            contentColor = p.onInstall,
-                            disabledContainerColor = p.accent.copy(alpha = 0.35f),
-                            disabledContentColor = p.onInstall.copy(alpha = 0.6f),
-                        ),
-                    ) {
-                        if (state.dispatching) {
-                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = p.onInstall)
-                        } else {
-                            Icon(XIcons.PlayArrow, contentDescription = stringResource(R.string.gh_run_action), modifier = Modifier.size(28.dp))
-                        }
+                    if (state.dispatching) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = p.onInstall)
+                    } else {
+                        Icon(XIcons.PlayArrow, contentDescription = stringResource(R.string.gh_run_action), modifier = Modifier.size(26.dp))
                     }
                 }
             }
@@ -186,18 +180,18 @@ private fun PickerButton(
                 contentColor = p.onCard,
                 disabledContentColor = p.onCard.copy(alpha = 0.4f),
             ),
-            modifier = Modifier.fillMaxWidth().height(48.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp),
+            modifier = Modifier.fillMaxWidth().height(42.dp),
+            contentPadding = PaddingValues(horizontal = 10.dp),
         ) {
-            Icon(leading, contentDescription = null, modifier = Modifier.size(20.dp), tint = p.onCardMuted)
-            Spacer(Modifier.width(8.dp))
+            Icon(leading, contentDescription = null, modifier = Modifier.size(18.dp), tint = p.onCardMuted)
+            Spacer(Modifier.width(6.dp))
             Text(
                 label, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f, fill = false),
             )
-            Spacer(Modifier.width(4.dp))
-            Icon(XIcons.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(2.dp))
+            Icon(XIcons.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) { content { open = false } }
     }
@@ -231,7 +225,7 @@ fun ApkCard(
     val busy = state.transfer != null || state.installing || state.pendingSave != null
 
     GhCard(p.apkCard, p.apkBorder) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             val title = when {
                 found != null -> apkBuildName(found.candidate.artifact.name, found.candidate.artifact.shortSha)
                 local != null -> apkTitle(local.label)
@@ -253,10 +247,10 @@ fun ApkCard(
             }.filter { it.isNotBlank() }.joinToString(" \u2022 ")
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ProjectIcon(projectPath, size = 56.dp, corner = 16.dp)
+                ProjectIcon(projectPath, size = 48.dp, corner = 14.dp)
                 Column(Modifier.weight(1f)) {
                     Text(
-                        title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                        title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
                         color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                     if (facts.isNotBlank()) {
@@ -284,11 +278,11 @@ fun ApkCard(
                             enabled = state.transfer == null,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(24.dp), tint = p.onInstall)
+                            Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(22.dp), tint = p.onInstall)
                             Spacer(Modifier.width(10.dp))
                             Text(
                                 stringResource(R.string.gh_apk_download),
-                                style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = p.onInstall,
+                                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = p.onInstall,
                             )
                         }
                     }
@@ -305,7 +299,7 @@ fun ApkCard(
                     Text(msg, style = MaterialTheme.typography.bodyMedium, color = if (apk is ApkCardState.Error) p.danger else p.onCard)
                     FilledTonalButton(
                         onClick = if (apk is ApkCardState.Error) tools::loadArtifactsAndApk else onRunShortcut,
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
                         colors = ButtonDefaults.filledTonalButtonColors(containerColor = p.neutralAction, contentColor = p.onNeutralAction),
                     ) {
                         Text(stringResource(if (apk is ApkCardState.Error) R.string.gh_retry else R.string.gh_run_action_label))
@@ -329,11 +323,11 @@ private fun ApkActions(d: DownloadedApk, installing: Boolean, busy: Boolean, too
             if (installing) {
                 CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = p.onInstall)
             } else {
-                Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(24.dp), tint = p.onInstall)
+                Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(22.dp), tint = p.onInstall)
                 Spacer(Modifier.width(10.dp))
                 Text(
                     stringResource(R.string.gh_install),
-                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = p.onInstall,
+                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = p.onInstall,
                 )
             }
         }

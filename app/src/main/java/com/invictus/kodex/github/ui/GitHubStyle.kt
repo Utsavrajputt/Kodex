@@ -112,7 +112,7 @@ internal fun ghPalette(): GhPalette {
     }
 }
 
-private val CardShape = RoundedCornerShape(24.dp)
+private val CardShape = RoundedCornerShape(20.dp)
 
 /** Rounded gradient card with a hairline border, the base of every card on the GitHub screen. */
 @Composable
@@ -120,6 +120,7 @@ internal fun GhCard(
     brush: Brush,
     border: Color,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -127,7 +128,8 @@ internal fun GhCard(
             .fillMaxWidth()
             .clip(CardShape)
             .background(brush)
-            .border(1.dp, border, CardShape),
+            .border(1.dp, border, CardShape)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         content = content,
     )
 }
@@ -143,7 +145,7 @@ internal fun GhPrimaryButton(
     val p = ghPalette()
     Row(
         modifier
-            .height(52.dp)
+            .height(44.dp)
             .alpha(if (enabled) 1f else 0.45f)
             .clip(CircleShape)
             .background(p.installBrush)
@@ -167,7 +169,7 @@ internal fun GhCircleButton(
     FilledIconButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.size(52.dp),
+        modifier = Modifier.size(44.dp),
         colors = IconButtonDefaults.filledIconButtonColors(
             containerColor = container,
             contentColor = tint,
@@ -175,6 +177,6 @@ internal fun GhCircleButton(
             disabledContentColor = tint.copy(alpha = 0.5f),
         ),
     ) {
-        Icon(icon, contentDescription = description, modifier = Modifier.size(24.dp))
+        Icon(icon, contentDescription = description, modifier = Modifier.size(22.dp))
     }
 }

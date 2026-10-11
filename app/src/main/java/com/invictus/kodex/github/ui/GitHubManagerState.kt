@@ -56,6 +56,8 @@ data class GitHubManagerState(
     val runsExpanded: Boolean = true,
     /** Runs with an action in flight (spinner on the row, actions disabled). */
     val busyRunIds: Set<Long> = emptySet(),
+    /** The run that is queued / building right now (drives the "Building APK…" card). */
+    val live: LiveBuild? = null,
 ) {
     fun workflowName(run: GhRun): String =
         workflows.firstOrNull { it.id == run.workflowId }?.name ?: run.name

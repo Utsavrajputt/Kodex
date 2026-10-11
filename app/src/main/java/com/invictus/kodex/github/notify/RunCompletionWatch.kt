@@ -32,7 +32,7 @@ object RunCompletionWatch {
     private val watching: MutableSet<Long> = ConcurrentHashMap.newKeySet()
 
     /** Idempotent: calling it again for a run that is already watched (or finished) does nothing. */
-    fun watch(context: Context, repoRef: GhRepoRef, run: GhRun) {
+    fun watch(context: Context, repoRef: GhRepoRef, run: GhRun, projectPath: String? = null) {
         if (!run.isActive || !watching.add(run.id)) return
         val app = context.applicationContext
         GhBackground.scope.launch(Dispatchers.IO) {
@@ -58,7 +58,7 @@ object RunCompletionWatch {
                         continue
                     }
                     if (!latest.isCompleted) continue
-                    finished(app, repo, repoRef, latest, notifier)
+                    finished(app, repo, repoRef, latest, notifier, projectPath)
                     break
                 }
             } finally {
@@ -74,6 +74,7 @@ object RunCompletionWatch {
         repoRef: GhRepoRef,
         run: GhRun,
         notifier: GhNotifier,
+        projectPath: String?,
     ) {
         when (run.display) {
             RunDisplayStatus.Success -> {
@@ -93,6 +94,7 @@ object RunCompletionWatch {
                     artifact?.let { app.getString(R.string.gh_notif_done_text, apkBuildName(it.name, it.shortSha)) }
                         ?: app.getString(R.string.gh_notif_done_text_plain),
                     ok = true,
+                    projectPath = projectPath,
                 )
             }
             RunDisplayStatus.Failed -> notifier.buildDone(
@@ -100,6 +102,7 @@ object RunCompletionWatch {
                 app.getString(R.string.gh_notif_failed_title, run.runNumber),
                 app.getString(R.string.gh_notif_failed_text),
                 ok = false,
+                projectPath = projectPath,
             )
             else -> Unit // cancelled / skipped: the user already knows
         }

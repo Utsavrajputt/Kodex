@@ -77,6 +77,9 @@ fun KodexNavHost(
     /** File handed in by "Open with Kodex" (ACTION_VIEW/EDIT); opened in the editor once permissions allow. */
     externalFile: java.io.File? = null,
     onExternalFileHandled: () -> Unit = {},
+    /** Project whose GitHub screen to open (build notification tap); cleared through [onOpenGitHubHandled]. */
+    openGitHubProject: String? = null,
+    onOpenGitHubHandled: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     // Activity-scoped on purpose: open tabs outlive the trip back to the file tree.
@@ -388,6 +391,16 @@ fun KodexNavHost(
             kotlinx.coroutines.delay(8_000)
             externalNavPending = false
         }
+    }
+
+    LaunchedEffect(openGitHubProject, storageGranted, onboardingCompleted) {
+        val path = openGitHubProject ?: return@LaunchedEffect
+        if (!storageGranted || !onboardingCompleted) return@LaunchedEffect
+        val current = navController.currentBackStackEntry
+        val alreadyThere = current?.destination?.route == Routes.GITHUB &&
+            current?.arguments?.getString("projectPath") == path
+        if (!alreadyThere) navController.navigate(Routes.github(path))
+        onOpenGitHubHandled()
     }
 
     LaunchedEffect(editorViewModel) {

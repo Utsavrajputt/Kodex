@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gh_build_building">Building APK…</string>
+    <string name="gh_build_queued">Queued…</string>
+    <string name="gh_build_started">Started %1$s</string>
+    <string name="gh_run_header_title">Run #%1$d</string>
+    <string name="gh_tab_steps">Steps</string>
+    <string name="gh_tab_log">Log</string>
+    <string name="gh_steps_none">Waiting for the steps to start…</string>
+    <string name="gh_log_after_finish">The log is available once the run finishes.</string>
+    <string name="gh_percent">%1$d%%</string>
+    <string name="gh_run_open_details">Open run details</string>
+</resources>

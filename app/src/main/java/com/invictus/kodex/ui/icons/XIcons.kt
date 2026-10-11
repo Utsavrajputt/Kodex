@@ -1,6 +1,7 @@
 package com.invictus.kodex.ui.icons
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
@@ -102,11 +103,14 @@ object XIcons {
             "M17.6,9.48l1.84,-3.18c0.16,-0.31 0.04,-0.69 -0.26,-0.85c-0.29,-0.15 -0.65,-0.06 -0.83,0.22l-1.88,3.24c-2.86,-1.21 -6.08,-1.21 -8.94,0L5.65,5.67c-0.19,-0.29 -0.58,-0.38 -0.87,-0.2C4.5,5.65 4.41,6.01 4.56,6.3L6.4,9.48C3.3,11.25 1.28,14.44 1,18h22C22.72,14.44 20.7,11.25 17.6,9.48zM7,15.25c-0.69,0 -1.25,-0.56 -1.25,-1.25c0,-0.69 0.56,-1.25 1.25,-1.25S8.25,13.31 8.25,14C8.25,14.69 7.69,15.25 7,15.25zM17,15.25c-0.69,0 -1.25,-0.56 -1.25,-1.25c0,-0.69 0.56,-1.25 1.25,-1.25s1.25,0.56 1.25,1.25C18.25,14.69 17.69,15.25 17,15.25z",
         )
     }
-    /** Material "call_split": branch glyph for the branch picker. */
+    /** Git branch glyph (three nodes joined by a curve), drawn on a 16px grid like the GitHub mark set. */
     val Branch: ImageVector by lazy {
-        icon(
+        icon16(
             "Branch",
-            "M14,4l2.29,2.29l-2.88,2.88l1.42,1.42l2.88,-2.88L20,10V4H14zM10,4H4v6l2.29,-2.29l4.71,4.7V20h2v-8.41l-5.29,-5.3L10,4z",
+            "M9.5 3.25 a2.25 2.25 0 1 1 3 2.122 V6 A2.5 2.5 0 0 1 10 8.5 H6 a1 1 0 0 0 -1 1 v1.128 " +
+                "a2.251 2.251 0 1 1 -1.5 0 V5.372 a2.25 2.25 0 1 1 1.5 0 v1.836 A2.493 2.493 0 0 1 6 7 h4 " +
+                "a1 1 0 0 0 1 -1 v-.628 A2.25 2.25 0 0 1 9.5 3.25 Z m-6 0 a.75 .75 0 1 0 1.5 0 .75 .75 0 0 0 -1.5 0 Z " +
+                "m8.25 -.75 a.75 .75 0 1 0 0 1.5 .75 .75 0 0 0 0 -1.5 Z M4.25 12 a.75 .75 0 1 0 0 1.5 .75 .75 0 0 0 0 -1.5 Z",
         )
     }
     /** Material "delete_sweep": bin with sweep lines, for Clean up (close to the old trash, clearly different). */
@@ -394,6 +398,22 @@ object XIcons {
                 fill = SolidColor(Color.Black),
             )
             .clearGroup()
+            .build()
+
+    /** Same as [icon] for glyphs drawn on a 16 x 16 grid (even-odd fill so the node holes stay open). */
+    private fun icon16(name: String, pathData: String): ImageVector =
+        ImageVector.Builder(
+            name = name,
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 16f,
+            viewportHeight = 16f,
+        )
+            .addPath(
+                pathData = PathParser().parsePathString(pathData).toNodes(),
+                pathFillType = PathFillType.EvenOdd,
+                fill = SolidColor(Color.Black),
+            )
             .build()
 
     private fun icon(name: String, pathData: String): ImageVector =

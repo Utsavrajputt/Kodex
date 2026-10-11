@@ -6,6 +6,10 @@ import com.invictus.kodex.core.diagnostics.CrashHandler
 import com.invictus.kodex.core.git.installGitByteCounting
 import com.invictus.kodex.core.git.installGitPerformanceTuning
 import com.invictus.kodex.di.AppContainer
+import com.invictus.kodex.github.notify.GhBackground
+import com.invictus.kodex.github.notify.GitPushEvents
+import com.invictus.kodex.github.notify.RunWatchStarter
+import kotlinx.coroutines.launch
 import com.invictus.kodex.ui.theme.ThemeSettings
 
 class KodexApp : Application() {
@@ -20,5 +24,7 @@ class KodexApp : Application() {
         installGitByteCounting()
         installGitPerformanceTuning()
         container = AppContainer(this)
+        // A push may start a build: follow it in the background so its end is announced even from recents.
+        GhBackground.scope.launch { GitPushEvents.pushed.collect { RunWatchStarter.afterPush(this@KodexApp, it) } }
     }
 }
