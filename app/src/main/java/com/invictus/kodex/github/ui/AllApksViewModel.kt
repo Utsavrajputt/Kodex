@@ -28,6 +28,7 @@ import com.invictus.kodex.github.notify.GhNotifier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -69,7 +70,7 @@ internal fun apkTitle(artifactName: String): String {
 internal fun apkBuildName(artifactName: String, shortSha: String): String =
     listOf(apkTitle(artifactName).replace(' ', '-'), shortSha).filter { it.isNotBlank() }.joinToString("-")
 
-/** One ARM64 build in the combined list: "<App> arm64". */
+/** One ARM64 variant (Light, Full, ...) of a repo's latest build: "<App> arm64". */
 data class ApkRow(
     val artifact: GhArtifact,
     val repo: GhRepoRef,
@@ -79,22 +80,31 @@ data class ApkRow(
     val projectPath: String = "",
 )
 
+/** The latest build of one repo: every ARM64 artifact it produced. */
+data class RepoBuild(val repo: GhRepoRef, val projectPath: String, val variants: List<ApkRow>) {
+    val key: String get() = "${repo.owner}/${repo.name}".lowercase()
+    val newestAt: Instant get() = variants.maxOfOrNull { it.artifact.createdAt ?: Instant.EPOCH } ?: Instant.EPOCH
+}
+
+/** The download in progress (or paused) on the Builds screen. */
+data class RowTransfer(
+    val artifactId: Long,
+    val downloaded: Long = 0L,
+    val total: Long = 0L,
+    val etaSeconds: Long? = null,
+    val paused: Boolean = false,
+)
+
 data class AllApksState(
     val loading: Boolean = true,
     val error: Int? = null,
-    val rows: List<ApkRow> = emptyList(),
-    val visible: Int = PAGE,
-    val loadingMore: Boolean = false,
-    /** Artifact id of the row that is downloading, with 0..1 progress (null = unknown size). */
-    val busyId: Long? = null,
-    val progress: Float? = null,
+    val builds: List<RepoBuild> = emptyList(),
+    val transfer: RowTransfer? = null,
     /** Artifact ids whose APK is already on the device (row shows Install + Delete instead of Download). */
     val downloaded: Set<Long> = emptySet(),
 ) {
-    val shown: List<ApkRow> get() = rows.take(visible)
-    val hasMore: Boolean get() = visible < rows.size
-
-    companion object { const val PAGE = 10 }
+    /** A running download blocks the other buttons; a paused one does not. */
+    val anyBusy: Boolean get() = transfer?.paused == false
 }
 
 sealed interface AllApksEvent {
@@ -103,8 +113,7 @@ sealed interface AllApksEvent {
 }
 
 /**
- * Every ARM64 build of the recent projects' GitHub repos, newest first. Rows only carry the app name
- * and "arm64"; the repo is an implementation detail.
+ * The latest build of every recent project's GitHub repo (all its ARM64 variants), newest first.
  */
 class AllApksViewModel(
     private val projects: ProjectRepository,
@@ -150,25 +159,25 @@ class AllApksViewModel(
                 val repos = found.map { it.first }
                 val pathOf = found.associate { (repo, path) -> repo to path }
 
-                val rows = coroutineScope {
+                val builds = coroutineScope {
                     repos.map { repo ->
                         async {
                             try {
-                                repoFactory(repo).artifacts(1).items
-                                    .filter { ApkResolver.isArm64(it.name) }
-                                    .map { toRow(it, repo, pathOf[repo].orEmpty()) }
+                                val latest = ApkResolver.latestBuild(repoFactory(repo).artifacts(1).items)
+                                if (latest.isEmpty()) null
+                                else RepoBuild(repo, pathOf[repo].orEmpty(), latest.map { toRow(it, repo, pathOf[repo].orEmpty()) })
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: GitHubError) {
-                                emptyList()
+                                null
                             }
                         }
-                    }.awaitAll().flatten()
-                }.sortedWith(compareByDescending<ApkRow> { it.artifact.createdAt ?: Instant.EPOCH }.thenByDescending { it.artifact.id })
+                    }.awaitAll().filterNotNull()
+                }.sortedByDescending { it.newestAt }
 
-                rows.groupBy { it.repo }.forEach { (repo, list) -> ArmBuildWatch.markSeen(appContext, repo, list.maxOf { it.artifact.id }) }
+                builds.forEach { b -> ArmBuildWatch.markSeen(appContext, b.repo, b.variants.maxOf { it.artifact.id }) }
                 _state.update {
-                    it.copy(loading = false, rows = rows, visible = AllApksState.PAGE, error = if (repos.isEmpty()) R.string.apks_no_repos else null)
+                    it.copy(loading = false, builds = builds, error = if (repos.isEmpty()) R.string.apks_no_repos else null)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -177,8 +186,6 @@ class AllApksViewModel(
             }
         }
     }
-
-    fun showMore() = _state.update { it.copy(visible = it.visible + AllApksState.PAGE) }
 
     private fun toRow(a: GhArtifact, repo: GhRepoRef, projectPath: String): ApkRow {
         return ApkRow(a, repo, apkAppName(a.name).ifEmpty { repo.name.replaceFirstChar { it.uppercase() } }, a.isExpiredAt(Instant.now()), projectPath)
@@ -192,7 +199,7 @@ class AllApksViewModel(
     fun install(row: ApkRow) = start(row, installAfter = true)
 
     fun delete(row: ApkRow) {
-        if (_state.value.busyId != null) return
+        if (_state.value.anyBusy) return
         viewModelScope.launch(Dispatchers.IO) {
             downloader.cachedApk(row.artifact.id)?.let { downloader.delete(it) }
             refreshDownloaded()
@@ -200,11 +207,52 @@ class AllApksViewModel(
         }
     }
 
+    private class PausedRow(val row: ApkRow, val installAfter: Boolean)
+
+    private var pausedRow: PausedRow? = null
+    private var pauseRequested = false
+
+    /** Stop the running download but keep the partial file; [resume] continues it. */
+    fun pause() {
+        val t = _state.value.transfer ?: return
+        if (t.paused || (t.total > 0 && t.downloaded >= t.total)) return
+        pauseRequested = true
+        transferJob?.cancel()
+    }
+
+    fun resume() {
+        val p = pausedRow ?: return
+        start(p.row, p.installAfter)
+    }
+
+    /** Cancel: a running download is stopped, a paused one is dropped; the partial file is deleted either way. */
+    fun cancel() {
+        val t = _state.value.transfer ?: return
+        if (t.paused) {
+            pausedRow = null
+            _state.update { it.copy(transfer = null) }
+            viewModelScope.launch(Dispatchers.IO) { downloader.discardPartial(t.artifactId) }
+        } else {
+            pauseRequested = false
+            transferJob?.cancel()
+        }
+    }
+
     private fun start(row: ApkRow, installAfter: Boolean) {
-        if (_state.value.busyId != null || row.expired) return
-        _state.update { it.copy(busyId = row.artifact.id, progress = 0f) }
+        val current = _state.value.transfer
+        // A paused download does not block: it is resumed (same row) or simply left with its partial file.
+        if ((current != null && !current.paused) || row.expired) return
+        pausedRow = null
+        pauseRequested = false
+        val partial = downloader.partialBytes(row.artifact.id)
+        _state.update {
+            it.copy(transfer = RowTransfer(row.artifact.id, downloaded = partial.takeIf { p -> p < row.artifact.sizeBytes } ?: 0L, total = row.artifact.sizeBytes))
+        }
         transferJob = GhBackground.scope.launch {
             GhBackground.begin(appContext)
+            var paused = false
+            var downloadDone = false
+            val meter = DownloadMeter()
             val title = appContext.getString(R.string.gh_notif_download_title, row.artifact.name)
             try {
                 val cached = withContext(Dispatchers.IO) { downloader.cachedApk(row.artifact.id) }
@@ -217,10 +265,16 @@ class AllApksViewModel(
                         val p = if (size > 0) (bytes.toFloat() / size).coerceIn(0f, 1f) else null
                         if (p == null || p - last >= 0.01f) {
                             last = p ?: last
-                            _state.update { it.copy(progress = p) }
+                            val eta = meter.etaSeconds(bytes, size)
+                            _state.update { st ->
+                                st.transfer?.takeIf { t -> !t.paused }
+                                    ?.let { t -> st.copy(transfer = t.copy(downloaded = bytes, total = size, etaSeconds = eta)) }
+                                    ?: st
+                            }
                             notifier.updateLive(title, p?.let { v -> appContext.getString(R.string.gh_notif_download_progress, (v * 100).toInt()) }.orEmpty(), p?.let { v -> (v * 100).toInt() })
                         }
                     }
+                    downloadDone = true
                     downloader.extract(zip, row.artifact)
                 }
                 val inspected = withContext(Dispatchers.IO) { inspector.inspect(apk) }
@@ -244,6 +298,15 @@ class AllApksViewModel(
                     }
                 }
             } catch (e: CancellationException) {
+                if (pauseRequested && !downloadDone) {
+                    // Paused: the .part file stays so Resume continues from there.
+                    paused = true
+                    pausedRow = PausedRow(row, installAfter)
+                    _state.update { st -> st.transfer?.let { t -> st.copy(transfer = t.copy(paused = true, etaSeconds = null)) } ?: st }
+                } else {
+                    withContext(NonCancellable + Dispatchers.IO) { downloader.discardPartial(row.artifact.id) }
+                }
+                pauseRequested = false
                 throw e
             } catch (e: GitHubError) {
                 _events.tryEmit(AllApksEvent.Snack(R.string.gh_download_incomplete))
@@ -255,15 +318,13 @@ class AllApksViewModel(
             } catch (e: Exception) {
                 _events.tryEmit(AllApksEvent.Snack(R.string.gh_install_failed, listOf(e.message.orEmpty())))
             } finally {
-                _state.update { it.copy(busyId = null, progress = null) }
+                if (!paused) _state.update { it.copy(transfer = null) }
                 withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { downloader.cleanOld() }
                 refreshDownloaded()
                 GhBackground.end(appContext)
             }
         }
     }
-
-    fun cancel() { transferJob?.cancel() }
 
     companion object {
         private const val MAX_PROJECTS = 12

@@ -25,6 +25,29 @@ object ApkResolver {
     private val UNIVERSAL = Regex("^.+-universal-.+$")
     private const val MAX_RUN_CHECKS = 5
 
+    /** Same build = same workflow run, else same commit (a build uploads one artifact per variant: light, full, ...). */
+    private fun sameBuild(a: GhArtifact, c: GhArtifact): Boolean = a.id == c.id || when {
+        c.runId != null -> a.runId == c.runId
+        !c.sha.isNullOrEmpty() -> a.sha == c.sha
+        else -> false
+    }
+
+    /** Every live artifact of [candidate]'s build with the same ABI kind (e.g. Light + Full arm64), by name. */
+    fun siblingsOf(candidate: ApkCandidate, artifacts: List<GhArtifact>, now: Instant): List<GhArtifact> {
+        val c = candidate.artifact
+        val regex = if (candidate.universal) UNIVERSAL else ARM64
+        return (artifacts.filter { regex.matches(it.name) && !it.isExpiredAt(now) && sameBuild(it, c) } + c)
+            .distinctBy { it.id }
+            .sortedBy { it.name.lowercase() }
+    }
+
+    /** The arm64 artifacts of the newest build in [artifacts] (all variants of it), by name. Empty = none. */
+    fun latestBuild(artifacts: List<GhArtifact>): List<GhArtifact> {
+        val arm = artifacts.filter { isArm64(it.name) }
+        val newest = arm.maxWithOrNull(compareBy<GhArtifact>({ it.createdAt ?: Instant.EPOCH }, { it.id })) ?: return emptyList()
+        return arm.filter { sameBuild(it, newest) }.sortedBy { it.name.lowercase() }
+    }
+
     fun isArm64(name: String) = ARM64.matches(name)
     fun isUniversal(name: String) = UNIVERSAL.matches(name)
 

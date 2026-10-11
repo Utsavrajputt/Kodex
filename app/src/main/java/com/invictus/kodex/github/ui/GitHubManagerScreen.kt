@@ -254,7 +254,7 @@ private fun ReadyContent(
                     BuildingCard(live, onOpen = { onOpenRunLog(live.run.id) }, onCancel = { pendingCancel = live.run })
                 }
             }
-            item(key = "apk") { ApkCard(toolsState, tools, onRunShortcut, vm.projectPath) }
+            item(key = "apk") { ApkCard(toolsState, tools, onRunShortcut, vm.projectPath, state.repo?.owner) }
             item(key = "runs_header") {
                 Row(
                     Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp),
@@ -399,7 +399,7 @@ private fun RepoHeaderCard(state: GitHubManagerState, projectPath: String) {
     val p = ghPalette()
     GhCard(p.card, p.cardBorder) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ProjectIcon(projectPath, size = 48.dp, corner = 14.dp)
+            ProjectIcon(projectPath, size = 48.dp, corner = 14.dp, ownerLogin = state.repo?.owner)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(

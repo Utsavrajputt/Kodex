@@ -77,4 +77,38 @@ class ApkResolverTest {
         assertTrue(ApkResolver.isUniversal("kodex-universal-1234567"))
         assertEquals(false, ApkResolver.isArm64("kodex-armeabi-v7a-1234567"))
     }
+
+    // ---- variants of one build -------------------------------------------------------------
+
+    @Test fun siblingsIncludeBothVariantsOfTheSameRun() {
+        val list = listOf(
+            art(1, "Xmd-lite-arm64-v8a-aaa", 1, run = 500), art(2, "Xmd-full-arm64-v8a-aaa", 1, run = 500),
+            art(3, "Xmd-full-arm64-v8a-old", 3, run = 400), art(4, "Xmd-full-armeabi-v7a-aaa", 1, run = 500),
+        )
+        val r = resolve(list) as ApkResolution.Found
+        val names = ApkResolver.siblingsOf(r.candidate, list, now).map { it.name }
+        assertEquals(listOf("Xmd-full-arm64-v8a-aaa", "Xmd-lite-arm64-v8a-aaa"), names)
+    }
+
+    @Test fun siblingsSkipExpiredVariants() {
+        val list = listOf(
+            art(1, "Xmd-lite-arm64-v8a-aaa", 1, run = 500),
+            art(2, "Xmd-full-arm64-v8a-aaa", 1, run = 500, expired = true),
+        )
+        val r = resolve(list) as ApkResolution.Found
+        assertEquals(listOf(1L), ApkResolver.siblingsOf(r.candidate, list, now).map { it.id })
+    }
+
+    @Test fun latestBuildGroupsTheNewestRunOnly() {
+        val list = listOf(
+            art(1, "Xmd-lite-arm64-v8a-new", 1, run = 500), art(2, "Xmd-full-arm64-v8a-new", 1, run = 500),
+            art(3, "Xmd-lite-arm64-v8a-old", 5, run = 400), art(4, "Xmd-full-arm64-v8a-old", 5, run = 400),
+            art(5, "Xmd-full-armeabi-v7a-new", 1, run = 500),
+        )
+        assertEquals(listOf(2L, 1L), ApkResolver.latestBuild(list).map { it.id })
+    }
+
+    @Test fun latestBuildEmptyWithoutArm64() {
+        assertTrue(ApkResolver.latestBuild(listOf(art(1, "kodex-universal-aaa", 1))).isEmpty())
+    }
 }

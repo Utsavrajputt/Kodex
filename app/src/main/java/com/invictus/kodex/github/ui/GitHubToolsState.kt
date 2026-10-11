@@ -51,6 +51,12 @@ data class Transfer(
     val progress: Float?,
     /** True for the APK card, so the card (not a row) shows the progress. */
     val fromApkCard: Boolean,
+    val downloaded: Long = 0L,
+    val total: Long = 0L,
+    /** Seconds left at the current speed; null = not known yet. */
+    val etaSeconds: Long? = null,
+    /** Stopped by the user; the partial file is kept and Resume continues it. */
+    val paused: Boolean = false,
 )
 
 /** An APK that was downloaded, extracted and inspected, waiting for the user's tap. */
@@ -68,7 +74,8 @@ sealed interface ApkCardState {
     data object Loading : ApkCardState
     data object None : ApkCardState
     data class AllExpired(val newestAt: Instant?) : ApkCardState
-    data class Found(val candidate: ApkCandidate) : ApkCardState
+    /** [variants] = every live artifact of the same build (Light + Full arm64, ...), including the candidate. */
+    data class Found(val candidate: ApkCandidate, val variants: List<GhArtifact> = listOf(candidate.artifact)) : ApkCardState
     data class Error(val message: GhText) : ApkCardState
 }
 

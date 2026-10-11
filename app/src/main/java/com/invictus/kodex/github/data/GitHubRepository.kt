@@ -68,8 +68,8 @@ class GitHubRepository(
 
     suspend fun artifacts(page: Int): Page<GhArtifact> = api.listArtifacts(page)
 
-    suspend fun downloadArtifact(artifact: GhArtifact, dest: File, onProgress: (Long) -> Unit) =
-        api.downloadArtifactZip(artifact, dest, MAX_ARTIFACT_BYTES, onProgress)
+    suspend fun downloadArtifact(artifact: GhArtifact, dest: File, keepPartial: Boolean, onProgress: (Long) -> Unit) =
+        api.downloadArtifactZip(artifact, dest, MAX_ARTIFACT_BYTES, keepPartial, onProgress)
 
     suspend fun deleteArtifact(id: Long) = api.deleteArtifact(id)
 

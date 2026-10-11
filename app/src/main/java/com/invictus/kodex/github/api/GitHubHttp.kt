@@ -136,45 +136,76 @@ class GitHubHttp(
     }
 
     /**
-     * Downloads a binary endpoint (artifact zip) into [dest], reporting bytes written. Like
-     * [downloadText] the 302 target is fetched WITHOUT credentials. Cancelling the coroutine stops
-     * the copy and removes [dest]. Throws [GitHubError.BadDownload] over [maxBytes] or when fewer
-     * than [expectedSize] bytes arrive (a truncated file is never handed on).
+     * Streams [path] to [dest]. With [keepPartial] a partial [dest] from an earlier (paused or interrupted)
+     * attempt is continued with a `Range` request; the partial is only trusted when the server answers
+     * `206` with a `Content-Range` that starts exactly at its length, otherwise the file is started over.
+     * The partial is kept on cancel / connection loss (so it can be resumed) and removed on every other failure.
      */
     suspend fun downloadBinary(
         path: String,
         dest: File,
         maxBytes: Long,
         expectedSize: Long,
+        keepPartial: Boolean,
         onProgress: (Long) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
         val ctx = currentCoroutineContext()
+        var resumeFrom = if (keepPartial && dest.isFile) dest.length() else 0L
+        // A partial that is already as big as the whole file cannot be trusted: start over.
+        if (resumeFrom > 0 && expectedSize > 0 && resumeFrom >= expectedSize) { dest.delete(); resumeFrom = 0L }
+        if (resumeFrom == 0L) dest.delete()
         try {
-            val first = request(buildUrl(path, emptyMap())).header("Accept", ACCEPT_JSON).build()
-            api.newCall(first).execute().use { res ->
-                capture(res)
-                when {
-                    res.isRedirect -> {
-                        val loc = res.header("Location") ?: throw GitHubError.Http(res.code, "Missing redirect")
-                        val plain = Request.Builder().url(loc.toHttpUrl()).header("User-Agent", UA).build()
-                        api.newCall(plain).execute().use { r2 ->
-                            if (!r2.isSuccessful) throw GitHubError.from(r2.code, null)
-                            copyBinary(r2, dest, maxBytes, expectedSize, onProgress, ctx)
-                        }
-                    }
-                    res.isSuccessful -> copyBinary(res, dest, maxBytes, expectedSize, onProgress, ctx)
-                    else -> throw toError(res)
-                }
+            try {
+                fetchBinary(path, dest, maxBytes, expectedSize, onProgress, ctx, resumeFrom)
+            } catch (e: RangeRejected) {
+                dest.delete()
+                fetchBinary(path, dest, maxBytes, expectedSize, onProgress, ctx, 0L)
             }
         } catch (e: GitHubError) {
             dest.delete()
             throw e
-        } catch (e: CancellationException) {
+        } catch (e: RangeRejected) {
             dest.delete()
+            throw GitHubError.BadDownload(GitHubError.BadDownload.Reason.Incomplete)
+        } catch (e: CancellationException) {
+            if (!keepPartial) dest.delete()
             throw e
         } catch (e: IOException) {
-            dest.delete()
+            if (!keepPartial) dest.delete()
             throw GitHubError.Offline()
+        }
+    }
+
+    /** The server did not honour the `Range` request the way a safe resume needs. */
+    private class RangeRejected : Exception()
+
+    private fun fetchBinary(
+        path: String,
+        dest: File,
+        maxBytes: Long,
+        expectedSize: Long,
+        onProgress: (Long) -> Unit,
+        ctx: CoroutineContext,
+        resumeFrom: Long,
+    ) {
+        val first = request(buildUrl(path, emptyMap())).header("Accept", ACCEPT_JSON).build()
+        api.newCall(first).execute().use { res ->
+            capture(res)
+            when {
+                res.isRedirect -> {
+                    val loc = res.header("Location") ?: throw GitHubError.Http(res.code, "Missing redirect")
+                    // The redirect target is a short-lived signed URL: it is requested fresh on every (re)start.
+                    val plain = Request.Builder().url(loc.toHttpUrl()).header("User-Agent", UA)
+                    if (resumeFrom > 0) plain.header("Range", "bytes=$resumeFrom-")
+                    api.newCall(plain.build()).execute().use { r2 ->
+                        if (r2.code == 416) throw RangeRejected()
+                        if (!r2.isSuccessful) throw GitHubError.from(r2.code, null)
+                        copyBinary(r2, dest, maxBytes, expectedSize, onProgress, ctx, resumeFrom)
+                    }
+                }
+                res.isSuccessful -> copyBinary(res, dest, maxBytes, expectedSize, onProgress, ctx, 0L)
+                else -> throw toError(res)
+            }
         }
     }
 
@@ -185,11 +216,19 @@ class GitHubHttp(
         expectedSize: Long,
         onProgress: (Long) -> Unit,
         ctx: CoroutineContext,
+        resumeFrom: Long,
     ) {
         dest.parentFile?.mkdirs()
-        var total = 0L
+        // 206 + a Content-Range that starts exactly where the partial ends = safe to append. A plain 200 means
+        // the server ignored the Range: the whole file arrives again, so the partial is overwritten.
+        val appending = resumeFrom > 0 && res.code == 206
+        if (appending) {
+            val start = res.header("Content-Range")?.substringAfter("bytes ", "")?.substringBefore('-')?.trim()?.toLongOrNull()
+            if (start != resumeFrom || dest.length() != resumeFrom) throw RangeRejected()
+        }
+        var total = if (appending) resumeFrom else 0L
         res.body!!.byteStream().use { input ->
-            dest.outputStream().use { out ->
+            java.io.FileOutputStream(dest, appending).use { out ->
                 val buf = ByteArray(32 * 1024)
                 while (true) {
                     ctx.ensureActive()

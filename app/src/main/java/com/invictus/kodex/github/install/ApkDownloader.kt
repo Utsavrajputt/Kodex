@@ -1,7 +1,9 @@
 package com.invictus.kodex.github.install
 
 import com.invictus.kodex.github.api.GhArtifact
+import com.invictus.kodex.github.api.GitHubError
 import com.invictus.kodex.github.data.GitHubRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -18,16 +20,33 @@ data class CachedApk(val artifactId: Long, val label: String, val file: File, va
 class ApkDownloader(baseDir: File) {
     val dir: File = File(baseDir, "gh_apk")
 
-    /** Downloads [artifact]'s zip. The returned file is final (not `.part`). Cancel = coroutine cancel. */
+    private fun partFile(artifactId: Long) = File(dir, "artifact-$artifactId.zip.part")
+
+    /** Bytes of an unfinished download of [artifactId] (paused / interrupted), 0 when there is none. */
+    fun partialBytes(artifactId: Long): Long = partFile(artifactId).takeIf { it.isFile }?.length() ?: 0L
+
+    /** Drops the unfinished download of [artifactId] (the user cancelled it). */
+    fun discardPartial(artifactId: Long) { partFile(artifactId).delete() }
+
+    /**
+     * Downloads [artifact]'s zip. The returned file is final (not `.part`). A `.part` left by an earlier
+     * pause / lost connection is continued (see `GitHubHttp.downloadBinary`). Pause = coroutine cancel: the
+     * `.part` is kept; the caller calls [discardPartial] when the user really cancels. Any other failure
+     * (bad response, too large, ...) removes the `.part` so a broken file is never resumed.
+     */
     suspend fun downloadZip(repo: GitHubRepository, artifact: GhArtifact, onProgress: (Long) -> Unit): File {
         withContext(Dispatchers.IO) { dir.mkdirs() }
-        val part = File(dir, "artifact-${artifact.id}.zip.part")
+        val part = partFile(artifact.id)
         val zip = File(dir, "artifact-${artifact.id}.zip")
         try {
-            repo.downloadArtifact(artifact, part, onProgress)
+            repo.downloadArtifact(artifact, part, keepPartial = true, onProgress = onProgress)
             val ok = withContext(Dispatchers.IO) { zip.delete(); part.renameTo(zip) }
             if (!ok) throw java.io.IOException("rename failed")
             return zip
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: GitHubError.Offline) {
+            throw e
         } catch (e: Throwable) {
             part.delete()
             throw e
@@ -74,7 +93,8 @@ class ApkDownloader(baseDir: File) {
             val isApk = NAME.matches(f.name)
             when {
                 isApk -> if (f !in keep && now - f.lastModified() > maxAgeMs) f.delete()
-                now - f.lastModified() > STALE_TMP_MS -> f.delete()
+                // A paused / interrupted download (.part) may be resumed for a day; other temp files are stale quickly.
+                now - f.lastModified() > (if (f.name.endsWith(".part")) maxAgeMs else STALE_TMP_MS) -> f.delete()
             }
         }
     }

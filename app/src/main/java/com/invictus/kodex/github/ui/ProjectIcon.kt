@@ -7,7 +7,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.invictus.kodex.KodexApp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
@@ -88,29 +94,66 @@ object ProjectIconLoader {
         return best
     }
 
-    fun load(context: Context, projectPath: String, targetPx: Int = 192): ImageBitmap {
-        val file = findIconFile(projectPath)
-        if (file != null) {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(file.path, bounds)
-            var sample = 1
-            while (bounds.outWidth / (sample * 2) >= targetPx && bounds.outWidth > 0) sample *= 2
-            val bmp = runCatching {
-                BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
-            }.getOrNull()
-            if (bmp != null) return bmp.asImageBitmap()
-        }
-        return context.packageManager.getApplicationIcon(context.packageName).toBitmap(targetPx, targetPx).asImageBitmap()
+    /** The project's own icon, or null when it has none we can decode. */
+    fun loadOrNull(projectPath: String, targetPx: Int = 192): ImageBitmap? {
+        val file = findIconFile(projectPath) ?: return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= targetPx && bounds.outWidth > 0) sample *= 2
+        return runCatching {
+            BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
+        }.getOrNull()?.asImageBitmap()
     }
+
+    fun kodexIcon(context: Context, targetPx: Int = 192): ImageBitmap =
+        context.packageManager.getApplicationIcon(context.packageName).toBitmap(targetPx, targetPx).asImageBitmap()
+
+    fun load(context: Context, projectPath: String, targetPx: Int = 192): ImageBitmap =
+        loadOrNull(projectPath, targetPx) ?: kodexIcon(context, targetPx)
 }
 
+private sealed interface IconState {
+    data object Loading : IconState
+    data class Found(val bitmap: ImageBitmap) : IconState
+    data object Missing : IconState
+}
+
+/**
+ * The project's own app icon. When the project has none, the GitHub profile picture of [ownerLogin]
+ * (the repo owner) is shown; Kodex's own icon is only the last resort (no owner / no network).
+ */
 @Composable
-fun ProjectIcon(projectPath: String, size: Dp, modifier: Modifier = Modifier, corner: Dp = 10.dp) {
+fun ProjectIcon(projectPath: String, size: Dp, modifier: Modifier = Modifier, corner: Dp = 10.dp, ownerLogin: String? = null) {
     val context = LocalContext.current.applicationContext
-    val icon by produceState<ImageBitmap?>(null, projectPath) {
-        value = withContext(Dispatchers.IO) { runCatching { ProjectIconLoader.load(context, projectPath) }.getOrNull() }
+    val shape = RoundedCornerShape(corner)
+    val icon by produceState<IconState>(IconState.Loading, projectPath) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { ProjectIconLoader.loadOrNull(projectPath) }.getOrNull()?.let { IconState.Found(it) } ?: IconState.Missing
+        }
     }
-    icon?.let {
-        Image(bitmap = it, contentDescription = null, modifier = modifier.size(size).clip(RoundedCornerShape(corner)))
+    when (val st = icon) {
+        IconState.Loading -> Unit
+        is IconState.Found -> Image(bitmap = st.bitmap, contentDescription = null, modifier = modifier.size(size).clip(shape))
+        IconState.Missing -> {
+            val kodex by produceState<ImageBitmap?>(null) {
+                value = withContext(Dispatchers.IO) { runCatching { ProjectIconLoader.kodexIcon(context) }.getOrNull() }
+            }
+            val fallback = kodex?.let { BitmapPainter(it) } ?: ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
+            if (ownerLogin.isNullOrBlank()) {
+                kodex?.let { Image(bitmap = it, contentDescription = null, modifier = modifier.size(size).clip(shape)) }
+            } else {
+                val loader = (context as KodexApp).container.avatarImageLoader
+                AsyncImage(
+                    model = "https://github.com/$ownerLogin.png?size=128",
+                    imageLoader = loader,
+                    contentDescription = null,
+                    placeholder = fallback,
+                    error = fallback,
+                    contentScale = ContentScale.Crop,
+                    modifier = modifier.size(size).clip(shape),
+                )
+            }
+        }
     }
 }

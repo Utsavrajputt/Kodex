@@ -1,7 +1,9 @@
 package com.invictus.kodex.github.ui
 
 import android.text.format.Formatter
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,9 +22,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,7 +52,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.invictus.kodex.R
 import com.invictus.kodex.ui.icons.XIcons
 
-/** Every ARM64 build of the recent projects, newest to oldest, ten at a time. */
+/** The latest build of every recent project's repo with all its ARM64 variants. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AllApksScreen(
@@ -63,7 +62,6 @@ fun AllApksScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
-    var expanded by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { e ->
@@ -99,7 +97,7 @@ fun AllApksScreen(
             state.loading -> Column(Modifier.padding(padding).fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator()
             }
-            state.rows.isEmpty() -> Column(Modifier.padding(padding).fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+            state.builds.isEmpty() -> Column(Modifier.padding(padding).fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(stringResource(state.error ?: R.string.apks_empty), style = MaterialTheme.typography.bodyLarge)
                 if (state.error == R.string.apks_load_failed) TextButton(onClick = viewModel::load) { Text(stringResource(R.string.gh_retry)) }
             }
@@ -108,104 +106,125 @@ fun AllApksScreen(
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Latest build first; "View more" reveals the older ones.
-                items(if (expanded) state.shown else state.rows.take(1), key = { it.artifact.id }) { row ->
-                    ApkRowCard(
-                        row = row,
-                        busy = state.busyId == row.artifact.id,
-                        downloaded = row.artifact.id in state.downloaded,
-                        progress = state.progress,
-                        anyBusy = state.busyId != null,
-                        onDownload = { viewModel.download(row) },
-                        onInstall = { viewModel.install(row) },
-                        onDelete = { viewModel.delete(row) },
+                items(state.builds, key = { it.key }) { build ->
+                    BuildCard(
+                        build = build,
+                        transfer = state.transfer,
+                        anyBusy = state.anyBusy,
+                        downloaded = state.downloaded,
+                        onDownload = viewModel::download,
+                        onInstall = viewModel::install,
+                        onDelete = viewModel::delete,
+                        onPauseResume = { if (state.transfer?.paused == true) viewModel.resume() else viewModel.pause() },
                         onCancel = viewModel::cancel,
                     )
-                }
-                if (!expanded && state.rows.size > 1) {
-                    item(key = "view_more") {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                            TextButton(onClick = { expanded = true }) { Text(stringResource(R.string.apks_show_more)) }
-                        }
-                    }
-                } else if (expanded && state.hasMore) {
-                    item(key = "more") {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                            TextButton(onClick = viewModel::showMore) { Text(stringResource(R.string.apks_show_more)) }
-                        }
-                    }
                 }
             }
         }
     }
 }
 
+/** One repo's latest build: a block per variant (Light, Full, ...), each with its own actions. */
 @Composable
-private fun ApkRowCard(
+private fun BuildCard(
+    build: RepoBuild,
+    transfer: RowTransfer?,
+    anyBusy: Boolean,
+    downloaded: Set<Long>,
+    onDownload: (ApkRow) -> Unit,
+    onInstall: (ApkRow) -> Unit,
+    onDelete: (ApkRow) -> Unit,
+    onPauseResume: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            build.variants.forEachIndexed { index, row ->
+                if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(cs.onPrimaryContainer.copy(alpha = 0.12f)))
+                ApkVariantBlock(
+                    row = row,
+                    transfer = transfer?.takeIf { it.artifactId == row.artifact.id },
+                    downloaded = row.artifact.id in downloaded,
+                    anyBusy = anyBusy,
+                    onDownload = { onDownload(row) },
+                    onInstall = { onInstall(row) },
+                    onDelete = { onDelete(row) },
+                    onPauseResume = onPauseResume,
+                    onCancel = onCancel,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ApkVariantBlock(
     row: ApkRow,
-    busy: Boolean,
+    transfer: RowTransfer?,
     downloaded: Boolean,
-    progress: Float?,
     anyBusy: Boolean,
     onDownload: () -> Unit,
     onInstall: () -> Unit,
     onDelete: () -> Unit,
+    onPauseResume: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val context = LocalContext.current
     val cs = MaterialTheme.colorScheme
     val a = row.artifact
-    Card(
+    Column(
         modifier = Modifier.fillMaxWidth().alpha(if (row.expired && !downloaded) 0.55f else 1f),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ProjectIcon(row.projectPath, size = 44.dp)
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        apkBuildName(a.name, a.shortSha), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        listOf(
-                            Formatter.formatShortFileSize(context, a.sizeBytes),
-                            a.createdAt?.let { timeAgoOrDate(it) }.orEmpty(),
-                            if (row.expired && !downloaded) stringResource(R.string.gh_artifact_expired_label) else "",
-                        ).filter { it.isNotBlank() }.joinToString(" \u2022 "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = cs.onPrimaryContainer.copy(alpha = 0.75f),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                // Not on the device yet: a Download button (not expired builds only).
-                if (!downloaded && !busy && !row.expired) {
-                    FilledIconButton(onClick = onDownload, enabled = !anyBusy, modifier = Modifier.size(44.dp)) {
-                        Icon(XIcons.Download, contentDescription = stringResource(R.string.gh_apk_download))
-                    }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ProjectIcon(row.projectPath, size = 44.dp, ownerLogin = row.repo.owner)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    apkBuildName(a.name, a.shortSha), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    listOf(
+                        Formatter.formatShortFileSize(context, a.sizeBytes),
+                        a.createdAt?.let { timeAgoOrDate(it) }.orEmpty(),
+                        if (row.expired && !downloaded) stringResource(R.string.gh_artifact_expired_label) else "",
+                    ).filter { it.isNotBlank() }.joinToString(" \u2022 "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = cs.onPrimaryContainer.copy(alpha = 0.75f),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            // Not on the device yet: a Download button (not expired builds only).
+            if (!downloaded && transfer == null && !row.expired) {
+                FilledIconButton(onClick = onDownload, enabled = !anyBusy, modifier = Modifier.size(44.dp)) {
+                    Icon(XIcons.Download, contentDescription = stringResource(R.string.gh_apk_download))
                 }
             }
-            if (busy) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (progress == null) LinearProgressIndicator(Modifier.weight(1f))
-                    else LinearProgressIndicator(progress = { progress }, modifier = Modifier.weight(1f))
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
+        }
+        if (transfer != null) {
+            TransferStatus(
+                downloaded = transfer.downloaded, total = transfer.total, etaSeconds = transfer.etaSeconds, paused = transfer.paused,
+                onPauseResume = onPauseResume, onCancel = onCancel,
+                accent = cs.primary, track = cs.onPrimaryContainer.copy(alpha = 0.15f), textColor = cs.onPrimaryContainer.copy(alpha = 0.75f),
+                canPause = transfer.total <= 0 || transfer.downloaded < transfer.total,
+            )
+        } else if (downloaded) {
+            // On the device: Install, plus Delete.
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = onInstall, enabled = !anyBusy, modifier = Modifier.weight(1f).height(44.dp)) {
+                    Text(stringResource(R.string.gh_install), style = MaterialTheme.typography.labelLarge)
                 }
-            } else if (downloaded) {
-                // On the device: Install, plus Delete.
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = onInstall, enabled = !anyBusy, modifier = Modifier.weight(1f).height(44.dp)) {
-                        Text(stringResource(R.string.gh_install), style = MaterialTheme.typography.labelLarge)
-                    }
-                    FilledTonalIconButton(
-                        onClick = onDelete, enabled = !anyBusy, modifier = Modifier.size(44.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = cs.errorContainer, contentColor = cs.onErrorContainer,
-                        ),
-                    ) { Icon(XIcons.Delete, contentDescription = stringResource(R.string.action_delete)) }
-                }
+                FilledTonalIconButton(
+                    onClick = onDelete, enabled = !anyBusy, modifier = Modifier.size(44.dp),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = cs.errorContainer, contentColor = cs.onErrorContainer,
+                    ),
+                ) { Icon(XIcons.Delete, contentDescription = stringResource(R.string.action_delete)) }
             }
         }
     }

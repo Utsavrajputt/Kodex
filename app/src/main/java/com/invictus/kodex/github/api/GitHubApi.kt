@@ -111,8 +111,8 @@ class GitHubApi(private val http: GitHubHttp, private val repo: GhRepoRef) {
     }
 
     /** `GET .../artifacts/{id}/zip` (302 -> zip) streamed to [dest]; 410 = expired. */
-    suspend fun downloadArtifactZip(artifact: GhArtifact, dest: File, maxBytes: Long, onProgress: (Long) -> Unit) =
-        http.downloadBinary("$base/actions/artifacts/${artifact.id}/zip", dest, maxBytes, artifact.sizeBytes, onProgress)
+    suspend fun downloadArtifactZip(artifact: GhArtifact, dest: File, maxBytes: Long, keepPartial: Boolean, onProgress: (Long) -> Unit) =
+        http.downloadBinary("$base/actions/artifacts/${artifact.id}/zip", dest, maxBytes, artifact.sizeBytes, keepPartial, onProgress)
 
     suspend fun deleteArtifact(id: Long) { http.send("DELETE", "$base/actions/artifacts/$id") }
 

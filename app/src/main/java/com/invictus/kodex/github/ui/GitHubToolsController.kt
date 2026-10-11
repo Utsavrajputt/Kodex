@@ -458,7 +458,10 @@ class GitHubToolsController(
             _state.update {
                 it.copy(
                     apk = when (resolution) {
-                        is ApkResolution.Found -> ApkCardState.Found(resolution.candidate)
+                        is ApkResolution.Found -> ApkCardState.Found(
+                            resolution.candidate,
+                            ApkResolver.siblingsOf(resolution.candidate, artifacts, clock()),
+                        )
                         is ApkResolution.AllExpired -> ApkCardState.AllExpired(resolution.newestAt)
                         ApkResolution.None -> ApkCardState.None
                     },
@@ -478,17 +481,59 @@ class GitHubToolsController(
     fun installFromArtifact(artifact: GhArtifact) = startTransfer(artifact, TransferPurpose.Install, fromApkCard = false)
     fun saveArtifact(artifact: GhArtifact) = startTransfer(artifact, TransferPurpose.Save, fromApkCard = false)
 
-    fun cancelTransfer() { transferJob?.cancel() }
+    /** What a paused transfer needs to continue. */
+    private class PausedTransfer(val artifact: GhArtifact, val purpose: TransferPurpose, val fromApkCard: Boolean)
+
+    private var pausedTransfer: PausedTransfer? = null
+    private var pauseRequested = false
+
+    /** Stop the running download but keep the partial file; [resumeTransfer] continues it. */
+    fun pauseTransfer() {
+        val t = _state.value.transfer ?: return
+        if (t.paused || (t.progress ?: 0f) >= 1f) return
+        pauseRequested = true
+        transferJob?.cancel()
+    }
+
+    fun resumeTransfer() {
+        val p = pausedTransfer ?: return
+        startTransfer(p.artifact, p.purpose, p.fromApkCard)
+    }
+
+    /** Cancel: a running download is stopped, a paused one is dropped; the partial file is deleted either way. */
+    fun cancelTransfer() {
+        val t = _state.value.transfer ?: return
+        if (t.paused) {
+            pausedTransfer = null
+            _state.update { it.copy(transfer = null) }
+            scope.launch(Dispatchers.IO) { downloader.discardPartial(t.artifactId) }
+        } else {
+            pauseRequested = false
+            transferJob?.cancel()
+        }
+    }
 
     private fun startTransfer(artifact: GhArtifact, purpose: TransferPurpose, fromApkCard: Boolean) {
         val repo = repoProvider() ?: return
         val s = _state.value
-        if (s.transfer != null || s.installing || s.pendingSave != null) return
-        _state.update { it.copy(transfer = Transfer(artifact.id, purpose, 0f, fromApkCard), ready = null) }
+        // A paused transfer does not block: it is resumed (same artifact) or simply left with its partial file.
+        if ((s.transfer != null && !s.transfer.paused) || s.installing || s.pendingSave != null) return
+        pausedTransfer = null
+        pauseRequested = false
+        val partial = downloader.partialBytes(artifact.id)
+        val startProgress = if (artifact.sizeBytes > 0 && partial in 1 until artifact.sizeBytes) partial.toFloat() / artifact.sizeBytes else 0f
+        _state.update {
+            it.copy(
+                transfer = Transfer(artifact.id, purpose, startProgress, fromApkCard, downloaded = partial, total = artifact.sizeBytes),
+                ready = null,
+            )
+        }
         // Already on disk (a quick list of one small folder): nothing long-running, so no notification.
         val alreadyDownloaded = downloader.cachedApk(artifact.id) != null
         transferJob = launchTracked(tracked = !alreadyDownloaded) {
             var zip: File? = null
+            var paused = false
+            val meter = DownloadMeter()
             val title = str(R.string.gh_notif_download_title, artifact.name)
             try {
                 // Already downloaded earlier (e.g. before a self-install restarted the app): no new download.
@@ -508,7 +553,12 @@ class GitHubToolsController(
                     val p = if (artifact.sizeBytes > 0) (bytes.toFloat() / artifact.sizeBytes).coerceIn(0f, 1f) else null
                     if (p == null || p - last >= 0.01f) {
                         last = p ?: last
-                        _state.update { st -> st.transfer?.let { t -> st.copy(transfer = t.copy(progress = p)) } ?: st }
+                        val eta = meter.etaSeconds(bytes, artifact.sizeBytes)
+                        _state.update { st ->
+                            st.transfer?.takeIf { t -> !t.paused }
+                                ?.let { t -> st.copy(transfer = t.copy(progress = p, downloaded = bytes, total = artifact.sizeBytes, etaSeconds = eta)) }
+                                ?: st
+                        }
                         notifier.updateLive(title, p?.let { str(R.string.gh_notif_download_progress, (it * 100).toInt()) } ?: "", p?.let { (it * 100).toInt() })
                     }
                 }
@@ -522,7 +572,16 @@ class GitHubToolsController(
                     notifier.result(GhNotifier.KIND_DOWNLOAD, str(R.string.gh_notif_download_done_title), str(R.string.gh_notif_download_done_text, artifact.name))
                 }
             } catch (e: CancellationException) {
-                zip?.delete()
+                if (pauseRequested && zip == null) {
+                    // Paused: the .part file stays so Resume continues from there.
+                    paused = true
+                    pausedTransfer = PausedTransfer(artifact, purpose, fromApkCard)
+                    _state.update { st -> st.transfer?.let { t -> st.copy(transfer = t.copy(paused = true, etaSeconds = null)) } ?: st }
+                } else {
+                    zip?.delete()
+                    withContext(NonCancellable + Dispatchers.IO) { downloader.discardPartial(artifact.id) }
+                }
+                pauseRequested = false
                 throw e
             } catch (e: GitHubError) {
                 zip?.delete()
@@ -538,7 +597,7 @@ class GitHubToolsController(
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_disk_error)))
                 notifier.result(GhNotifier.KIND_DOWNLOAD, str(R.string.gh_notif_download_failed_title), str(R.string.gh_disk_error), ok = false)
             } finally {
-                _state.update { it.copy(transfer = null) }
+                if (!paused) _state.update { it.copy(transfer = null) }
                 withContext(NonCancellable + Dispatchers.IO) { downloader.cleanOld(); refreshDownloadedNow() }
             }
         }

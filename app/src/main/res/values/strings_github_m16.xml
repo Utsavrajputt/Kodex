@@ -34,6 +34,11 @@
     <string name="gh_apk_download">Download</string>
     <string name="gh_apk_invalid">Invalid package: no installable APK inside.</string>
     <string name="gh_transfer_downloading">Downloading…</string>
+    <string name="gh_transfer_status_downloading">Downloading</string>
+    <string name="gh_transfer_paused">Paused</string>
+    <string name="gh_transfer_pause">Pause</string>
+    <string name="gh_transfer_resume">Resume</string>
+    <string name="gh_transfer_eta">ETA %1$s</string>
     <string name="gh_transfer_preparing_save">Preparing file…</string>
     <string name="gh_download_too_large">The download is larger than the allowed size and was stopped.</string>
     <string name="gh_download_incomplete">The download was cut short. Try again.</string>
