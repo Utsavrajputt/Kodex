@@ -216,12 +216,18 @@ fun ApkCard(
     val p = ghPalette()
     val context = LocalContext.current
     // Only ONE APK is ever shown: the latest successful run's artifact. If it is already on the device the
-    // card offers Install / Save / Delete, otherwise Download. An older downloaded file is only a fallback when
+    // card offers Install / Save / Delete, otherwise Download. An older downloaded file of this repo is only a fallback when
     // no run artifact is available any more (expired / none / error).
     val apk = state.apk
     val found = apk as? ApkCardState.Found
     val latestId = found?.candidate?.artifact?.id
-    val local = if (latestId != null) state.downloaded.firstOrNull { it.artifactId == latestId } else state.downloaded.firstOrNull()
+    // The APK cache is shared by every project, so the fallback only considers files whose artifact belongs to THIS repo.
+    val repoArtifactIds = state.artifacts.mapTo(HashSet()) { it.id }
+    val local = if (latestId != null) {
+        state.downloaded.firstOrNull { it.artifactId == latestId }
+    } else {
+        state.downloaded.firstOrNull { it.artifactId in repoArtifactIds }
+    }
     val busy = state.transfer != null || state.installing || state.pendingSave != null
 
     GhCard(p.apkCard, p.apkBorder) {
