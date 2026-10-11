@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Brush
@@ -55,6 +56,9 @@ internal class GhPalette(
     val onSuccess: Color,
     val danger: Color,
     val onDanger: Color,
+    /** Quiet tile behind secondary icon actions (artifact Download) and its hairline border. */
+    val tileFill: Color,
+    val tileBorder: Color,
 )
 
 @Composable
@@ -84,6 +88,8 @@ internal fun ghPalette(): GhPalette {
             onSuccess = Color(0xFF06210F),
             danger = Color(0xFFFF6B6B),
             onDanger = Color(0xFF2B0505),
+            tileFill = Color(0xFF101C3A),
+            tileBorder = Color(0xFF4F8BFF).copy(alpha = 0.30f),
         )
     } else {
         GhPalette(
@@ -108,6 +114,8 @@ internal fun ghPalette(): GhPalette {
             onSuccess = Color.White,
             danger = cs.error,
             onDanger = cs.onError,
+            tileFill = cs.surfaceContainerHighest,
+            tileBorder = cs.primary.copy(alpha = 0.30f),
         )
     }
 }
@@ -156,20 +164,30 @@ internal fun GhPrimaryButton(
     )
 }
 
-/** Round icon-only action (open folder, delete) next to the Install button. */
+private val TileShape = RoundedCornerShape(12.dp)
+
+/** Rounded-square icon-only action (open folder, delete, download) used on the APK card and artifact rows. */
 @Composable
-internal fun GhCircleButton(
+internal fun GhTileButton(
     icon: ImageVector,
     description: String,
     container: Color,
     tint: Color,
     enabled: Boolean,
     onClick: () -> Unit,
+    size: Dp = 44.dp,
+    iconSize: Dp = 22.dp,
+    borderColor: Color? = null,
 ) {
     FilledIconButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.size(44.dp),
+        modifier = Modifier
+            .size(size)
+            .then(
+                if (borderColor != null) Modifier.border(1.dp, borderColor.copy(alpha = borderColor.alpha * if (enabled) 1f else 0.5f), TileShape) else Modifier,
+            ),
+        shape = TileShape,
         colors = IconButtonDefaults.filledIconButtonColors(
             containerColor = container,
             contentColor = tint,
@@ -177,6 +195,6 @@ internal fun GhCircleButton(
             disabledContentColor = tint.copy(alpha = 0.5f),
         ),
     ) {
-        Icon(icon, contentDescription = description, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = description, modifier = Modifier.size(iconSize))
     }
 }

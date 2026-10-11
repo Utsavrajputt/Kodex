@@ -82,6 +82,10 @@ object XIcons {
                 "C21,5.9 20.1,5 19,5zM19,21H8V7h11V21z",
         )
     }
+    /** Material "insert_drive_file": document with a folded corner, the leading tile of an artifact row. */
+    val InsertDriveFile: ImageVector by lazy {
+        icon("InsertDriveFile", "M6,2c-1.1,0 -1.99,0.9 -1.99,2L4,20c0,1.1 0.89,2 1.99,2H18c1.1,0 2,-0.9 2,-2V8l-6,-6H6zM13,9V3.5L18.5,9H13z")
+    }
     val Delete: ImageVector by lazy {
         icon("Delete", "M6,19c0,1.1 0.9,2 2,2h8c1.1,0 2,-0.9 2,-2V7H6v12zM19,4h-3.5l-1,-1h-5l-1,1H5v2h14V4z")
     }

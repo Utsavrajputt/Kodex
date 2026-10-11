@@ -18,6 +18,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Button
@@ -353,14 +356,14 @@ private fun ApkActions(d: DownloadedApk, installing: Boolean, busy: Boolean, too
                 )
             }
         }
-        GhCircleButton(
+        GhTileButton(
             icon = XIcons.Folder,
             description = stringResource(R.string.gh_save_to_folder),
             container = p.neutralAction, tint = p.onNeutralAction,
             enabled = !busy,
             onClick = { tools.saveDownloaded(d) },
         )
-        GhCircleButton(
+        GhTileButton(
             icon = XIcons.Delete,
             description = stringResource(R.string.action_delete),
             container = p.dangerAction, tint = p.onDangerAction,
@@ -450,7 +453,7 @@ fun LazyListScope.artifactsSection(
     }
 }
 
-/** Compact row: name + size/time, Download (or Install once it is on the device) and Delete. */
+/** Row: file tile + name / size \u2022 time, then Download (or Install once on the device) and Delete as rounded tiles. */
 @Composable
 private fun ArtifactRow(a: GhArtifact, state: GitHubToolsState, tools: GitHubToolsController, onDelete: () -> Unit) {
     val p = ghPalette()
@@ -459,61 +462,83 @@ private fun ArtifactRow(a: GhArtifact, state: GitHubToolsState, tools: GitHubToo
     val transfer = state.transfer?.takeIf { !it.fromApkCard && it.artifactId == a.id }
     val busy = state.transfer?.paused == false || state.installing || state.pendingSave != null
     val deleting = a.id in state.busyArtifactIds
-    Card(
-        Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = p.runCard),
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(p.runCard)
+            .border(1.dp, p.cardBorder, shape)
+            .padding(10.dp),
     ) {
-        Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        a.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
-                        color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        listOf(Formatter.formatShortFileSize(context, a.sizeBytes), a.createdAt?.let { timeAgoOrDate(it) }.orEmpty())
-                            .filter { it.isNotBlank() }.joinToString(" \u2022 "),
-                        style = MaterialTheme.typography.bodySmall, color = p.onCardMuted, maxLines = 1,
-                    )
-                }
-                when {
-                    deleting -> CircularProgressIndicator(Modifier.padding(10.dp).size(22.dp), strokeWidth = 2.dp)
-                    else -> {
-                        if (local != null) {
-                            TextButton(
-                                onClick = { tools.installDownloaded(local) }, enabled = !busy,
-                                colors = ButtonDefaults.textButtonColors(contentColor = p.accent),
-                            ) { Text(stringResource(R.string.gh_install)) }
-                        } else if (transfer == null) {
-                            IconButton(
-                                onClick = {
-                                    if (ApkResolver.isApkArtifact(a.name)) tools.installFromArtifact(a) else tools.saveArtifact(a)
-                                },
-                                enabled = !busy, modifier = Modifier.size(40.dp),
-                            ) {
-                                Icon(XIcons.Download, contentDescription = stringResource(R.string.gh_apk_download), tint = p.accent, modifier = Modifier.size(22.dp))
-                            }
-                        }
-                        IconButton(onClick = onDelete, enabled = !busy, modifier = Modifier.size(40.dp)) {
-                            Icon(
-                                XIcons.Delete, contentDescription = stringResource(R.string.action_delete),
-                                tint = p.danger, modifier = Modifier.size(22.dp),
-                            )
-                        }
-                    }
-                }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(p.onCard.copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(XIcons.InsertDriveFile, contentDescription = null, tint = p.onCard, modifier = Modifier.size(22.dp))
             }
-            if (transfer != null) {
-                TransferStatus(
-                    downloaded = transfer.downloaded, total = transfer.total, etaSeconds = transfer.etaSeconds, paused = transfer.paused,
-                    onPauseResume = if (transfer.paused) tools::resumeTransfer else tools::pauseTransfer,
-                    onCancel = tools::cancelTransfer,
-                    accent = p.accent, track = p.onCard.copy(alpha = 0.12f), textColor = p.onCardMuted,
-                    modifier = Modifier.padding(end = 8.dp),
-                    canPause = (transfer.progress ?: 0f) < 1f,
+            Column(Modifier.weight(1f)) {
+                Text(
+                    a.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold,
+                    color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    listOf(Formatter.formatShortFileSize(context, a.sizeBytes), a.createdAt?.let { timeAgoOrDate(it) }.orEmpty())
+                        .filter { it.isNotBlank() }.joinToString(" \u2022 "),
+                    style = MaterialTheme.typography.bodySmall, color = p.onCardMuted, maxLines = 1,
                 )
             }
+            if (deleting) {
+                Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (local != null) {
+                        Row(
+                            Modifier
+                                .height(40.dp)
+                                .alpha(if (busy) 0.45f else 1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(p.installBrush)
+                                .clickable(enabled = !busy, role = Role.Button) { tools.installDownloaded(local) }
+                                .padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                stringResource(R.string.gh_install),
+                                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = p.onInstall,
+                            )
+                        }
+                    } else if (transfer == null) {
+                        GhTileButton(
+                            icon = XIcons.Download,
+                            description = stringResource(R.string.gh_apk_download),
+                            container = p.tileFill, tint = p.accent, borderColor = p.tileBorder,
+                            enabled = !busy, size = 40.dp, iconSize = 22.dp,
+                            onClick = { if (ApkResolver.isApkArtifact(a.name)) tools.installFromArtifact(a) else tools.saveArtifact(a) },
+                        )
+                    }
+                    GhTileButton(
+                        icon = XIcons.Delete,
+                        description = stringResource(R.string.action_delete),
+                        container = p.dangerAction, tint = p.onDangerAction,
+                        enabled = !busy, size = 40.dp, iconSize = 22.dp,
+                        onClick = onDelete,
+                    )
+                }
+            }
+        }
+        if (transfer != null) {
+            TransferStatus(
+                downloaded = transfer.downloaded, total = transfer.total, etaSeconds = transfer.etaSeconds, paused = transfer.paused,
+                onPauseResume = if (transfer.paused) tools::resumeTransfer else tools::pauseTransfer,
+                onCancel = tools::cancelTransfer,
+                accent = p.accent, track = p.onCard.copy(alpha = 0.12f), textColor = p.onCardMuted,
+                modifier = Modifier.padding(top = 8.dp),
+                canPause = (transfer.progress ?: 0f) < 1f,
+            )
         }
     }
 }
