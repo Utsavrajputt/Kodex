@@ -39,36 +39,77 @@ class GhNotifier(context: Context) {
      * Opens the app. With a [projectPath] the tap lands on that project's GitHub screen: an explicit intent to
      * MainActivity (singleTask) so the extra reaches onNewIntent even when the app is only sitting in recents.
      */
-    private fun openApp(projectPath: String? = null): PendingIntent? {
+    private fun openApp(projectPath: String? = null, runId: Long = 0L): PendingIntent? {
         val intent = if (projectPath != null) {
             Intent(ctx, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .putExtra(EXTRA_OPEN_GITHUB, projectPath)
+                .apply { if (runId > 0L) putExtra(EXTRA_OPEN_RUN, runId) }
         } else {
             ctx.packageManager.getLaunchIntentForPackage(ctx.packageName) ?: return null
         }
-        return PendingIntent.getActivity(
-            ctx, projectPath?.hashCode() ?: 0, intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        val code = if (projectPath != null) projectPath.hashCode() * 31 + runId.hashCode() else 0
+        return PendingIntent.getActivity(ctx, code, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
-    /** The ongoing notification. [progress] 0..100, or null for an indeterminate bar. */
-    fun live(title: String, text: String, progress: Int?): Notification =
-        NotificationCompat.Builder(ctx, CHANNEL)
+    /** "Stop" on the build notification: ends the background watch (and with it the notification, on every Android version). */
+    private fun stopWatchingIntent(): PendingIntent =
+        PendingIntent.getService(
+            ctx, 1,
+            Intent(ctx, GhWorkService::class.java).setAction(GhWorkService.ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    /** What the live notification currently says; also what the foreground service shows the moment it starts. */
+    data class LiveSpec(
+        val title: String,
+        val text: String,
+        val progress: Int?,
+        /** Where a tap goes: this project's GitHub screen, and the run's details when [runId] is set. */
+        val projectPath: String? = null,
+        val runId: Long = 0L,
+        /** Adds a Stop button (ends the background build watch). */
+        val stoppable: Boolean = false,
+    )
+
+    /**
+     * The live notification. [LiveSpec.progress] 0..100, or null for an indeterminate bar. Not marked ongoing, so
+     * it can be swiped away on Android 14+ (older versions keep a foreground notification: use the Stop button).
+     */
+    fun live(spec: LiveSpec): Notification {
+        val b = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setOngoing(true)
+            .setContentTitle(spec.title)
+            .setContentText(spec.text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(spec.text))
+            .setOngoing(false)
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            .setContentIntent(openApp())
-            .setProgress(100, progress ?: 0, progress == null)
-            .build()
+            .setContentIntent(openApp(spec.projectPath, spec.runId))
+            .setProgress(100, spec.progress ?: 0, spec.progress == null)
+        if (spec.stoppable) b.addAction(0, ctx.getString(R.string.gh_notif_stop_watching), stopWatchingIntent())
+        return b.build()
+    }
 
-    fun updateLive(title: String, text: String, progress: Int?) = post(LIVE_ID, live(title, text, progress))
+    fun live(title: String, text: String, progress: Int?): Notification = live(LiveSpec(title, text, progress))
 
-    fun clearLive() = try { nm.cancel(LIVE_ID) } catch (_: SecurityException) { }
+    fun updateLive(
+        title: String,
+        text: String,
+        progress: Int?,
+        projectPath: String? = null,
+        runId: Long = 0L,
+        stoppable: Boolean = false,
+    ) {
+        val spec = LiveSpec(title, text, progress, projectPath, runId, stoppable)
+        lastLive = spec
+        post(LIVE_ID, live(spec))
+    }
+
+    fun clearLive() {
+        lastLive = null
+        try { nm.cancel(LIVE_ID) } catch (_: SecurityException) { }
+    }
 
     /** A finished process: stays until the user dismisses it. [kind] keeps one result per process type. */
     fun result(kind: Int, title: String, text: String, ok: Boolean = true) {
@@ -119,6 +160,12 @@ class GhNotifier(context: Context) {
     companion object {
         /** Intent extra: project whose GitHub screen the notification should open. */
         const val EXTRA_OPEN_GITHUB = "com.invictus.kodex.extra.OPEN_GITHUB"
+
+        /** Intent extra: run whose details to open on top of the GitHub screen. */
+        const val EXTRA_OPEN_RUN = "com.invictus.kodex.extra.OPEN_RUN"
+
+        @Volatile
+        internal var lastLive: LiveSpec? = null
         const val CHANNEL = "gh_manager"
         const val CHANNEL_BUILDS = "gh_new_builds"
         const val LIVE_ID = 7100

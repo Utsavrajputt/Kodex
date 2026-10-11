@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
 
     /** Project whose GitHub screen a build notification asked for; consumed by the nav host. */
     private var openGitHub by mutableStateOf<String?>(null)
+    private var openGitHubRun by mutableStateOf(0L)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,7 +89,8 @@ class MainActivity : ComponentActivity() {
                         externalFile = externalFile,
                         onExternalFileHandled = { externalFile = null },
                         openGitHubProject = openGitHub,
-                        onOpenGitHubHandled = { openGitHub = null },
+                        openGitHubRunId = openGitHubRun,
+                        onOpenGitHubHandled = { openGitHub = null; openGitHubRun = 0L },
                     )
                     ThemeTransitionOverlay(transitionController)
                     if (ThemePickerState.visible) {
@@ -112,7 +114,10 @@ class MainActivity : ComponentActivity() {
     private fun handleGitHubIntent(intent: Intent?) {
         val open = intent ?: return
         val path = open.getStringExtra(GhNotifier.EXTRA_OPEN_GITHUB) ?: return
+        val runId = open.getLongExtra(GhNotifier.EXTRA_OPEN_RUN, 0L)
         open.removeExtra(GhNotifier.EXTRA_OPEN_GITHUB)
+        open.removeExtra(GhNotifier.EXTRA_OPEN_RUN)
+        openGitHubRun = runId
         openGitHub = path
     }
 

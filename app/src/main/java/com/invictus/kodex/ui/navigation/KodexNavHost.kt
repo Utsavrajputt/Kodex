@@ -79,6 +79,8 @@ fun KodexNavHost(
     onExternalFileHandled: () -> Unit = {},
     /** Project whose GitHub screen to open (build notification tap); cleared through [onOpenGitHubHandled]. */
     openGitHubProject: String? = null,
+    /** With [openGitHubProject]: also open this run's details on top of the GitHub screen. */
+    openGitHubRunId: Long = 0L,
     onOpenGitHubHandled: () -> Unit = {},
 ) {
     val navController = rememberNavController()
@@ -393,13 +395,25 @@ fun KodexNavHost(
         }
     }
 
-    LaunchedEffect(openGitHubProject, storageGranted, onboardingCompleted) {
+    LaunchedEffect(openGitHubProject, openGitHubRunId, storageGranted, onboardingCompleted) {
         val path = openGitHubProject ?: return@LaunchedEffect
         if (!storageGranted || !onboardingCompleted) return@LaunchedEffect
         val current = navController.currentBackStackEntry
-        val alreadyThere = current?.destination?.route == Routes.GITHUB &&
-            current?.arguments?.getString("projectPath") == path
-        if (!alreadyThere) navController.navigate(Routes.github(path))
+        val route = current?.destination?.route
+        val sameProject = current?.arguments?.getString("projectPath") == path
+        if (openGitHubRunId > 0L) {
+            val showingRun = route == Routes.GITHUB_RUN_LOG && sameProject &&
+                current?.arguments?.getLong("runId") == openGitHubRunId
+            if (!showingRun) {
+                // GitHub screen underneath, so Back from the run lands there.
+                val onGitHubStack = sameProject &&
+                    (route == Routes.GITHUB || route == Routes.GITHUB_RUNS || route == Routes.GITHUB_RUN_LOG)
+                if (!onGitHubStack) navController.navigate(Routes.github(path))
+                navController.navigate(Routes.githubRunLog(path, openGitHubRunId))
+            }
+        } else if (!(route == Routes.GITHUB && sameProject)) {
+            navController.navigate(Routes.github(path))
+        }
         onOpenGitHubHandled()
     }
 

@@ -46,7 +46,10 @@ object GhBackground {
 class GhWorkService : Service() {
     override fun onCreate() {
         super.onCreate()
-        val n = GhNotifier(this).live(getString(R.string.gh_notif_working_title), getString(R.string.gh_notif_working_text), null)
+        // Show what the watcher last posted (if anything) so the service start never overwrites it with a generic text.
+        val notifier = GhNotifier(this)
+        val n = GhNotifier.lastLive?.let { notifier.live(it) }
+            ?: notifier.live(getString(R.string.gh_notif_working_title), getString(R.string.gh_notif_working_text), null)
         try {
             ServiceCompat.startForeground(this, GhNotifier.LIVE_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } catch (_: Exception) {
@@ -54,5 +57,18 @@ class GhWorkService : Service() {
         }
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            // The user asked to remove the notification: stop watching builds (each watch releases the service itself).
+            RunCompletionWatch.cancelAll()
+            GhNotifier(this).clearLive()
+        }
+        return START_NOT_STICKY
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
+
+    companion object {
+        const val ACTION_STOP = "com.invictus.kodex.github.STOP_WATCH"
+    }
 }

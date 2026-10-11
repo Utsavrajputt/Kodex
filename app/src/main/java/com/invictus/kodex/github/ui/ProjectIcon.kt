@@ -37,6 +37,10 @@ object ProjectIconLoader {
         return (direct + modules).filter { it.isDirectory }.distinct()
     }
 
+    /**
+     * 1. the app's launcher icon (Android projects), 2. otherwise a logo-like image anywhere in the repo:
+     * file names containing "bundle" first (patch bundles), then "logo", then "icon". null = use Kodex's icon.
+     */
     fun findIconFile(projectPath: String): File? {
         val root = File(projectPath)
         for (res in resDirs(root)) {
@@ -45,7 +49,43 @@ object ProjectIconLoader {
                 if (f.isFile && f.length() > 0) return f
             }
         }
-        return null
+        return findLogoImage(root)
+    }
+
+    private val IMAGE_EXTENSIONS = setOf("png", "webp", "jpg", "jpeg")
+    private val SKIP_DIRS = setOf("build", "node_modules", "venv", "__pycache__", "dist", "out", "target")
+    private val KEYWORDS = listOf("bundle", "logo", "icon") // order = priority
+    private const val MAX_DEPTH = 4
+    private const val MAX_DIRS = 600
+    private const val MAX_IMAGE_BYTES = 6L * 1024 * 1024
+
+    private fun findLogoImage(root: File): File? {
+        var best: File? = null
+        var bestScore = Int.MAX_VALUE
+        var bestDepth = Int.MAX_VALUE
+        var visited = 0
+
+        fun walk(dir: File, depth: Int) {
+            if (depth > MAX_DEPTH || visited++ > MAX_DIRS) return
+            val children = dir.listFiles() ?: return
+            for (f in children) {
+                if (f.isDirectory) {
+                    val n = f.name
+                    if (n == ".github" || (!n.startsWith(".") && n !in SKIP_DIRS)) walk(f, depth + 1)
+                } else {
+                    if (f.extension.lowercase() !in IMAGE_EXTENSIONS) continue
+                    if (f.length() <= 0 || f.length() > MAX_IMAGE_BYTES) continue
+                    val name = f.nameWithoutExtension.lowercase()
+                    val score = KEYWORDS.indexOfFirst { name.contains(it) }
+                    if (score < 0) continue
+                    if (score < bestScore || (score == bestScore && depth < bestDepth)) {
+                        best = f; bestScore = score; bestDepth = depth
+                    }
+                }
+            }
+        }
+        walk(root, 0)
+        return best
     }
 
     fun load(context: Context, projectPath: String, targetPx: Int = 192): ImageBitmap {

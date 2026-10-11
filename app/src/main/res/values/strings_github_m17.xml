@@ -10,4 +10,6 @@
     <string name="gh_log_after_finish">The log is available once the run finishes.</string>
     <string name="gh_percent">%1$d%%</string>
     <string name="gh_run_open_details">Open run details</string>
+    <string name="gh_notif_run_waiting">%1$s • waiting for the first step…</string>
+    <string name="gh_notif_stop_watching">Stop</string>
 </resources>

@@ -9,8 +9,12 @@ import com.invictus.kodex.github.api.GhRun
 import com.invictus.kodex.github.api.GitHubError
 import com.invictus.kodex.github.api.RunDisplayStatus
 import com.invictus.kodex.github.data.ApkResolver
+import com.invictus.kodex.github.ui.RunProgress
+import com.invictus.kodex.github.ui.StepState
 import com.invictus.kodex.github.ui.apkBuildName
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -25,24 +29,28 @@ import java.util.concurrent.ConcurrentHashMap
  * depend on the slow periodic [ArmBuildWatch] job.
  */
 object RunCompletionWatch {
-    private const val POLL_MS = 15_000L
+    private const val POLL_MS = 10_000L
     private const val MAX_WATCH_MS = 45L * 60 * 1000
     private const val MAX_POLL_FAILURES = 8
 
     private val watching: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+    private val jobs = ConcurrentHashMap<Long, Job>()
+
+    /** Ends every running watch (the notification's Stop button). */
+    fun cancelAll() {
+        jobs.values.forEach { it.cancel() }
+    }
 
     /** Idempotent: calling it again for a run that is already watched (or finished) does nothing. */
     fun watch(context: Context, repoRef: GhRepoRef, run: GhRun, projectPath: String? = null) {
         if (!run.isActive || !watching.add(run.id)) return
         val app = context.applicationContext
-        GhBackground.scope.launch(Dispatchers.IO) {
-            GhBackground.begin(app)
+        val title = app.getString(R.string.gh_notif_run_title, run.runNumber)
+        val job = GhBackground.scope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
             val notifier = GhNotifier(app)
-            notifier.updateLive(
-                app.getString(R.string.gh_notif_run_title, run.runNumber),
-                app.getString(R.string.gh_notif_run_text),
-                null,
-            )
+            // Post the real text first, so the foreground service that starts next shows it instead of a generic one.
+            notifier.updateLive(title, app.getString(R.string.gh_notif_run_waiting, repoRef.name), null, projectPath, run.id, stoppable = true)
+            GhBackground.begin(app)
             try {
                 val repo = (app as KodexApp).container.gitHubRepository(repoRef)
                 val deadline = SystemClock.elapsedRealtime() + MAX_WATCH_MS
@@ -57,15 +65,35 @@ object RunCompletionWatch {
                         if (++failures >= MAX_POLL_FAILURES) break
                         continue
                     }
-                    if (!latest.isCompleted) continue
+                    if (!latest.isCompleted) {
+                        val progress = try {
+                            RunProgress.of(repo.jobs(run.id))
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: GitHubError) {
+                            null
+                        }
+                        if (progress != null && progress.hasSteps) {
+                            val step = progress.steps.firstOrNull { it.state == StepState.Current }?.name
+                                ?: progress.steps.firstOrNull { it.state == StepState.Pending }?.name
+                            notifier.updateLive(
+                                title, listOfNotNull(repoRef.name, step).joinToString(" \u2022 "),
+                                progress.percent, projectPath, run.id, stoppable = true,
+                            )
+                        }
+                        continue
+                    }
                     finished(app, repo, repoRef, latest, notifier, projectPath)
                     break
                 }
             } finally {
                 watching.remove(run.id)
+                jobs.remove(run.id)
                 GhBackground.end(app)
             }
         }
+        jobs[run.id] = job
+        job.start()
     }
 
     private suspend fun finished(
