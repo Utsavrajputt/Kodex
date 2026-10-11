@@ -215,15 +215,20 @@ fun GitScreen(
                     }
                 },
                 actions = {
+                    // GitHub Manager (runs, APKs, artifacts) lives to the left of Fetch.
+                    // The GitHub mark fills its whole 24dp box, so it is drawn smaller to match the other glyphs.
+                    IconButton(onClick = { onOpenRoute(Routes.github(projectPath)) }) {
+                        Icon(
+                            XIcons.GitHub,
+                            contentDescription = stringResource(R.string.gh_menu_github),
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                     IconButton(
                         onClick = { viewModel.onEvent(GitEvent.Fetch) },
                         enabled = canSync && state.networkOp == null,
                     ) {
                         Icon(XIcons.Sync, contentDescription = stringResource(R.string.git_fetch))
-                    }
-                    // GitHub Manager (runs, APKs, artifacts) lives next to Fetch.
-                    IconButton(onClick = { onOpenRoute(Routes.github(projectPath)) }) {
-                        Icon(XIcons.GitHub, contentDescription = stringResource(R.string.gh_menu_github))
                     }
                     IconButton(
                         onClick = { viewModel.onEvent(GitEvent.OpenReset) },

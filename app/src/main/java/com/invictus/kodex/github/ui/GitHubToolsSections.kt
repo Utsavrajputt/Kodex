@@ -17,6 +17,11 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -75,10 +80,17 @@ fun RunWorkflowCard(
     val canRun = workflow != null && ref != null && !state.dispatching &&
         (supported == true || info is DispatchInfoState.Failed)
 
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Text(stringResource(R.string.gh_run_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(8.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(XIcons.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Text(stringResource(R.string.gh_run_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PickerButton(
                     label = workflow?.name ?: stringResource(R.string.gh_run_pick_workflow),
@@ -114,6 +126,7 @@ fun RunWorkflowCard(
                 FilledIconButton(
                     onClick = { if (workflow != null && ref != null) tools.onRunPressed(workflow, ref) },
                     enabled = canRun,
+                    modifier = Modifier.size(48.dp),
                 ) {
                     if (state.dispatching) {
                         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -149,7 +162,8 @@ private fun PickerButton(
         OutlinedButton(
             onClick = { open = true },
             enabled = enabled,
-            modifier = Modifier.fillMaxWidth(),
+            shape = CircleShape,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
             contentPadding = PaddingValues(horizontal = 12.dp),
         ) {
             Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
@@ -167,104 +181,146 @@ fun ApkCard(
     tools: GitHubToolsController,
     onRunShortcut: () -> Unit,
 ) {
-    // The newest APK that is already on the device comes first: it is what the user wants to install.
-    val newest = state.downloaded.firstOrNull()
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            if (newest != null) {
-                DownloadedTop(newest, state, tools)
-                Spacer(Modifier.height(8.dp))
-            }
-            when (val apk = state.apk) {
-                ApkCardState.Loading -> {
-                    if (newest == null) CardTitle(R.string.gh_apk_title)
-                    LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp))
-                }
-                ApkCardState.None -> {
-                    if (newest == null) {
-                        CardTitle(R.string.gh_apk_title)
-                        Muted(stringResource(R.string.gh_apk_none))
-                    }
-                    TextButton(onClick = onRunShortcut) { Text(stringResource(R.string.gh_run_action_label)) }
-                }
-                is ApkCardState.AllExpired -> {
-                    if (newest == null) {
-                        CardTitle(R.string.gh_apk_title)
-                        val date = apk.newestAt?.let { dateOf(it) }
-                        Muted(if (date != null) stringResource(R.string.gh_apk_expired_on, date) else stringResource(R.string.gh_apk_expired))
-                    }
-                    TextButton(onClick = onRunShortcut) { Text(stringResource(R.string.gh_run_action_label)) }
-                }
-                is ApkCardState.Error -> {
-                    if (newest == null) CardTitle(R.string.gh_apk_title)
-                    Text(apk.message.resolve(LocalContext.current), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = tools::loadArtifactsAndApk) { Text(stringResource(R.string.gh_retry)) }
-                }
-                is ApkCardState.Found ->
-                    if (newest != null && newest.artifactId == apk.candidate.artifact.id) {
-                        Muted(stringResource(R.string.gh_apk_up_to_date))
-                    } else {
-                        FoundApk(apk, state, tools)
-                    }
-            }
-        }
-    }
-}
-
-/** The newest APK kept on the device: Install / Save / Delete, no new download needed. */
-@Composable
-private fun DownloadedTop(d: DownloadedApk, state: GitHubToolsState, tools: GitHubToolsController) {
+    val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
+    // Only ONE APK is ever shown: the latest successful run's artifact. If it is already on the device the
+    // card offers Install / Save / Delete, otherwise Download. An older downloaded file is only a fallback when
+    // no run artifact is available any more (expired / none / error).
+    val apk = state.apk
+    val found = apk as? ApkCardState.Found
+    val latestId = found?.candidate?.artifact?.id
+    val local = if (latestId != null) state.downloaded.firstOrNull { it.artifactId == latestId } else state.downloaded.firstOrNull()
     val busy = state.transfer != null || state.installing || state.pendingSave != null
-    CardTitle(apkTitle(d.label))
-    Muted(
-        listOf(
-            Formatter.formatShortFileSize(context, d.sizeBytes),
-            relative(Instant.ofEpochMilli(d.modifiedAt)),
-        ).joinToString(" • "),
-    )
-    Spacer(Modifier.height(8.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Button(onClick = { tools.installDownloaded(d) }, enabled = !busy) { Text(stringResource(R.string.gh_install)) }
-        OutlinedButton(onClick = { tools.saveDownloaded(d) }, enabled = !busy) { Text(stringResource(R.string.gh_save_to_folder)) }
-        IconButton(onClick = { tools.deleteDownloaded(d) }, enabled = !state.installing) {
-            Icon(XIcons.Delete, contentDescription = stringResource(R.string.action_delete), tint = MaterialTheme.colorScheme.error)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer),
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            val title = when {
+                found != null -> apkTitle(found.candidate.artifact.name)
+                local != null -> apkTitle(local.label)
+                else -> stringResource(R.string.gh_apk_title)
+            }
+            val facts = when {
+                found != null -> {
+                    val a = found.candidate.artifact
+                    listOf(
+                        if (found.candidate.universal) "universal" else "arm64-v8a",
+                        Formatter.formatShortFileSize(context, a.sizeBytes),
+                        a.createdAt?.let { relative(it) }.orEmpty(),
+                    )
+                }
+                local != null -> listOf(
+                    Formatter.formatShortFileSize(context, local.sizeBytes),
+                    relative(Instant.ofEpochMilli(local.modifiedAt)),
+                )
+                else -> emptyList()
+            }.filter { it.isNotBlank() }.joinToString(" \u2022 ")
+
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Surface(shape = CircleShape, color = cs.primary, contentColor = cs.onPrimary, modifier = Modifier.size(48.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            if (local != null) XIcons.Save else XIcons.CloudDownload,
+                            contentDescription = null, modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    if (facts.isNotBlank()) {
+                        Text(
+                            facts, style = MaterialTheme.typography.bodyMedium,
+                            color = cs.onPrimaryContainer.copy(alpha = 0.75f),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+
+            when {
+                found != null -> {
+                    val a = found.candidate.artifact
+                    val transfer = state.transfer?.takeIf { it.fromApkCard && it.artifactId == a.id }
+                    val ready = state.ready?.takeIf { it.fromApkCard && it.artifactId == a.id }
+                    when {
+                        transfer != null -> TransferRow(transfer, onCancel = tools::cancelTransfer)
+                        ready != null -> ReadyApkBody(
+                            ready = ready,
+                            installing = state.installing,
+                            onInstall = tools::onInstallTapped,
+                            onSave = tools::saveReadyApk,
+                            onDismiss = tools::dismissReady,
+                        )
+                        local != null -> ApkActions(local, state.installing, busy, tools)
+                        else -> Button(
+                            onClick = { tools.downloadApk(found.candidate) },
+                            enabled = state.transfer == null,
+                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                        ) {
+                            Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.gh_apk_download), style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+                local != null -> ApkActions(local, state.installing, busy, tools)
+                apk == ApkCardState.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
+                else -> {
+                    val msg = when (apk) {
+                        is ApkCardState.Error -> apk.message.resolve(context)
+                        is ApkCardState.AllExpired -> apk.newestAt?.let { stringResource(R.string.gh_apk_expired_on, dateOf(it)) }
+                            ?: stringResource(R.string.gh_apk_expired)
+                        else -> stringResource(R.string.gh_apk_none)
+                    }
+                    Text(msg, style = MaterialTheme.typography.bodyMedium, color = if (apk is ApkCardState.Error) cs.error else cs.onPrimaryContainer)
+                    FilledTonalButton(
+                        onClick = if (apk is ApkCardState.Error) tools::loadArtifactsAndApk else onRunShortcut,
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                    ) {
+                        Text(stringResource(if (apk is ApkCardState.Error) R.string.gh_retry else R.string.gh_run_action_label))
+                    }
+                }
+            }
         }
     }
 }
 
+/** APK already on the device: big Install, plus Save-to-folder and a clearly separate Delete. */
 @Composable
-private fun FoundApk(found: ApkCardState.Found, state: GitHubToolsState, tools: GitHubToolsController) {
-    val context = LocalContext.current
-    val a = found.candidate.artifact
-    CardTitle(apkTitle(a.name))
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Pill(if (found.candidate.universal) "universal" else "arm64-v8a")
-        Muted(
-            listOf(
-                a.shortSha,
-                a.createdAt?.let { dateOf(it) }.orEmpty(),
-                Formatter.formatShortFileSize(context, a.sizeBytes),
-            ).filter { it.isNotBlank() }.joinToString(" • "),
-        )
-    }
-    Spacer(Modifier.height(8.dp))
-
-    val transfer = state.transfer?.takeIf { it.fromApkCard && it.artifactId == a.id }
-    val ready = state.ready?.takeIf { it.fromApkCard && it.artifactId == a.id }
-    when {
-        transfer != null -> TransferRow(transfer, onCancel = tools::cancelTransfer)
-        ready != null -> ReadyApkBody(
-            ready = ready,
-            installing = state.installing,
-            onInstall = tools::onInstallTapped,
-            onSave = tools::saveReadyApk,
-            onDismiss = tools::dismissReady,
-        )
-        else -> Button(onClick = { tools.downloadApk(found.candidate) }, enabled = state.transfer == null) {
-            Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+private fun ApkActions(d: DownloadedApk, installing: Boolean, busy: Boolean, tools: GitHubToolsController) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Button(
+            onClick = { tools.installDownloaded(d) },
+            enabled = !busy,
+            modifier = Modifier.weight(1f).height(52.dp),
+        ) {
+            Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.gh_apk_download))
+            Text(stringResource(R.string.gh_install), style = MaterialTheme.typography.labelLarge)
+        }
+        FilledTonalIconButton(
+            onClick = { tools.saveDownloaded(d) },
+            enabled = !busy,
+            modifier = Modifier.size(52.dp),
+        ) {
+            Icon(XIcons.Folder, contentDescription = stringResource(R.string.gh_save_to_folder))
+        }
+        FilledTonalIconButton(
+            onClick = { tools.deleteDownloaded(d) },
+            enabled = !installing,
+            modifier = Modifier.size(52.dp),
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            ),
+        ) {
+            Icon(XIcons.Delete, contentDescription = stringResource(R.string.action_delete))
         }
     }
 }
@@ -527,15 +583,6 @@ private fun DeploymentRow(d: GhDeployment, busy: Boolean, onDelete: () -> Unit) 
 }
 
 // ---- shared small pieces ------------------------------------------------------------------------
-
-@Composable
-private fun CardTitle(res: Int) = CardTitle(stringResource(res))
-
-@Composable
-private fun CardTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-    Spacer(Modifier.height(4.dp))
-}
 
 @Composable
 internal fun Muted(text: String, modifier: Modifier = Modifier) {

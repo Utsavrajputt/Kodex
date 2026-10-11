@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -98,7 +101,8 @@ fun AllApksScreen(
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(state.shown, key = { it.artifact.id }) { row ->
+                // Only the latest build is shown; older ones are intentionally hidden.
+                items(state.rows.take(1), key = { it.artifact.id }) { row ->
                     ApkRowCard(
                         row = row,
                         busy = state.busyId == row.artifact.id,
@@ -107,15 +111,6 @@ fun AllApksScreen(
                         onInstall = { viewModel.install(row) },
                         onCancel = viewModel::cancel,
                     )
-                }
-                if (state.hasMore) {
-                    item(key = "more") {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                            TextButton(onClick = viewModel::showMore) {
-                                Text(stringResource(R.string.apks_show_more))
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -132,33 +127,39 @@ private fun ApkRowCard(
     onCancel: () -> Unit,
 ) {
     val context = LocalContext.current
+    val cs = MaterialTheme.colorScheme
     val a = row.artifact
-    Card(Modifier.fillMaxWidth().alpha(if (row.expired) 0.55f else 1f)) {
-        Column(Modifier.padding(start = 12.dp, top = 10.dp, bottom = 10.dp, end = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "${row.appName} arm64", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    )
-                    Muted(
-                        listOf(
-                            Formatter.formatShortFileSize(context, a.sizeBytes),
-                            a.createdAt?.let { relative(it) }.orEmpty(),
-                            if (row.expired) stringResource(R.string.gh_artifact_expired_label) else "",
-                        ).filter { it.isNotBlank() }.joinToString(" • "),
-                    )
-                }
-                if (!row.expired && !busy) {
-                    Button(onClick = onInstall, enabled = !anyBusy) { Text(stringResource(R.string.gh_install)) }
-                }
+    Card(
+        modifier = Modifier.fillMaxWidth().alpha(if (row.expired) 0.55f else 1f),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = cs.primaryContainer, contentColor = cs.onPrimaryContainer),
+    ) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column {
+                Text(
+                    "${row.appName} arm64", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    listOf(
+                        Formatter.formatShortFileSize(context, a.sizeBytes),
+                        a.createdAt?.let { relative(it) }.orEmpty(),
+                        if (row.expired) stringResource(R.string.gh_artifact_expired_label) else "",
+                    ).filter { it.isNotBlank() }.joinToString(" \u2022 "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = cs.onPrimaryContainer.copy(alpha = 0.75f),
+                )
             }
             if (busy) {
-                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     if (progress == null) LinearProgressIndicator(Modifier.weight(1f))
                     else LinearProgressIndicator(progress = { progress }, modifier = Modifier.weight(1f))
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
+                }
+            } else if (!row.expired) {
+                Button(onClick = onInstall, enabled = !anyBusy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                    Text(stringResource(R.string.gh_install), style = MaterialTheme.typography.labelLarge)
                 }
             }
         }

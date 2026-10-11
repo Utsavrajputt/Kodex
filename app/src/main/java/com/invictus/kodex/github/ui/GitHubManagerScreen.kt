@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -384,21 +385,32 @@ private fun BannerCard(banner: GhBanner, onReconnect: () -> Unit) {
 
 @Composable
 private fun RepoHeaderCard(state: GitHubManagerState, projectPath: String) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ProjectIcon(projectPath, size = 44.dp)
-            Spacer(Modifier.width(12.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            ProjectIcon(projectPath, size = 56.dp)
+            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    state.repo?.name.orEmpty(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
+                    state.repo?.name.orEmpty(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
-                Text(state.repo?.fullName.orEmpty(), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    state.repo?.fullName.orEmpty(), style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
                 state.repo?.defaultBranch?.let {
-                    Text(
-                        stringResource(R.string.gh_default_branch, it),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Spacer(Modifier.height(6.dp))
+                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
+                        Text(
+                            stringResource(R.string.gh_default_branch, it),
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                    }
                 }
             }
             state.rateLimit?.takeIf { it.isLow() }?.let {
@@ -494,7 +506,11 @@ private fun RunRow(
     val haptics = LocalHapticFeedback.current
     val (icon, label, tint) = statusVisuals(run.display)
     val statusText = stringResource(label)
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -507,7 +523,7 @@ private fun RunRow(
                         if (run.isFailed) onCopyError() else menu = true
                     },
                 )
-                .padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+                .padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
