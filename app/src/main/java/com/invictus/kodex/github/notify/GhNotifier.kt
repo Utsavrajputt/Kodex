@@ -113,6 +113,8 @@ class GhNotifier(context: Context) {
 
     /** A finished process: stays until the user dismisses it. [kind] keeps one result per process type. */
     fun result(kind: Int, title: String, text: String, ok: Boolean = true) {
+        // No "download complete" / "app installed" notifications; failures are still shown.
+        if (ok && (kind == KIND_DOWNLOAD || kind == KIND_INSTALL)) return
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(if (ok) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
             .setContentTitle(title)

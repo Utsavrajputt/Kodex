@@ -62,7 +62,11 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: bash .github/scripts/sign-apks.sh
+          # Push / manual runs must always be signed with the same keystore (an unsigned or
+          # differently-signed APK can't update the installed app and Play Protect trusts it less).
+          # Only fork PRs (no secrets) may fall back to unsigned APKs.
+          REQUIRE_SECRETS: ${{ github.event_name != 'pull_request' && '--require-secrets' || '' }}
+        run: bash .github/scripts/sign-apks.sh $REQUIRE_SECRETS
 
       # Single edition (AI is a runtime toggle in Settings > Behavior), split by ABI + universal.
       - name: Upload arm64-v8a APK
