@@ -63,6 +63,8 @@ import com.invictus.kodex.github.data.ApkCandidate
 import com.invictus.kodex.github.data.ApkResolver
 import com.invictus.kodex.github.api.GhDeployment
 import com.invictus.kodex.github.api.GhWorkflow
+import com.invictus.kodex.github.install.ApkAction
+import com.invictus.kodex.github.install.ApkInstallInfo
 import com.invictus.kodex.github.install.ArtifactZip
 import com.invictus.kodex.github.install.InstallDecision
 import com.invictus.kodex.github.install.InstallKind
@@ -202,6 +204,20 @@ private fun PickerButton(
     }
 }
 
+/** Label of the primary button for [action]: Install / Update / Open. */
+internal fun apkActionLabel(action: ApkAction): Int = when (action) {
+    ApkAction.Install -> R.string.gh_install
+    ApkAction.Update -> R.string.gh_update
+    ApkAction.Open -> R.string.gh_open
+}
+
+/** Icon of the primary button for [action]. */
+internal fun apkActionIcon(action: ApkAction) = when (action) {
+    ApkAction.Install -> XIcons.Download
+    ApkAction.Update -> XIcons.Sync
+    ApkAction.Open -> XIcons.OpenInNew
+}
+
 // ---- Latest APK card (plan 6.1 card 3 / 8.3 / 8.4) ----------------------------------------------
 
 /** The card is only worth showing with a build to install, a downloaded APK, or an error with Retry; "none yet" / expired / loading hide it. */
@@ -246,7 +262,7 @@ fun ApkCard(
                             timeAgoOrDate(Instant.ofEpochMilli(fallbackLocal.modifiedAt)),
                         ).filter { it.isNotBlank() }.joinToString(" \u2022 "),
                     )
-                    ApkActions(fallbackLocal, state.installing, busy, tools)
+                    ApkActions(fallbackLocal, state.installInfo[fallbackLocal.artifactId], state.installing, busy, tools)
                 }
                 else -> {
                     ApkHeader(projectPath, ownerLogin, stringResource(R.string.gh_apk_title), "")
@@ -324,8 +340,8 @@ private fun ApkVariant(
                 accent = p.accent, track = p.onCard.copy(alpha = 0.12f), textColor = p.onCardMuted,
                 canPause = (transfer.progress ?: 0f) < 1f,
             )
-            local != null -> ApkActions(local, state.installing, busy, tools)
-            justDownloaded != null -> ApkActions(justDownloaded, state.installing, busy, tools)
+            local != null -> ApkActions(local, state.installInfo[local.artifactId], state.installing, busy, tools)
+            justDownloaded != null -> ApkActions(justDownloaded, state.installInfo[justDownloaded.artifactId], state.installing, busy, tools)
             else -> GhPrimaryButton(
                 onClick = { tools.downloadApk(ApkCandidate(a, universal)) },
                 enabled = !busy,
@@ -342,23 +358,24 @@ private fun ApkVariant(
     }
 }
 
-/** APK already on the device: big Install, plus open-folder (save) and a clearly separate Delete. */
+/** APK already on the device: big Install / Update / Open, plus open-folder (save) and a clearly separate Delete. */
 @Composable
-private fun ApkActions(d: DownloadedApk, installing: Boolean, busy: Boolean, tools: GitHubToolsController) {
+private fun ApkActions(d: DownloadedApk, info: ApkInstallInfo?, installing: Boolean, busy: Boolean, tools: GitHubToolsController) {
     val p = ghPalette()
+    val action = info?.action ?: ApkAction.Install
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
         GhPrimaryButton(
-            onClick = { tools.installDownloaded(d) },
+            onClick = { if (action == ApkAction.Open) tools.openInstalled(d) else tools.installDownloaded(d) },
             enabled = !busy,
             modifier = Modifier.weight(1f),
         ) {
             if (installing) {
                 CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = p.onInstall)
             } else {
-                Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(22.dp), tint = p.onInstall)
+                Icon(apkActionIcon(action), contentDescription = null, modifier = Modifier.size(22.dp), tint = p.onInstall)
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    stringResource(R.string.gh_install),
+                    stringResource(apkActionLabel(action)),
                     style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = p.onInstall,
                 )
             }
@@ -513,18 +530,21 @@ private fun ArtifactRow(a: GhArtifact, state: GitHubToolsState, tools: GitHubToo
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (local != null) {
+                        val action = state.installInfo[local.artifactId]?.action ?: ApkAction.Install
                         Row(
                             Modifier
                                 .height(40.dp)
                                 .alpha(if (busy) 0.45f else 1f)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(p.installBrush)
-                                .clickable(enabled = !busy, role = Role.Button) { tools.installDownloaded(local) }
+                                .clickable(enabled = !busy, role = Role.Button) {
+                                    if (action == ApkAction.Open) tools.openInstalled(local) else tools.installDownloaded(local)
+                                }
                                 .padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                stringResource(R.string.gh_install),
+                                stringResource(apkActionLabel(action)),
                                 style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = p.onInstall,
                             )
                         }

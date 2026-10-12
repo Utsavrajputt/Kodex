@@ -65,10 +65,13 @@ jobs:
 
       - name: Build unsigned release APKs
         shell: bash
+        env:
+          GIT_SHA: ${{ github.sha }}
         run: |
           ./gradlew assembleRelease \
             -PappVersionName="$VERSION_NAME" \
             -PappVersionCode="$VERSION_CODE" \
+            -PgitSha="$GIT_SHA" \
             --stacktrace --no-daemon
 
       - name: Sign and verify release APKs

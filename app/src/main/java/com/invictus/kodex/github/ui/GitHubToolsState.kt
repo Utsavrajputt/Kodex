@@ -9,6 +9,7 @@ import com.invictus.kodex.github.data.CleanupKind
 import com.invictus.kodex.github.data.CleanupPlan
 import com.invictus.kodex.github.data.CleanupResult
 import com.invictus.kodex.github.data.DispatchInfo
+import com.invictus.kodex.github.install.ApkInstallInfo
 import com.invictus.kodex.github.install.InspectResult
 import java.io.File
 import java.time.Instant
@@ -68,6 +69,8 @@ data class ReadyApk(
     val fromApkCard: Boolean,
     /** Install was started straight from the Install button: no details dialog / inline body is shown. */
     val silent: Boolean = false,
+    /** Commit the APK was built from; recorded as the installed commit once the installer succeeds. */
+    val buildSha: String? = null,
 )
 
 sealed interface ApkCardState {
@@ -144,6 +147,8 @@ data class GitHubToolsState(
     val busyDeploymentIds: Set<Long> = emptySet(),
 
     val downloaded: List<DownloadedApk> = emptyList(),
+    /** Install / Update / Open per downloaded artifact id (missing = not resolved yet, treated as Install). */
+    val installInfo: Map<Long, ApkInstallInfo> = emptyMap(),
 
     val cleanup: CleanupState = CleanupState(),
 )

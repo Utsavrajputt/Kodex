@@ -47,6 +47,9 @@
 
     <!-- Verified APK / install -->
     <string name="gh_install">Install</string>
+    <string name="gh_update">Update</string>
+    <string name="gh_open">Open</string>
+    <string name="gh_open_failed">Couldn\'t open the app</string>
     <string name="gh_save_to_folder">Save to folder</string>
     <string name="gh_ready_version">Version %1$s (%2$d)</string>
     <string name="gh_ready_install">New install.</string>

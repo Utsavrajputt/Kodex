@@ -30,6 +30,9 @@ import com.invictus.kodex.github.notify.GhBackground
 import com.invictus.kodex.github.notify.GhNotifier
 import com.invictus.kodex.github.install.ApkInspector
 import com.invictus.kodex.github.install.ApkInstaller
+import com.invictus.kodex.github.install.BuildSha
+import com.invictus.kodex.github.install.InstalledApps
+import com.invictus.kodex.github.install.InstalledBuilds
 import com.invictus.kodex.github.install.ArtifactZip
 import com.invictus.kodex.github.install.ArtifactZipException
 import com.invictus.kodex.github.install.InstallDecision
@@ -79,6 +82,8 @@ class GitHubToolsController(
     private val notifier = GhNotifier(appContext)
     private val inspector = ApkInspector(appContext)
     private val installer = ApkInstaller(appContext)
+    private val installedBuilds = InstalledBuilds(appContext)
+    private val installedApps = InstalledApps(appContext)
 
     private val dispatchCache = HashMap<String, DispatchInfo>()
     private var activeInfoKey: String? = null
@@ -119,7 +124,21 @@ class GitHubToolsController(
 
     private fun refreshDownloadedNow() {
         val list = downloader.listCached().map { DownloadedApk(it.artifactId, it.label, it.file, it.sizeBytes, it.modifiedAt) }
-        _state.update { it.copy(downloaded = list) }
+        val artifacts = _state.value.artifacts
+        val info = list.associate { d ->
+            d.artifactId to installedApps.resolve(d.file, buildShaOf(d.artifactId, d.label, artifacts), installedBuilds)
+        }
+        _state.update { it.copy(downloaded = list, installInfo = info) }
+    }
+
+    /** The commit of a build: the artifact's run commit, else the one its name ends with. */
+    private fun buildShaOf(artifactId: Long, label: String, artifacts: List<GhArtifact>): String? =
+        artifacts.firstOrNull { it.id == artifactId }?.sha?.takeIf { it.isNotBlank() } ?: BuildSha.fromArtifactName(label)
+
+    /** The Open button: launches the installed app of this downloaded APK. */
+    fun openInstalled(d: DownloadedApk) {
+        val pkg = _state.value.installInfo[d.artifactId]?.packageName
+        if (pkg == null || !installedApps.open(pkg)) emit(GhEvent.Snack(GhText.Res(R.string.gh_open_failed)))
     }
 
     fun refreshDownloaded() { scope.launch(Dispatchers.IO) { refreshDownloadedNow() } }
@@ -138,7 +157,8 @@ class GitHubToolsController(
                 return@launch
             }
             // Straight to the system installer: no details dialog. The system still asks for its own confirmation.
-            _state.update { it.copy(ready = ReadyApk(d.artifactId, d.label, d.file, inspected, fromApkCard = false, silent = true)) }
+            val sha = buildShaOf(d.artifactId, d.label, _state.value.artifacts)
+            _state.update { it.copy(ready = ReadyApk(d.artifactId, d.label, d.file, inspected, fromApkCard = false, silent = true, buildSha = sha)) }
             if (!installer.canRequestInstalls()) _state.update { it.copy(installDialog = InstallDialog.UnknownSources) }
             else startInstall()
         }
@@ -620,7 +640,8 @@ class GitHubToolsController(
             emit(GhEvent.Snack(GhText.Res(R.string.gh_apk_invalid)))
             return
         }
-        _state.update { it.copy(ready = ReadyApk(artifact.id, artifact.name, apk, inspected, fromApkCard)) }
+        val sha = artifact.sha?.takeIf { it.isNotBlank() } ?: BuildSha.fromArtifactName(artifact.name)
+        _state.update { it.copy(ready = ReadyApk(artifact.id, artifact.name, apk, inspected, fromApkCard, buildSha = sha)) }
     }
 
     private suspend fun prepareSave(zip: File, artifact: GhArtifact) {
@@ -711,6 +732,7 @@ class GitHubToolsController(
     private fun startInstall() {
         val r = _state.value.ready ?: return
         _state.update { it.copy(installing = true) }
+        installedBuilds.begin(r.inspect.info.packageName, r.buildSha)
         scope.launch {
             try {
                 // The package installer may replace this very app (killing the process): leave no stale bar behind.
@@ -732,6 +754,7 @@ class GitHubToolsController(
         when (result) {
             InstallResult.Success -> {
                 _state.update { it.copy(ready = null) }
+                refreshDownloaded() // the buttons turn into Open
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_install_ok)))
             }
             InstallResult.Cancelled -> emit(GhEvent.Snack(GhText.Res(R.string.gh_install_cancelled)))

@@ -48,9 +48,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.invictus.kodex.R
+import com.invictus.kodex.github.install.ApkAction
+import com.invictus.kodex.github.install.ApkInstallInfo
 import com.invictus.kodex.ui.icons.XIcons
 
 /** The latest build of every recent project's repo with all its ARM64 variants. */
@@ -63,6 +67,9 @@ fun AllApksScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
+
+    // Back from the installer or another app: an install / update may have happened there.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshDownloaded() }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { e ->
@@ -113,8 +120,10 @@ fun AllApksScreen(
                         transfer = state.transfer,
                         anyBusy = state.anyBusy,
                         downloaded = state.downloaded,
+                        installInfo = state.installInfo,
                         onDownload = viewModel::download,
                         onInstall = viewModel::install,
+                        onOpen = viewModel::open,
                         onDelete = viewModel::delete,
                         onPauseResume = { if (state.transfer?.paused == true) viewModel.resume() else viewModel.pause() },
                         onCancel = viewModel::cancel,
@@ -132,8 +141,10 @@ private fun BuildCard(
     transfer: RowTransfer?,
     anyBusy: Boolean,
     downloaded: Set<Long>,
+    installInfo: Map<Long, ApkInstallInfo>,
     onDownload: (ApkRow) -> Unit,
     onInstall: (ApkRow) -> Unit,
+    onOpen: (ApkRow) -> Unit,
     onDelete: (ApkRow) -> Unit,
     onPauseResume: () -> Unit,
     onCancel: () -> Unit,
@@ -152,9 +163,11 @@ private fun BuildCard(
                     row = row,
                     transfer = transfer?.takeIf { it.artifactId == row.artifact.id },
                     downloaded = row.artifact.id in downloaded,
+                    action = installInfo[row.artifact.id]?.action ?: ApkAction.Install,
                     anyBusy = anyBusy,
                     onDownload = { onDownload(row) },
                     onInstall = { onInstall(row) },
+                    onOpen = { onOpen(row) },
                     onDelete = { onDelete(row) },
                     onPauseResume = onPauseResume,
                     onCancel = onCancel,
@@ -169,9 +182,11 @@ private fun ApkVariantBlock(
     row: ApkRow,
     transfer: RowTransfer?,
     downloaded: Boolean,
+    action: ApkAction,
     anyBusy: Boolean,
     onDownload: () -> Unit,
     onInstall: () -> Unit,
+    onOpen: () -> Unit,
     onDelete: () -> Unit,
     onPauseResume: () -> Unit,
     onCancel: () -> Unit,
@@ -216,10 +231,13 @@ private fun ApkVariantBlock(
                 canPause = transfer.total <= 0 || transfer.downloaded < transfer.total,
             )
         } else if (downloaded) {
-            // On the device: Install, plus Delete.
+            // On the device: Install / Update / Open, plus Delete.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = onInstall, enabled = !anyBusy, modifier = Modifier.weight(1f).height(44.dp)) {
-                    Text(stringResource(R.string.gh_install), style = MaterialTheme.typography.labelLarge)
+                Button(
+                    onClick = if (action == ApkAction.Open) onOpen else onInstall,
+                    enabled = !anyBusy, modifier = Modifier.weight(1f).height(44.dp),
+                ) {
+                    Text(stringResource(apkActionLabel(action)), style = MaterialTheme.typography.labelLarge)
                 }
                 FilledTonalIconButton(
                     onClick = onDelete, enabled = !anyBusy, modifier = Modifier.size(44.dp),

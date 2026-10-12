@@ -113,6 +113,8 @@ class InstallResultReceiver : BroadcastReceiver() {
                 }
             }
             PackageInstaller.STATUS_SUCCESS -> {
+                // Remember which commit now runs, before anyone reacts to the event.
+                InstalledBuilds(context).commit(context, intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME))
                 InstallEvents.emit(InstallResult.Success)
                 GhNotifier(context).result(
                     GhNotifier.KIND_INSTALL, context.getString(R.string.gh_notif_install_ok_title),

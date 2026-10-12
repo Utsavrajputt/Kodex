@@ -51,7 +51,11 @@ jobs:
         run: ./gradlew testDebugUnitTest --no-daemon
 
       - name: Build unsigned release APKs
-        run: ./gradlew assembleRelease --stacktrace --no-daemon
+        shell: bash
+        env:
+          # Same commit GitHub reports as the run's head_sha (the PR head, not the merge commit).
+          GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: ./gradlew assembleRelease -PgitSha="$GIT_SHA" --stacktrace --no-daemon
 
       # Each ABI gets its own APK with only its own native libs, plus a universal one.
       # Fork PRs have no secrets, so those APKs are simply left unsigned.

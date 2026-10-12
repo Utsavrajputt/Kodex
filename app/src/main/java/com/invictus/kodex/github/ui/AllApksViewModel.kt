@@ -19,7 +19,12 @@ import com.invictus.kodex.github.data.GitHubRepository
 import com.invictus.kodex.github.data.GitHubResolution
 import com.invictus.kodex.github.install.ApkDownloader
 import com.invictus.kodex.github.install.ApkInspector
+import com.invictus.kodex.github.install.ApkInstallInfo
 import com.invictus.kodex.github.install.ApkInstaller
+import com.invictus.kodex.github.install.BuildSha
+import com.invictus.kodex.github.install.InstallEvents
+import com.invictus.kodex.github.install.InstalledApps
+import com.invictus.kodex.github.install.InstalledBuilds
 import com.invictus.kodex.github.install.ArtifactZipException
 import com.invictus.kodex.github.install.InstallDecision
 import com.invictus.kodex.github.notify.ArmBuildWatch
@@ -102,6 +107,8 @@ data class AllApksState(
     val transfer: RowTransfer? = null,
     /** Artifact ids whose APK is already on the device (row shows Install + Delete instead of Download). */
     val downloaded: Set<Long> = emptySet(),
+    /** Install / Update / Open for each downloaded artifact id. */
+    val installInfo: Map<Long, ApkInstallInfo> = emptyMap(),
 ) {
     /** A running download blocks the other buttons; a paused one does not. */
     val anyBusy: Boolean get() = transfer?.paused == false
@@ -131,20 +138,36 @@ class AllApksViewModel(
     private val downloader = ApkDownloader(appContext.filesDir)
     private val inspector = ApkInspector(appContext)
     private val installer = ApkInstaller(appContext)
+    private val installedBuilds = InstalledBuilds(appContext)
+    private val installedApps = InstalledApps(appContext)
     private val notifier = GhNotifier(appContext)
     private var transferJob: Job? = null
 
     init {
         ArmBuildWatch.schedule(appContext)
         refreshDownloaded()
+        // An install finished (Install -> Open) while this screen is open.
+        viewModelScope.launch { InstallEvents.results.collect { refreshDownloaded() } }
         load()
     }
 
-    private fun refreshDownloaded() {
+    /** Also called from the screen on resume: the app may have been installed or updated elsewhere. */
+    fun refreshDownloaded() {
         viewModelScope.launch(Dispatchers.IO) {
-            val ids = downloader.listCached().map { it.artifactId }.toSet()
-            _state.update { it.copy(downloaded = ids) }
+            val cached = downloader.listCached()
+            val rows = _state.value.builds.flatMap { it.variants }.associateBy { it.artifact.id }
+            val info = cached.associate { c ->
+                val sha = rows[c.artifactId]?.artifact?.sha?.takeIf { it.isNotBlank() } ?: BuildSha.fromArtifactName(c.label)
+                c.artifactId to installedApps.resolve(c.file, sha, installedBuilds)
+            }
+            _state.update { it.copy(downloaded = cached.map { c -> c.artifactId }.toSet(), installInfo = info) }
         }
+    }
+
+    /** The Open button of a row. */
+    fun open(row: ApkRow) {
+        val pkg = _state.value.installInfo[row.artifact.id]?.packageName
+        if (pkg == null || !installedApps.open(pkg)) _events.tryEmit(AllApksEvent.Snack(R.string.gh_open_failed))
     }
 
     fun load() {
@@ -179,6 +202,7 @@ class AllApksViewModel(
                 _state.update {
                     it.copy(loading = false, builds = builds, error = if (repos.isEmpty()) R.string.apks_no_repos else null)
                 }
+                refreshDownloaded() // now that the builds' commits are known
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -297,6 +321,7 @@ class AllApksViewModel(
                         )
                         // The package installer may replace this very app (killing the process): leave no stale bar behind.
                         notifier.clearLive()
+                        installedBuilds.begin(inspected.info.packageName, row.artifact.sha?.takeIf { it.isNotBlank() } ?: BuildSha.fromArtifactName(row.artifact.name))
                         installer.install(apk)
                     }
                 }
