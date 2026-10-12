@@ -45,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -76,11 +77,15 @@ import com.invictus.kodex.ai.provider.AiRequest
 import com.invictus.kodex.ai.provider.ModelInfo
 import com.invictus.kodex.ai.provider.ModelList
 import com.invictus.kodex.ai.provider.ProviderRegistry
+import com.invictus.kodex.ai.usage.UsageLedger
+import com.invictus.kodex.ai.usage.UsageStore
+import com.invictus.kodex.ai.usage.UsageView
 import com.invictus.kodex.ai.ui.chat.AiTag
 import com.invictus.kodex.ai.ui.chat.TierTag
 import com.invictus.kodex.ui.icons.XIcons
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -126,6 +131,10 @@ class AiSettingsViewModel(
     val keyHint: StateFlow<Map<String, String>> = _keyHint.asStateFlow()
 
     val usage: StateFlow<AiUsage.Snapshot> = AiUsage.state
+    val ledger = UsageStore.ledger
+    val dailyLimits = UsageStore.limits
+
+    fun setDailyLimit(provider: String, model: String, limit: Int) = UsageStore.setDailyLimit(provider, model, limit)
 
     private val _messages = MutableStateFlow<String?>(null)
     val messages: StateFlow<String?> = _messages.asStateFlow()
@@ -263,6 +272,10 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
     val keyHint by vm.keyHint.collectAsState()
     val test by vm.test.collectAsState()
     val usage by vm.usage.collectAsState()
+    val ledger by vm.ledger.collectAsState()
+    val dailyLimits by vm.dailyLimits.collectAsState()
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { delay(30_000); nowMs = System.currentTimeMillis() } }
     val snackbar = remember { SnackbarHostState() }
     val message by vm.messages.collectAsState()
     val uriHandler = LocalUriHandler.current
@@ -339,6 +352,13 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                     HeroCheck(keySaved, if (keySaved) "API key saved" else "Add an API key to begin")
                     HeroCheck(consent, if (consent) "AI allowed in projects" else "Turn on \"Allow AI in projects\" below")
                     activeModel?.let { HeroCheck(true, ModelInfo.contextLabel(it.maxContextChars) + " window") }
+                    HeroUsage(
+                        view = UsageLedger.view(ledger, dailyLimits, providerId, activeId, nowMs),
+                        nowMs = nowMs,
+                        contextTokens = usage.lastRequestTokens,
+                        contextWindowTokens = activeModel?.let { it.maxContextChars / 4 } ?: 0,
+                        resetsOnPacific = providerId == "gemini",
+                    )
                 }
             }
 
@@ -500,6 +520,14 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                         warn = true,
                     )
                 }
+                SyncedTextField(
+                    value = dailyLimits[UsageLedger.key(providerId, activeId)]?.toString().orEmpty(),
+                    onValueChange = { vm.setDailyLimit(providerId, activeId, it.filter(Char::isDigit).take(7).toIntOrNull() ?: 0) },
+                    label = { Text("Daily request limit (optional)") },
+                    supportingText = { Text("Your plan's real cap for this model. Leave empty to use Kodex's rough default, if there is one.") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 TextButton(onClick = { vm.resetUsage() }, enabled = usage.requests > 0 || usage.rateLimitHits > 0) { Text("Reset counters") }
             }
 
@@ -610,6 +638,50 @@ private fun HeroCheck(ok: Boolean, text: String) {
         )
         Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(start = 8.dp))
     }
+}
+
+/** Today / this month / last-request-vs-window block for the status card. Token numbers are estimates. */
+@Composable
+private fun HeroUsage(view: UsageView, nowMs: Long, contextTokens: Int, contextWindowTokens: Int, resetsOnPacific: Boolean) {
+    val onHero = MaterialTheme.colorScheme.onPrimaryContainer
+    HorizontalDivider(Modifier.padding(vertical = 10.dp), color = onHero.copy(alpha = 0.2f))
+    val limit = view.dailyLimit
+    Text(
+        "Today: ${view.day.requests}" + (if (limit != null) " / $limit" else "") + " requests · ~" +
+            ModelInfo.formatTokens(view.day.tokens) + " tokens",
+        style = MaterialTheme.typography.bodyMedium, color = onHero, fontWeight = FontWeight.Medium,
+    )
+    view.dailyFraction?.let { f ->
+        val warn = f >= 0.8f
+        LinearProgressIndicator(
+            progress = { f.coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp).height(6.dp).clip(RoundedCornerShape(3.dp)),
+            color = if (warn) MaterialTheme.colorScheme.error else onHero,
+            trackColor = onHero.copy(alpha = 0.15f),
+        )
+    }
+    view.resetAtMillis?.let { at ->
+        Text(
+            "Daily quota resets in ${UsageLedger.formatRemaining(at - nowMs)}" +
+                (if (resetsOnPacific) " (midnight Pacific)" else "") +
+                (if (view.limitIsCustom) "" else " · limit is a rough guess"),
+            style = MaterialTheme.typography.labelSmall, color = onHero.copy(alpha = 0.75f), modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+    Text(
+        "This month: ${view.month.requests} requests · ~" + ModelInfo.formatTokens(view.month.tokens) + " tokens",
+        style = MaterialTheme.typography.bodySmall, color = onHero, modifier = Modifier.padding(top = 8.dp),
+    )
+    if (contextWindowTokens > 0 && contextTokens > 0) {
+        Text(
+            "Last request: ~${ModelInfo.formatTokens(contextTokens.toLong())} of ${ModelInfo.formatTokens(contextWindowTokens.toLong())} window",
+            style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.85f), modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+    Text(
+        "The ~250K figure is the window per request, not a daily or monthly allowance. Tokens are estimates.",
+        style = MaterialTheme.typography.labelSmall, color = onHero.copy(alpha = 0.6f), modifier = Modifier.padding(top = 6.dp),
+    )
 }
 
 @Composable

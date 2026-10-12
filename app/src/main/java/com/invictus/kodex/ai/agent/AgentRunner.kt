@@ -131,7 +131,7 @@ class AgentRunner(
                 }
                 continue
             }
-            AiUsage.recordRequest(inChars, text.length)
+            AiUsage.recordRequest(provider.id, model, inChars, text.length)
             sink.onUsage(AiUsage.estimateTokens(inChars), AiUsage.estimateTokens(text.length))
             if (!tooLong) return text.toString() to calls
             if (squeezed) throw AiException(AiError.ContextTooLong())

@@ -21,6 +21,7 @@ class KodexApp : Application() {
         super.onCreate()
         com.invictus.kodex.ai.AiSwitch.init(this)
         com.invictus.kodex.ai.AiFlavor.init(this)
+        com.invictus.kodex.ai.usage.UsageStore.init(this)
         CrashHandler.install(this)
         GitLog.init(this)
         ThemeSettings.init(this)

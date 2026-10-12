@@ -1,12 +1,13 @@
 package com.invictus.kodex.ai.agent
 
+import com.invictus.kodex.ai.usage.UsageStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 /**
- * In-memory usage counters for this app session (reset on app restart or via [reset]).
+ * Session counters (reset on app restart or via [reset]); daily/monthly totals live in [UsageStore].
  * Token counts are estimates (about 4 characters per token) — providers bill by their own tokenizer,
  * so treat them as a guide, not an invoice.
  */
@@ -30,7 +31,13 @@ object AiUsage {
 
     fun estimateTokens(chars: Int): Int = (chars + 3) / 4
 
-    fun recordRequest(inputChars: Int, outputChars: Int) = _state.update {
+    /** Counts one request in the session snapshot and in the persistent daily/monthly ledger. */
+    fun recordRequest(provider: String, model: String, inputChars: Int, outputChars: Int) {
+        UsageStore.record(provider, model, estimateTokens(inputChars), estimateTokens(outputChars))
+        recordSession(inputChars, outputChars)
+    }
+
+    private fun recordSession(inputChars: Int, outputChars: Int) = _state.update {
         val inTok = estimateTokens(inputChars)
         it.copy(
             requests = it.requests + 1,

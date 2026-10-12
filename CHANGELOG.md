@@ -11,6 +11,7 @@ pick the matching section as the GitHub Release notes.
 ## [Unreleased]
 
 ### ✨ Added
+- 📊 **AI usage in the status card** — Settings → AI now shows requests and estimated tokens used today and this month, a daily request meter with a reset countdown (Gemini resets at midnight Pacific), and the last request against the model's context window. Counters survive app restarts; the daily limit can be overridden per model.
 - 🤖 **AI Agent on the workspace screen** — a new ✨ button opens a full-screen agent that searches, lists and reads your whole project (never-send globs and secret redaction still apply) and can edit, create and delete several files in one reply. Native tool calling on Claude, OpenAI and Gemini, up to 15 tool rounds per message, live steps ("Reading Foo.kt", "Editing Bar.kt").
 - 🔍 **One review for every change** — all files the AI touched appear in a single sheet with per-file and per-hunk checkboxes. Nothing is written until you tap Apply selected; changes to open tabs go through the editor buffer, stale files are refused, and a one-tap **Undo** restores everything.
 - 💬 **Premium chat** — full Markdown (headings, lists, tables, quotes, bold/italic/links), syntax-highlighted code blocks with **Copy** and **Apply to file**, `@file` mentions and an attach picker, regenerate / copy / edit-and-resend, and **saved chats per project**.
