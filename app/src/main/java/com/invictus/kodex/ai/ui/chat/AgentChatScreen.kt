@@ -2,7 +2,26 @@
 
 package com.invictus.kodex.ai.ui.chat
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import coil.compose.AsyncImage
+import com.invictus.kodex.ai.provider.ChatImage
+import java.io.File
+import java.util.Calendar
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.drawBehind
@@ -39,7 +58,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
@@ -151,6 +169,7 @@ fun AgentChatContent(
 
     var input by remember { mutableStateOf("") }
     val attached = remember { mutableStateListOf<String>() }
+    val images = remember { mutableStateListOf<ChatImage>() }
     var ownHistory by remember { mutableStateOf(false) }
     val showHistory = historyOpen ?: ownHistory
     val setHistory: (Boolean) -> Unit = { open ->
@@ -163,7 +182,12 @@ fun AgentChatContent(
 
     // A new chat (from anywhere, e.g. the host's top bar) starts with an empty draft.
     LaunchedEffect(newChatEpoch) {
-        if (newChatEpoch > 0) { input = ""; attached.clear() }
+        if (newChatEpoch > 0) {
+            input = ""
+            attached.clear()
+            images.forEach { vm.discardImage(it) }
+            images.clear()
+        }
     }
 
     // Provider, model, key and consent are edited in Settings; pick the change up when we come back.
@@ -229,10 +253,12 @@ fun AgentChatContent(
                             busy = busy,
                             onRegenerate = { vm.regenerate() },
                             onEdit = {
-                                vm.editFrom(m.id)?.let { (t, atts) ->
-                                    input = t
+                                vm.editFrom(m.id)?.let { d ->
+                                    input = d.text
                                     attached.clear()
-                                    attached.addAll(atts)
+                                    attached.addAll(d.files)
+                                    images.clear()
+                                    images.addAll(d.images)
                                 }
                             },
                             onApplyCode = { _, code -> applyDialog = code },
@@ -323,29 +349,55 @@ fun AgentChatContent(
                 }
             }
         }
-        if (attached.isNotEmpty()) {
-            LazyRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(attached.toList()) { path ->
-                    InputChip(
-                        selected = false,
-                        onClick = { attached.remove(path) },
-                        label = { Text(path.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        trailingIcon = { Icon(XIcons.Close, contentDescription = stringResource(R.string.ai_settings_remove), modifier = Modifier.size(16.dp)) },
-                    )
-                }
-            }
+        val scope = rememberCoroutineScope()
+        val photoPicker = rememberLauncherForActivityResult(
+            ActivityResultContracts.PickMultipleVisualMedia(AgentChatViewModel.MAX_IMAGES),
+        ) { uris ->
+            val room = AgentChatViewModel.MAX_IMAGES - images.size
+            scope.launch { uris.take(room).forEach { u -> vm.importImage(u)?.let { images.add(it) } } }
         }
+        var plusMenu by remember { mutableStateOf(false) }
+        val cs = MaterialTheme.colorScheme
+        // Like Claude: one rounded card. Photos / file chips and the text on top, then a row with + on the left
+        // and the model pill + send/stop on the right.
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            color = cs.surfaceContainerHigh,
+            border = BorderStroke(1.dp, cs.outlineVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
         ) {
-            // Like Claude: the text on top, then one row with attach on the left and model + send on the right.
             Column {
+                if (images.isNotEmpty()) {
+                    LazyRow(
+                        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(images.toList(), key = { it.path }) { img ->
+                            DraftPhoto(img, onRemove = { images.remove(img); vm.discardImage(img) })
+                        }
+                    }
+                }
+                if (attached.isNotEmpty()) {
+                    LazyRow(
+                        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        items(attached.toList()) { path ->
+                            InputChip(
+                                selected = false,
+                                onClick = { attached.remove(path) },
+                                label = { Text(path.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                trailingIcon = { Icon(XIcons.Close, contentDescription = stringResource(R.string.ai_settings_remove), modifier = Modifier.size(16.dp)) },
+                            )
+                        }
+                    }
+                }
                 TextField(
                     value = input,
                     onValueChange = { input = it },
-                    placeholder = { Text(stringResource(R.string.ai_chat_ask_the_agent_to_mention)) },
+                    placeholder = {
+                        Text(stringResource(R.string.ai_chat_ask_the_agent_to_mention), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    },
                     maxLines = 6,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = Color.Transparent,
@@ -357,27 +409,57 @@ fun AgentChatContent(
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { vm.refreshIndex(); showPicker = true }) {
-                        Icon(XIcons.Add, contentDescription = stringResource(R.string.ai_chat_attach_files))
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box {
+                        ComposerCircleButton(XIcons.Add, stringResource(R.string.ai_chat_attach_files)) { plusMenu = true }
+                        DropdownMenu(expanded = plusMenu, onDismissRequest = { plusMenu = false }) {
+                            val canPick = status.canSeeImages && images.size < AgentChatViewModel.MAX_IMAGES
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(stringResource(R.string.ai_chat_photos))
+                                        val hint = when {
+                                            !status.canSeeImages -> stringResource(R.string.ai_chat_photos_unsupported)
+                                            images.size >= AgentChatViewModel.MAX_IMAGES -> stringResource(R.string.ai_chat_photos_max, AgentChatViewModel.MAX_IMAGES)
+                                            else -> null
+                                        }
+                                        if (hint != null) Text(hint, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+                                    }
+                                },
+                                leadingIcon = { Icon(XIcons.Image, contentDescription = null) },
+                                enabled = canPick,
+                                onClick = {
+                                    plusMenu = false
+                                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.ai_chat_attach_files)) },
+                                leadingIcon = { Icon(XIcons.Article, contentDescription = null) },
+                                onClick = { plusMenu = false; vm.refreshIndex(); showPicker = true },
+                            )
+                        }
                     }
                     Spacer(Modifier.weight(1f))
                     if (status.loaded) {
                         ModelChip(status.modelLabel, onClick = { vm.refreshStatus(); showModels = true })
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.width(8.dp))
                     }
-                    if (busy) {
-                        FilledIconButton(onClick = { vm.stop() }) { Icon(XIcons.StopCircle, contentDescription = stringResource(R.string.ai_chat_stop)) }
-                    } else {
-                        FilledIconButton(
-                            enabled = input.isNotBlank(),
-                            onClick = {
-                                vm.send(input, attached.toList())
+                    SendStopButton(
+                        busy = busy,
+                        canSend = input.isNotBlank(),
+                        onSend = {
+                            if (vm.send(input, attached.toList(), images.toList())) {
                                 input = ""
                                 attached.clear()
-                            },
-                        ) { Icon(XIcons.Send, contentDescription = stringResource(R.string.ai_chat_send)) }
-                    }
+                                images.clear()
+                            }
+                        },
+                        onStop = { vm.stop() },
+                    )
                 }
             }
         }
@@ -569,13 +651,30 @@ private fun MessageItem(
     if (m.role == "user") {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
             Surface(shape = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-                SelectionContainer {
-                    Text(
-                        m.text,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.widthIn(max = 320.dp).padding(horizontal = 14.dp, vertical = 10.dp),
-                    )
+                Column(
+                    Modifier.widthIn(max = 320.dp).padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (m.images.isNotEmpty()) {
+                        val side = if (m.images.size == 1) 168.dp else 96.dp
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            m.images.forEach { img ->
+                                AsyncImage(
+                                    model = File(img.path),
+                                    contentDescription = stringResource(R.string.ai_chat_photo),
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(side).clip(RoundedCornerShape(12.dp)),
+                                )
+                            }
+                        }
+                    }
+                    SelectionContainer {
+                        Text(
+                            m.text,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
             }
             if (m.attachments.isNotEmpty()) {
@@ -724,6 +823,26 @@ private fun StepsBlock(m: UiMessage) {
     }
 }
 
+private enum class DayGroup { TODAY, YESTERDAY, WEEK, EARLIER }
+
+private fun dayGroup(ts: Long): DayGroup {
+    val cal = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }
+    val today = cal.timeInMillis
+    cal.add(Calendar.DAY_OF_YEAR, -1)
+    val yesterday = cal.timeInMillis
+    cal.add(Calendar.DAY_OF_YEAR, -5)
+    val week = cal.timeInMillis
+    return when {
+        ts >= today -> DayGroup.TODAY
+        ts >= yesterday -> DayGroup.YESTERDAY
+        ts >= week -> DayGroup.WEEK
+        else -> DayGroup.EARLIER
+    }
+}
+
+/** Claude-style history: a full-height sheet, chats grouped by day, quiet rows with a subtle delete. */
 @Composable
 private fun ChatHistorySheet(
     chats: List<com.invictus.kodex.ai.agent.ChatMeta>,
@@ -732,27 +851,145 @@ private fun ChatHistorySheet(
     onNew: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.ai_chat_chats), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Button(onClick = onNew) { Text(stringResource(R.string.ai_chat_new_chat)) }
+    val cs = MaterialTheme.colorScheme
+    val grouped = remember(chats) { chats.groupBy { dayGroup(it.updatedAt) }.entries.toList() }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight(0.92f)) {
+            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.ai_chat_chats), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Button(onClick = onNew) {
+                    Icon(XIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text(stringResource(R.string.ai_chat_new_chat), modifier = Modifier.padding(start = 6.dp))
+                }
             }
-            if (chats.isEmpty()) Text(stringResource(R.string.ai_chat_no_saved_chats_yet), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 12.dp))
-            LazyColumn(Modifier.height(360.dp)) {
-                items(chats, key = { it.id }) { c ->
-                    Row(Modifier.fillMaxWidth().clickable { onOpen(c.id) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(c.title.ifBlank { stringResource(R.string.ai_chat_chat) }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (chats.isEmpty()) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text(stringResource(R.string.ai_chat_no_saved_chats_yet), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+                }
+            } else {
+                LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp)) {
+                    grouped.forEach { (group, list) ->
+                        item(key = "header_$group") {
                             Text(
-                                DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(c.updatedAt)),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                stringResource(
+                                    when (group) {
+                                        DayGroup.TODAY -> R.string.ai_chat_today
+                                        DayGroup.YESTERDAY -> R.string.ai_chat_yesterday
+                                        DayGroup.WEEK -> R.string.ai_chat_previous_7_days
+                                        DayGroup.EARLIER -> R.string.ai_chat_earlier
+                                    },
+                                ),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = cs.primary,
+                                modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 4.dp),
                             )
                         }
-                        IconButton(onClick = { onDelete(c.id) }) { Icon(XIcons.Delete, contentDescription = stringResource(R.string.ai_chat_delete_chat)) }
+                        items(list, key = { it.id }) { c ->
+                            val recent = group == DayGroup.TODAY || group == DayGroup.YESTERDAY
+                            val whenText = if (recent) DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(c.updatedAt))
+                            else DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(c.updatedAt))
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { onOpen(c.id) }
+                                    .padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        c.title.ifBlank { stringResource(R.string.ai_chat_chat) },
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(whenText, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+                                }
+                                IconButton(onClick = { onDelete(c.id) }) {
+                                    Icon(
+                                        XIcons.Delete,
+                                        contentDescription = stringResource(R.string.ai_chat_delete_chat),
+                                        tint = cs.onSurfaceVariant.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Outlined round button (the + in the input card). */
+@Composable
+private fun ComposerCircleButton(icon: ImageVector, description: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = Color.Transparent,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier.size(40.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = description, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+/**
+ * Send (arrow up) while idle, Stop (a small rounded square in a filled circle, with a slowly turning ring)
+ * while the answer is streaming. Muted and inert when there is nothing to send.
+ */
+@Composable
+private fun SendStopButton(busy: Boolean, canSend: Boolean, onSend: () -> Unit, onStop: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val active = busy || canSend
+    val stopLabel = stringResource(R.string.ai_chat_stop)
+    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        if (busy) CircularProgressIndicator(Modifier.size(40.dp), strokeWidth = 2.dp, color = cs.primary, trackColor = Color.Transparent)
+        Surface(
+            onClick = if (busy) onStop else onSend,
+            enabled = active,
+            shape = CircleShape,
+            color = if (active) cs.primary else cs.surfaceVariant,
+            modifier = Modifier.size(if (busy) 32.dp else 40.dp),
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                if (busy) {
+                    Box(
+                        Modifier.size(12.dp).clip(RoundedCornerShape(3.dp)).background(cs.onPrimary)
+                            .semantics { contentDescription = stopLabel },
+                    )
+                } else {
+                    Icon(
+                        XIcons.ArrowUpward,
+                        contentDescription = stringResource(R.string.ai_chat_send),
+                        tint = if (canSend) cs.onPrimary else cs.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A photo waiting in the input card, with a small remove button in its corner. */
+@Composable
+private fun DraftPhoto(img: ChatImage, onRemove: () -> Unit) {
+    Box(Modifier.size(68.dp)) {
+        AsyncImage(
+            model = File(img.path),
+            contentDescription = stringResource(R.string.ai_chat_photo),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)),
+        )
+        Surface(
+            onClick = onRemove,
+            shape = CircleShape,
+            color = Color.Black.copy(alpha = 0.6f),
+            modifier = Modifier.align(Alignment.TopEnd).padding(3.dp).size(20.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(XIcons.Close, contentDescription = stringResource(R.string.ai_chat_remove_photo), tint = Color.White, modifier = Modifier.size(12.dp))
             }
         }
     }

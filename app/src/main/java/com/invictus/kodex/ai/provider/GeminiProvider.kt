@@ -148,7 +148,15 @@ class GeminiProvider : AiProvider {
             while (i < msgs.size) {
                 when (val m = msgs[i]) {
                     is AgentMessage.User -> {
-                        out.put(JSONObject().put("role", "user").put("parts", JSONArray(listOf(JSONObject().put("text", m.text)))))
+                        val parts = JSONArray()
+                        // Images first, then the question (Google's recommended order for image prompts).
+                        m.images.forEach { img ->
+                            img.base64()?.let { data ->
+                                parts.put(JSONObject().put("inlineData", JSONObject().put("mimeType", img.mime).put("data", data)))
+                            }
+                        }
+                        parts.put(JSONObject().put("text", m.text))
+                        out.put(JSONObject().put("role", "user").put("parts", parts))
                         i++
                     }
                     is AgentMessage.Assistant -> {

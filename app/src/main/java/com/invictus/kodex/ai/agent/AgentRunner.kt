@@ -50,6 +50,8 @@ class AgentRunner(
     private val tools: AgentTools,
     private val budgetChars: Int,
     private val maxRounds: Int = MAX_ROUNDS,
+    /** False when the model can't read images: photos in the transcript are replaced by a short note. */
+    private val sendImages: Boolean = true,
 ) {
     private val skip = Channel<Unit>(Channel.CONFLATED)
 
@@ -102,7 +104,7 @@ class AgentRunner(
             var tooLong = false
             var rateLimit: AiError.RateLimited? = null
             val inChars = system.length + historyChars(history)
-            provider.streamAgent(key, model, system, history.toList(), specs).collect { ev ->
+            provider.streamAgent(key, model, system, outgoing(history), specs).collect { ev ->
                 when (ev) {
                     is AgentEvent.Delta -> { text.append(ev.text); sink.onText(ev.text) }
                     is AgentEvent.Call -> calls += ev.call
@@ -140,9 +142,16 @@ class AgentRunner(
         }
     }
 
+    private fun outgoing(history: List<AgentMessage>): List<AgentMessage> =
+        if (sendImages) history.toList() else history.map { m ->
+            if (m is AgentMessage.User && m.images.isNotEmpty()) {
+                m.copy(images = emptyList(), text = m.text + "\n\n(${m.images.size} attached image(s) omitted: the current model can't read images.)")
+            } else m
+        }
+
     private fun historyChars(history: List<AgentMessage>): Int = history.sumOf { m ->
         when (m) {
-            is AgentMessage.User -> m.text.length
+            is AgentMessage.User -> m.text.length + m.images.size * Compactor.IMAGE_CHARS
             is AgentMessage.Assistant -> m.text.length + m.calls.sumOf { it.args.toString().length }
             is AgentMessage.ToolResult -> m.content.length
         }

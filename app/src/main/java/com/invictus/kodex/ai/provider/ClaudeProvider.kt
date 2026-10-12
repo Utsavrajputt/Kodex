@@ -118,7 +118,21 @@ class ClaudeProvider : AiProvider {
             while (i < msgs.size) {
                 when (val m = msgs[i]) {
                     is AgentMessage.User -> {
-                        out.put(JSONObject().put("role", "user").put("content", m.text))
+                        val encoded = m.images.mapNotNull { img -> img.base64()?.let { img.mime to it } }
+                        if (encoded.isEmpty()) {
+                            out.put(JSONObject().put("role", "user").put("content", m.text))
+                        } else {
+                            val blocks = JSONArray()
+                            encoded.forEach { (mime, data) ->
+                                blocks.put(
+                                    JSONObject().put("type", "image").put(
+                                        "source", JSONObject().put("type", "base64").put("media_type", mime).put("data", data),
+                                    ),
+                                )
+                            }
+                            blocks.put(JSONObject().put("type", "text").put("text", m.text))
+                            out.put(JSONObject().put("role", "user").put("content", blocks))
+                        }
                         i++
                     }
                     is AgentMessage.Assistant -> {

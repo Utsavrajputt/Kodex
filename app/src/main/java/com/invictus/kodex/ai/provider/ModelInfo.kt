@@ -18,6 +18,18 @@ object ModelInfo {
         }
     }
 
+    /** Whether this model accepts photos. Claude and Gemini chat models all do; OpenAI's older/text-only ids don't. */
+    fun supportsImages(providerId: String, modelId: String): Boolean {
+        val l = modelId.lowercase()
+        return when (providerId) {
+            "claude" -> true
+            "gemini" -> l.startsWith("gemini") && "embedding" !in l
+            "openai" -> listOf("gpt-3", "o1-mini", "o1-preview", "o3-mini", "instruct", "embedding", "audio", "tts", "whisper", "davinci")
+                .none { l.startsWith(it) || it in l }
+            else -> false
+        }
+    }
+
     /** 1_000_000 → "1M", 200_000 → "200K", 850 → "850". */
     fun formatTokens(n: Long): String = when {
         n >= 1_000_000 -> trim(String.format(Locale.US, "%.1f", n / 1_000_000.0)) + "M"

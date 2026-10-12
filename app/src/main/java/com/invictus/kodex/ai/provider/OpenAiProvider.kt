@@ -104,7 +104,21 @@ class OpenAiProvider : AiProvider {
         fun toMessages(msgs: List<AgentMessage>): JSONArray = JSONArray().also { out ->
             msgs.forEach { m ->
                 when (m) {
-                    is AgentMessage.User -> out.put(JSONObject().put("role", "user").put("content", m.text))
+                    is AgentMessage.User -> {
+                        val encoded = m.images.mapNotNull { img -> img.base64()?.let { img.mime to it } }
+                        if (encoded.isEmpty()) {
+                            out.put(JSONObject().put("role", "user").put("content", m.text))
+                        } else {
+                            val parts = JSONArray().put(JSONObject().put("type", "text").put("text", m.text))
+                            encoded.forEach { (mime, data) ->
+                                parts.put(
+                                    JSONObject().put("type", "image_url")
+                                        .put("image_url", JSONObject().put("url", "data:$mime;base64,$data")),
+                                )
+                            }
+                            out.put(JSONObject().put("role", "user").put("content", parts))
+                        }
+                    }
                     is AgentMessage.Assistant -> out.put(
                         JSONObject().put("role", "assistant")
                             .put("content", if (m.text.isBlank()) JSONObject.NULL else m.text)

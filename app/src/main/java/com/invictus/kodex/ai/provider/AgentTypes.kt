@@ -17,7 +17,7 @@ data class ToolCall(
 
 /** Provider-neutral agent transcript. Each provider maps it to its own wire format. */
 sealed interface AgentMessage {
-    data class User(val text: String) : AgentMessage
+    data class User(val text: String, val images: List<ChatImage> = emptyList()) : AgentMessage
     data class Assistant(val text: String, val calls: List<ToolCall> = emptyList()) : AgentMessage
     data class ToolResult(
         val callId: String,

@@ -6,9 +6,12 @@ import com.invictus.kodex.ai.provider.AgentMessage
 object Compactor {
     const val STUB = "[older tool output omitted to save context]"
 
+    /** Rough context cost of one attached photo, in characters (about 1K tokens). */
+    const val IMAGE_CHARS = 4_000
+
     fun totalChars(history: List<AgentMessage>): Int = history.sumOf {
         when (it) {
-            is AgentMessage.User -> it.text.length
+            is AgentMessage.User -> it.text.length + it.images.size * IMAGE_CHARS
             is AgentMessage.Assistant -> it.text.length + it.calls.sumOf { c -> c.args.toString().length }
             is AgentMessage.ToolResult -> it.content.length
         }

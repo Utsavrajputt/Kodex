@@ -783,6 +783,15 @@
     <string name="ai_chat_saved">Saved</string>
     <string name="ai_chat_searches_your_project">Searches your project</string>
     <string name="ai_chat_send">Send</string>
+    <string name="ai_chat_photos">Photos</string>
+    <string name="ai_chat_photos_unsupported">This model can\'t read images</string>
+    <string name="ai_chat_photos_max">Up to %1$d photos per message</string>
+    <string name="ai_chat_photo">Photo</string>
+    <string name="ai_chat_remove_photo">Remove photo</string>
+    <string name="ai_chat_today">Today</string>
+    <string name="ai_chat_yesterday">Yesterday</string>
+    <string name="ai_chat_previous_7_days">Previous 7 days</string>
+    <string name="ai_chat_earlier">Earlier</string>
     <string name="ai_chat_set_up_ai_to_get">Set up AI to get started</string>
     <string name="ai_chat_show_steps">Show steps</string>
     <string name="ai_chat_steps_failed">" · %1$s failed"</string>

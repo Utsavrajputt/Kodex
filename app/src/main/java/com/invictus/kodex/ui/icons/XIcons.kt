@@ -95,6 +95,10 @@ object XIcons {
     val ArrowUpward: ImageVector by lazy {
         icon("ArrowUpward", "M4,12l1.41,1.41L11,7.83V20h2V7.83l5.58,5.59L20,12l-8,-8 -8,8z")
     }
+    /** Material "image": framed landscape, the Photos entry of the chat's + menu. */
+    val Image: ImageVector by lazy {
+        icon("Image", "M21,19V5c0,-1.1 -0.9,-2 -2,-2H5c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2zM8.5,13.5l2.5,3.01L14.5,12l4.5,6H5l3.5,-4.5z")
+    }
     val ArrowDownward: ImageVector by lazy {
         icon("ArrowDownward", "M20,12l-1.41,-1.41L13,16.17V4h-2v12.17l-5.58,-5.59L4,12l8,8 8,-8z")
     }

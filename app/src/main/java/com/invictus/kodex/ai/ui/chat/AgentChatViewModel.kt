@@ -1,6 +1,7 @@
 package com.invictus.kodex.ai.ui.chat
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -15,6 +16,7 @@ import com.invictus.kodex.ai.agent.ProjectInstructions
 import com.invictus.kodex.ai.agent.AgentRunner
 import com.invictus.kodex.ai.agent.AgentSink
 import com.invictus.kodex.ai.agent.AgentTools
+import com.invictus.kodex.ai.agent.ImageImporter
 import com.invictus.kodex.ai.agent.RateLimitInfo
 import com.invictus.kodex.ai.agent.ApprovedChange
 import com.invictus.kodex.ai.agent.ChangeKind
@@ -35,6 +37,8 @@ import com.invictus.kodex.ai.provider.AiErrorInfo
 import com.invictus.kodex.ai.provider.AiErrorPresenter
 import com.invictus.kodex.ai.provider.AiException
 import com.invictus.kodex.ai.provider.AiModel
+import com.invictus.kodex.ai.provider.ChatImage
+import com.invictus.kodex.ai.provider.ModelInfo
 import com.invictus.kodex.ai.provider.ProviderRegistry
 import java.io.File
 import java.util.UUID
@@ -68,7 +72,10 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         val streaming: Boolean = false,
         /** Where this user turn starts in the agent transcript; used by regenerate/edit to rewind. */
         val histPos: Int = 0,
+        val images: List<ChatImage> = emptyList(),
     )
+    /** What "Edit" on a user message hands back to the input box. */
+    data class EditDraft(val text: String, val files: List<String>, val images: List<ChatImage>)
     data class EditorContext(val absPath: String, val fileText: String?, val selection: String?)
     data class UndoEntry(val path: String, val before: String?, val after: String?)
     data class UndoInfo(val entries: List<UndoEntry>)
@@ -87,6 +94,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         val customModelActive: Boolean = false,
     ) {
         val ready get() = hasKey && consent
+        val canSeeImages get() = ModelInfo.supportsImages(providerId, modelId)
     }
 
     private val prefs = AiPrefs(app)
@@ -209,11 +217,29 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
 
     // ---- sending ----
 
-    fun send(text: String, attached: List<String>) {
-        if (_busy.value) return
+    /** Starts a turn; false when nothing was sent (busy, empty, or photos on a model that can't read them), so the caller keeps the draft. */
+    fun send(text: String, attached: List<String>, images: List<ChatImage> = emptyList()): Boolean {
+        if (_busy.value) return false
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
-        startTurn(trimmed, attached)
+        if (trimmed.isEmpty()) return false
+        if (images.isNotEmpty() && !_status.value.canSeeImages) {
+            _error.value = "This model can't read images. Switch to a vision model or remove the photos."
+            return false
+        }
+        startTurn(trimmed, attached, images)
+        return true
+    }
+
+    /** Copies a picked photo into app storage (downscaled). Null (and an error card) when it can't be read. */
+    suspend fun importImage(uri: Uri): ChatImage? {
+        val img = withContext(Dispatchers.IO) { ImageImporter.import(app, uri, store.imageDir) }
+        if (img == null) _error.value = "Couldn't read that image"
+        return img
+    }
+
+    /** Deletes a draft photo that was never sent (or was taken back from a rewound message). */
+    fun discardImage(img: ChatImage) {
+        viewModelScope.launch(Dispatchers.IO) { runCatching { File(img.path).delete() } }
     }
 
     fun stop() {
@@ -228,11 +254,11 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         val u = list[idx]
         _messages.value = list.take(idx)
         truncateHistory(u.histPos)
-        startTurn(u.text, u.attachments)
+        startTurn(u.text, u.attachments, u.images)
     }
 
     /** Rewinds the chat to just before user message [id] and hands back its text/attachments for editing. */
-    fun editFrom(id: Long): Pair<String, List<String>>? {
+    fun editFrom(id: Long): EditDraft? {
         if (_busy.value) return null
         val list = _messages.value
         val idx = list.indexOfFirst { it.id == id && it.role == "user" }
@@ -241,14 +267,14 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         _messages.value = list.take(idx)
         truncateHistory(u.histPos)
         persistNow()
-        return u.text to u.attachments
+        return EditDraft(u.text, u.attachments, u.images)
     }
 
     private fun truncateHistory(pos: Int) {
         while (history.size > pos) history.removeAt(history.lastIndex)
     }
 
-    private fun startTurn(text: String, attached: List<String>) {
+    private fun startTurn(text: String, attached: List<String>, images: List<ChatImage>) {
         _error.value = null
         _failure.value = null
         val startPos = history.size
@@ -257,7 +283,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         val attachedAll = (attached + mentions).distinct()
         val ctx = contextProvider?.invoke()
         _messages.update {
-            it + UiMessage(nextId++, "user", text, attachments = attachedAll, histPos = startPos) +
+            it + UiMessage(nextId++, "user", text, attachments = attachedAll, histPos = startPos, images = images) +
                 UiMessage(nextId++, "assistant", "", streaming = true, histPos = startPos)
         }
         job = viewModelScope.launch {
@@ -268,7 +294,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             var failed = false
             try {
                 val files = ProjectFiles(root, globs.value, io)
-                history += AgentMessage.User(buildUserText(files, attachedAll, ctx, text))
+                history += AgentMessage.User(buildUserText(files, attachedAll, ctx, text), images)
                 val (provider, model, key) = runtime.resolve()
                 val budget = (provider.defaultModels.firstOrNull { it.id == model }?.maxContextChars ?: 100_000)
                     .let { (it * 0.6).toInt().coerceAtMost(300_000) }
@@ -278,25 +304,28 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                         .sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
                         .take(50).map { if (it.isDirectory) it.name + "/" else it.name }
                 }
-                val r = AgentRunner(provider, key, model, AgentTools(files, pending), budget)
+                val r = AgentRunner(
+                    provider, key, model, AgentTools(files, pending), budget,
+                    sendImages = ModelInfo.supportsImages(provider.id, model),
+                )
                 runner = r
                 val instructions = ProjectInstructions.load(files)
                 r.run(AgentPrompt.system(root.name, topLevel, instructions), history, sink)
                 if (_messages.value.lastOrNull()?.let { it.text.isBlank() && it.steps.isEmpty() } == true) {
-                    rollback(startPos, text, "")
+                    rollback(startPos, text, "", images)
                     _error.value = "The model returned an empty response"
                 }
             } catch (ce: CancellationException) {
                 cancelled = true
-                rollback(startPos, text, _messages.value.lastOrNull()?.text.orEmpty())
+                rollback(startPos, text, _messages.value.lastOrNull()?.text.orEmpty(), images)
                 throw ce
             } catch (e: AiException) {
                 failed = true
-                rollback(startPos, text, _messages.value.lastOrNull()?.text.orEmpty())
+                rollback(startPos, text, _messages.value.lastOrNull()?.text.orEmpty(), images)
                 _failure.value = AiErrorPresenter.describe(e.error, providerName())
             } catch (e: Exception) {
                 failed = true
-                rollback(startPos, text, _messages.value.lastOrNull()?.text.orEmpty())
+                rollback(startPos, text, _messages.value.lastOrNull()?.text.orEmpty(), images)
                 _error.value = e.message ?: "Request failed"
             } finally {
                 runner = null
@@ -318,9 +347,9 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     private suspend fun providerName(): String = ProviderRegistry.byId(prefs.providerId.first()).displayName
 
     /** After a failed or stopped turn: drop the half-finished tool trail but keep the question (and any text streamed so far). */
-    private fun rollback(startPos: Int, userText: String, partial: String) {
+    private fun rollback(startPos: Int, userText: String, partial: String, images: List<ChatImage>) {
         truncateHistory(startPos)
-        history += AgentMessage.User(userText)
+        history += AgentMessage.User(userText, images)
         if (partial.isNotBlank()) history += AgentMessage.Assistant(partial)
     }
 
@@ -404,12 +433,13 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         val ui = ArrayList<UiMessage>()
         chat.messages.forEach { m ->
             val pos = history.size
-            if (m.role == "user") history += AgentMessage.User(m.text)
+            val imgs = m.images.map { File(store.imageDir, it) }.filter { it.exists() }.map { ChatImage(it.absolutePath) }
+            if (m.role == "user") history += AgentMessage.User(m.text, imgs)
             else if (m.text.isNotBlank()) history += AgentMessage.Assistant(m.text)
             ui += UiMessage(
                 nextId++, m.role, m.text,
                 m.steps.map { UiStep("s${nextId++}", it.label, if (it.ok) StepStatus.DONE else StepStatus.FAILED) },
-                m.attachments, false, pos,
+                m.attachments, false, pos, imgs,
             )
         }
         _messages.value = ui
@@ -429,7 +459,11 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         val chat = StoredChat(
             id, title, System.currentTimeMillis(),
             msgs.map { m ->
-                StoredMessage(m.role, m.text, m.attachments, m.steps.map { StoredStep(it.label, it.status != StepStatus.FAILED) })
+                StoredMessage(
+                    m.role, m.text, m.attachments,
+                    m.steps.map { StoredStep(it.label, it.status != StepStatus.FAILED) },
+                    m.images.map { File(it.path).name },
+                )
             },
         )
         viewModelScope.launch(Dispatchers.IO) {
@@ -602,6 +636,9 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     }
 
     companion object {
+        /** Photos per message. */
+        const val MAX_IMAGES = 4
+
         private val MENTION = Regex("""(^|\s)@(\S+)""")
 
         fun factory(app: Application, projectPath: String) = viewModelFactory {
