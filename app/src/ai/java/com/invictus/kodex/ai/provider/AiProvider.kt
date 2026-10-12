@@ -20,4 +20,19 @@ interface AiProvider {
 
     /** Streaming call; emits Delta* then Done, or a single Error. Collector cancellation cancels the HTTP call. */
     fun stream(key: String, model: String, request: AiRequest): Flow<AiEvent>
+
+    /**
+     * One streamed model turn with native tool calling: Delta* and Call* then Done, or Error.
+     * The caller runs the tools and calls again with the results appended to [messages].
+     */
+    fun streamAgent(
+        key: String,
+        model: String,
+        system: String,
+        messages: List<AgentMessage>,
+        tools: List<ToolSpec>,
+        maxOutputTokens: Int = 8192,
+    ): Flow<AgentEvent> = kotlinx.coroutines.flow.flowOf(
+        AgentEvent.Error(AiError.Unknown(0, "$id has no tool-calling support")),
+    )
 }

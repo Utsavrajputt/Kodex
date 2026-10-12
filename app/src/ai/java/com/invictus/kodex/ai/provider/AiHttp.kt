@@ -84,6 +84,52 @@ object AiHttp {
         }
     }.flowOn(Dispatchers.IO) // call.execute() blocks; collectors run on Main (viewModelScope / LaunchedEffect)
 
+    /**
+     * Generic SSE reader: every `data:` payload goes through [handle] (which may keep per-call state, so
+     * create it per request); [finish] runs after the stream ends; then [done]. Non-2xx collapses to one [fail].
+     */
+    fun <T> sse(
+        request: Request,
+        handle: (JSONObject) -> List<T>,
+        finish: () -> List<T>,
+        done: T,
+        fail: (AiError) -> T,
+    ): Flow<T> = channelFlow {
+        val call = client.newCall(request)
+        coroutineContext.job.invokeOnCompletion { call.cancel() }
+        try {
+            call.execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    send(fail(mapHttpError(resp.code, resp.body?.string().orEmpty(), resp.header("retry-after"))))
+                    return@use
+                }
+                val src = resp.body!!.source()
+                var data = StringBuilder()
+                var finished = false
+                while (!finished) {
+                    val line = src.readUtf8Line() ?: break
+                    when {
+                        line.isEmpty() -> {
+                            val payload = data.toString().also { data = StringBuilder() }
+                            when {
+                                payload == "[DONE]" -> finished = true
+                                payload.isNotEmpty() -> runCatching { JSONObject(payload) }.getOrNull()
+                                    ?.let { obj -> handle(obj).forEach { send(it) } }
+                            }
+                        }
+                        line.startsWith("data:") -> data.append(line.substring(5).trimStart())
+                    }
+                }
+                finish().forEach { send(it) }
+                send(done)
+            }
+        } catch (e: Exception) {
+            if (!call.isCanceled()) {
+                send(fail(if (e is SocketTimeoutException) AiError.Timeout() else AiError.Network(e)))
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
     fun mapHttpError(code: Int, body: String, retryAfter: String?): AiError {
         val msg = runCatching {
             val o = JSONObject(body)

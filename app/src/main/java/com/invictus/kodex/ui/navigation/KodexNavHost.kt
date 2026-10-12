@@ -150,6 +150,7 @@ fun KodexNavHost(
                     navController.navigate(Routes.codeSearch(root.path))
                 },
                 onOpenGitHub = { root -> navController.navigate(Routes.github(root.path)) },
+                onOpenAi = AiGate?.let { g -> { root: java.io.File -> navController.navigate(g.agentRouteFor(root.path)) } },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
             )
         }
@@ -192,6 +193,12 @@ fun KodexNavHost(
         AiGate?.let { gate ->
             composable(gate.settingsRoute) {
                 gate.SettingsAiScreen(onBack = { navController.popBackStack() })
+            }
+            composable(gate.agentRoute) { entry ->
+                val path = entry.arguments?.getString("projectPath")
+                if (path != null) {
+                    gate.AgentScreen(projectPath = path, editor = editorViewModel, onBack = { navController.popBackStack() })
+                }
             }
         }
         composable(Routes.SETTINGS_DIAGNOSTICS) {

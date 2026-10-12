@@ -65,6 +65,59 @@ class GeminiProvider : AiProvider {
     override fun stream(key: String, model: String, request: AiRequest): Flow<AiEvent> =
         AiHttp.stream(request(key, model, request.copy(model = model), streaming = true)) { extractText(it) }
 
+    override fun streamAgent(
+        key: String, model: String, system: String,
+        messages: List<AgentMessage>, tools: List<ToolSpec>, maxOutputTokens: Int,
+    ): Flow<AgentEvent> {
+        val generation = JSONObject().put("maxOutputTokens", maxOutputTokens)
+        when {
+            model.contains("2.5-flash") -> generation.put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
+            model.startsWith("gemini-3") -> generation.put("thinkingConfig", JSONObject().put("thinkingLevel", "low"))
+        }
+        val body = JSONObject()
+            .put("systemInstruction", JSONObject().put("parts", JSONArray(listOf(JSONObject().put("text", system)))))
+            .put("contents", toContents(messages))
+            .put("generationConfig", generation)
+        if (tools.isNotEmpty()) {
+            body.put("tools", JSONArray(listOf(JSONObject().put("functionDeclarations", JSONArray(tools.map {
+                JSONObject().put("name", it.name).put("description", it.description).put("parameters", it.schema)
+            })))))
+        }
+        val req = Request.Builder()
+            .url(url(model, streaming = true))
+            .header("x-goog-api-key", key)
+            .header("content-type", "application/json")
+            .post(AiHttp.jsonBody(body))
+            .build()
+
+        var counter = 0
+        val handle: (JSONObject) -> List<AgentEvent> = handle@{ obj ->
+            val parts = obj.optJSONArray("candidates")?.optJSONObject(0)
+                ?.optJSONObject("content")?.optJSONArray("parts") ?: return@handle emptyList()
+            val events = mutableListOf<AgentEvent>()
+            for (n in 0 until parts.length()) {
+                val part = parts.optJSONObject(n) ?: continue
+                val fc = part.optJSONObject("functionCall")
+                if (fc != null) {
+                    val apiId = fc.optString("id")
+                    events += AgentEvent.Call(
+                        ToolCall(
+                            id = apiId.ifEmpty { "call_${counter++}" },
+                            name = fc.optString("name"),
+                            args = fc.optJSONObject("args") ?: JSONObject(),
+                            signature = part.optString("thoughtSignature").ifEmpty { null },
+                            idFromApi = apiId.isNotEmpty(),
+                        ),
+                    )
+                } else if (!part.optBoolean("thought", false)) {
+                    part.optString("text").takeIf { it.isNotEmpty() }?.let { events += AgentEvent.Delta(it) }
+                }
+            }
+            events
+        }
+        return AiHttp.sse(req, handle, { emptyList() }, AgentEvent.Done) { AgentEvent.Error(it) }
+    }
+
     override suspend fun listModels(key: String): List<AiModel>? {
         val all = mutableListOf<AiModel>()
         var pageToken: String? = null
@@ -87,6 +140,46 @@ class GeminiProvider : AiProvider {
     companion object {
         const val DEFAULT_MODEL_ID = "gemini-3.8-flash"
         private const val MAX_PAGES = 5
+
+        /** Neutral transcript -> Gemini `contents` (consecutive tool results share one user turn). */
+        fun toContents(msgs: List<AgentMessage>): JSONArray {
+            val out = JSONArray()
+            var i = 0
+            while (i < msgs.size) {
+                when (val m = msgs[i]) {
+                    is AgentMessage.User -> {
+                        out.put(JSONObject().put("role", "user").put("parts", JSONArray(listOf(JSONObject().put("text", m.text)))))
+                        i++
+                    }
+                    is AgentMessage.Assistant -> {
+                        val parts = JSONArray()
+                        if (m.text.isNotBlank()) parts.put(JSONObject().put("text", m.text))
+                        m.calls.forEach { c ->
+                            val fc = JSONObject().put("name", c.name).put("args", c.args)
+                            if (c.idFromApi) fc.put("id", c.id)
+                            val part = JSONObject().put("functionCall", fc)
+                            c.signature?.let { part.put("thoughtSignature", it) }
+                            parts.put(part)
+                        }
+                        if (parts.length() > 0) out.put(JSONObject().put("role", "model").put("parts", parts))
+                        i++
+                    }
+                    is AgentMessage.ToolResult -> {
+                        val parts = JSONArray()
+                        while (i < msgs.size && msgs[i] is AgentMessage.ToolResult) {
+                            val r = msgs[i] as AgentMessage.ToolResult
+                            val fr = JSONObject().put("name", r.name)
+                                .put("response", JSONObject().put(if (r.isError) "error" else "result", r.content))
+                            if (r.echoId) fr.put("id", r.callId)
+                            parts.put(JSONObject().put("functionResponse", fr))
+                            i++
+                        }
+                        out.put(JSONObject().put("role", "user").put("parts", parts))
+                    }
+                }
+            }
+            return out
+        }
 
         // Generative-media / realtime / non-chat variants that also advertise generateContent.
         private val NOT_CHAT = listOf(

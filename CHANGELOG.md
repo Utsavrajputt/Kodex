@@ -11,9 +11,13 @@ pick the matching section as the GitHub Release notes.
 ## [Unreleased]
 
 ### ✨ Added
+- 🤖 **AI Agent on the workspace screen** — a new ✨ button opens a full-screen agent that searches, lists and reads your whole project (never-send globs and secret redaction still apply) and can edit, create and delete several files in one reply. Native tool calling on Claude, OpenAI and Gemini, up to 15 tool rounds per message, live steps ("Reading Foo.kt", "Editing Bar.kt").
+- 🔍 **One review for every change** — all files the AI touched appear in a single sheet with per-file and per-hunk checkboxes. Nothing is written until you tap Apply selected; changes to open tabs go through the editor buffer, stale files are refused, and a one-tap **Undo** restores everything.
+- 💬 **Premium chat** — full Markdown (headings, lists, tables, quotes, bold/italic/links), syntax-highlighted code blocks with **Copy** and **Apply to file**, `@file` mentions and an attach picker, regenerate / copy / edit-and-resend, and **saved chats per project**.
 - 🤖 **Live Gemini model list** — the AI Assistant model dropdown now loads every chat-capable Gemini model available to your API key (newest first, curated picks on top), so new releases show up without an app update. Falls back to the built-in list when offline or without a key.
 
 ### 🔄 Changed
+- 🤖 The editor's AI panel now runs on the same agent engine: the open file and selection travel with each message, and the agent can still look at the rest of the project.
 - 🤖 Gemini defaults are now **Gemini 3.8 Flash** and **Gemini 3.1 Pro**. A saved Gemini 2.5 Flash / 2.5 Pro selection is moved to 3.8 Flash automatically.
 
 ### 🐛 Fixed

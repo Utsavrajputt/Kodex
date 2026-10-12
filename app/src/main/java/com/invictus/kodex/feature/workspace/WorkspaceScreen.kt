@@ -91,6 +91,7 @@ fun WorkspaceScreen(
     onGitSetup: (File) -> Unit = {},
     onOpenCodeSearch: (File) -> Unit = {},
     onOpenGitHub: (File) -> Unit = {},
+    onOpenAi: ((File) -> Unit)? = null,
     onOpenSettings: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -214,6 +215,7 @@ fun WorkspaceScreen(
                 onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
                 onOpenCodeSearch = { onOpenCodeSearch(state.root) },
                 onOpenGitHub = { onOpenGitHub(state.root) },
+                onOpenAi = onOpenAi?.let { open -> { open(state.root) } },
                 onOpenSettings = onOpenSettings,
             )
         },
@@ -310,6 +312,7 @@ private fun WorkspaceTopBar(
     onOpenGit: (() -> Unit)? = null,
     onOpenCodeSearch: () -> Unit = {},
     onOpenGitHub: () -> Unit = {},
+    onOpenAi: (() -> Unit)? = null,
     onOpenSettings: () -> Unit = {},
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -342,6 +345,11 @@ private fun WorkspaceTopBar(
             }
             IconButton(onClick = onOpenCodeSearch) {
                 Icon(XIcons.Search, contentDescription = stringResource(R.string.search_code_title))
+            }
+            if (onOpenAi != null) {
+                IconButton(onClick = onOpenAi) {
+                    Icon(XIcons.AutoAwesome, contentDescription = "AI Agent")
+                }
             }
             if (onOpenGit != null) {
                 IconButton(onClick = onOpenGit) {

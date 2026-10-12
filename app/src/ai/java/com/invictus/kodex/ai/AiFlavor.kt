@@ -1,12 +1,14 @@
 package com.invictus.kodex.ai
 
 import android.app.Application
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.invictus.kodex.ai.settings.AiSettingsScreen
 import com.invictus.kodex.ai.settings.AiSettingsViewModel
-import com.invictus.kodex.ai.ui.AiChatPanel
-import com.invictus.kodex.ai.ui.AiChatViewModel
+import com.invictus.kodex.ai.ui.chat.AgentChatScreen
+import com.invictus.kodex.ai.ui.chat.AgentChatViewModel
+import com.invictus.kodex.ai.ui.chat.EditorAiPanel
 import com.invictus.kodex.feature.editor.EditorHandle
 import com.invictus.kodex.feature.editor.EditorViewModel
 
@@ -22,6 +24,18 @@ object AiFlavor {
 
 class RealAiGate(private val app: Application) : AiGateImpl {
     override val settingsRoute = "settings_ai"
+    override val agentRoute = "ai_agent/{projectPath}"
+    override fun agentRouteFor(projectPath: String) = "ai_agent/" + android.net.Uri.encode(projectPath)
+
+    @Composable
+    override fun AgentScreen(projectPath: String, editor: EditorViewModel, onBack: () -> Unit) {
+        val vm: AgentChatViewModel = viewModel(key = "agent:$projectPath", factory = AgentChatViewModel.factory(app, projectPath))
+        androidx.compose.runtime.LaunchedEffect(vm, editor) {
+            vm.bindIo(com.invictus.kodex.ai.agent.EditorIo(editor))
+            vm.refreshIndex()
+        }
+        AgentChatScreen(vm = vm, projectName = java.io.File(projectPath).name, onBack = onBack)
+    }
 
     @Composable
     override fun SettingsAiScreen(onBack: () -> Unit) {
@@ -31,8 +45,13 @@ class RealAiGate(private val app: Application) : AiGateImpl {
 
     @Composable
     override fun AiEditorPanel(viewModel: EditorViewModel, handle: EditorHandle, onClose: () -> Unit) {
-        val vm: AiChatViewModel = viewModel(factory = AiChatViewModel.factory(app))
-        AiChatPanel(vm = vm, editor = viewModel, handle = handle, onClose = onClose)
+        val root = viewModel.projectRoot?.path
+        if (root == null) {
+            Text("Open a project to use the AI assistant.")
+        } else {
+            val vm: AgentChatViewModel = viewModel(key = "agent:$root", factory = AgentChatViewModel.factory(app, root))
+            EditorAiPanel(vm = vm, editor = viewModel, handle = handle, onClose = onClose)
+        }
     }
 
     @Composable

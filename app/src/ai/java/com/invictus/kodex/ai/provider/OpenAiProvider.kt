@@ -41,4 +41,86 @@ class OpenAiProvider : AiProvider {
         AiHttp.stream(request(key, request.copy(model = model), stream = true)) { obj ->
             obj.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta")?.optString("content")
         }
+
+    private class PartialCall(var id: String = "", var name: String = "", val args: StringBuilder = StringBuilder())
+
+    override fun streamAgent(
+        key: String, model: String, system: String,
+        messages: List<AgentMessage>, tools: List<ToolSpec>, maxOutputTokens: Int,
+    ): Flow<AgentEvent> {
+        val all = JSONArray().put(JSONObject().put("role", "system").put("content", system))
+        val converted = toMessages(messages)
+        for (i in 0 until converted.length()) all.put(converted.get(i))
+        val body = JSONObject()
+            .put("model", model)
+            .put("messages", all)
+            .put("max_completion_tokens", maxOutputTokens)
+            .put("stream", true)
+        if (tools.isNotEmpty()) {
+            body.put("tools", JSONArray(tools.map {
+                JSONObject().put("type", "function").put(
+                    "function",
+                    JSONObject().put("name", it.name).put("description", it.description).put("parameters", it.schema),
+                )
+            }))
+        }
+        val req = Request.Builder()
+            .url("https://api.openai.com/v1/chat/completions")
+            .header("Authorization", "Bearer $key")
+            .header("content-type", "application/json")
+            .post(AiHttp.jsonBody(body))
+            .build()
+
+        val partial = java.util.TreeMap<Int, PartialCall>()
+        val handle: (JSONObject) -> List<AgentEvent> = handle@{ obj ->
+            val delta = obj.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta")
+                ?: return@handle emptyList()
+            val events = mutableListOf<AgentEvent>()
+            if (!delta.isNull("content")) delta.optString("content").takeIf { it.isNotEmpty() }?.let { events += AgentEvent.Delta(it) }
+            delta.optJSONArray("tool_calls")?.let { arr ->
+                for (n in 0 until arr.length()) {
+                    val tc = arr.optJSONObject(n) ?: continue
+                    val pc = partial.getOrPut(tc.optInt("index", n)) { PartialCall() }
+                    tc.optString("id").takeIf { it.isNotEmpty() }?.let { pc.id = it }
+                    tc.optJSONObject("function")?.let { fn ->
+                        fn.optString("name").takeIf { it.isNotEmpty() }?.let { pc.name = it }
+                        if (!fn.isNull("arguments")) pc.args.append(fn.optString("arguments"))
+                    }
+                }
+            }
+            events
+        }
+        val finish: () -> List<AgentEvent> = {
+            partial.values.filter { it.name.isNotEmpty() }.mapIndexed { n, pc ->
+                val args = runCatching { JSONObject(pc.args.toString().ifBlank { "{}" }) }.getOrElse { JSONObject() }
+                AgentEvent.Call(ToolCall(pc.id.ifEmpty { "call_$n" }, pc.name, args))
+            }
+        }
+        return AiHttp.sse(req, handle, finish, AgentEvent.Done) { AgentEvent.Error(it) }
+    }
+
+    companion object {
+        /** Neutral transcript -> chat-completions messages (no system message; the caller prepends it). */
+        fun toMessages(msgs: List<AgentMessage>): JSONArray = JSONArray().also { out ->
+            msgs.forEach { m ->
+                when (m) {
+                    is AgentMessage.User -> out.put(JSONObject().put("role", "user").put("content", m.text))
+                    is AgentMessage.Assistant -> out.put(
+                        JSONObject().put("role", "assistant")
+                            .put("content", if (m.text.isBlank()) JSONObject.NULL else m.text)
+                            .apply {
+                                if (m.calls.isNotEmpty()) put("tool_calls", JSONArray(m.calls.map { c ->
+                                    JSONObject().put("id", c.id).put("type", "function").put(
+                                        "function", JSONObject().put("name", c.name).put("arguments", c.args.toString()),
+                                    )
+                                }))
+                            },
+                    )
+                    is AgentMessage.ToolResult -> out.put(
+                        JSONObject().put("role", "tool").put("tool_call_id", m.callId).put("content", m.content),
+                    )
+                }
+            }
+        }
+    }
 }

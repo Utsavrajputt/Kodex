@@ -14,6 +14,16 @@ val AiGate: AiGateImpl? get() = AiFlavor.gate
 interface AiGateImpl {
     val settingsRoute: String
 
+    /** Nav route pattern of the workspace AI agent screen (one `{projectPath}` argument). */
+    val agentRoute: String
+
+    /** Concrete route for [projectPath] (encoded). */
+    fun agentRouteFor(projectPath: String): String
+
+    /** Full-screen AI agent for a project: reads/searches the whole project and stages multi-file changes for review. */
+    @Composable
+    fun AgentScreen(projectPath: String, editor: EditorViewModel, onBack: () -> Unit)
+
     @Composable
     fun SettingsAiScreen(onBack: () -> Unit)
 
