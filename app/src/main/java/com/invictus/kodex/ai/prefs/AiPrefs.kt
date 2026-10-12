@@ -21,6 +21,7 @@ class AiPrefs(private val context: Context) {
         val CUSTOM_MODEL = stringPreferencesKey("ai.custom_model")
         val CONSENT = booleanPreferencesKey("ai.consent_granted")
         val GLOBS = stringPreferencesKey("ai.exclude_globs")
+        val COMMIT_STYLE = stringPreferencesKey("ai.commit_style")
         fun model(p: String) = stringPreferencesKey("ai.model.$p")
     }
 
@@ -40,6 +41,10 @@ class AiPrefs(private val context: Context) {
     val excludeGlobs: Flow<String> =
         context.aiPrefsStore.data.map { it[K.GLOBS] ?: ".env, .env.*, *.pem, *.key, id_rsa*" }
     suspend fun setExcludeGlobs(v: String) { context.aiPrefsStore.edit { it[K.GLOBS] = v } }
+
+    /** Name of the last commit-message style picked in the Git screen's AI sheet (tap on the AI button reuses it). */
+    val commitStyle: Flow<String> = context.aiPrefsStore.data.map { it[K.COMMIT_STYLE] ?: "" }
+    suspend fun setCommitStyle(v: String) { context.aiPrefsStore.edit { it[K.COMMIT_STYLE] = v } }
 
     /** Rewrites a saved Gemini model that Google has retired to the current default. Idempotent. */
     suspend fun migrateRetiredModels() {

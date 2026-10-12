@@ -1,6 +1,21 @@
 package com.invictus.kodex.ai.ui
 
 import android.app.Application
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
+import com.invictus.kodex.ai.prefs.AiPrefs
+import kotlinx.coroutines.flow.first
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,65 +51,120 @@ import kotlinx.coroutines.launch
 
 private const val MAX_DIFF_CHARS = 60_000
 
-/** M20 entry point (Git stage CommitCard): generates an editable commit message, never commits. */
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Git stage CommitCard AI button. Tap: generate with the last chosen style and put the message straight into the
+ * commit box (never commits). Long press: the sheet (style, regenerate, edit before using). A failed tap opens
+ * the sheet so the error is visible.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -> Unit, app: Application) {
     var open by remember { mutableStateOf(false) }
-    IconButton(onClick = { open = true }, enabled = hasChanges) {
-        Icon(XIcons.AutoAwesome, contentDescription = "Generate commit message with AI")
-    }
-    if (!open) return
-
     val runtime = remember { AiRuntime(app) }
+    val prefs = remember { AiPrefs(app) }
     val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
     var style by remember { mutableStateOf(CommitMessageTask.Style.NORMAL) }
+    var styleLoaded by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var generatedOnce by remember { mutableStateOf(false) }
 
-    fun generate() {
+    LaunchedEffect(Unit) {
+        val saved = prefs.commitStyle.first()
+        CommitMessageTask.Style.entries.firstOrNull { it.name == saved }?.let { style = it }
+        styleLoaded = true
+    }
+
+    /** Streams a message for the current diff; null (with [error] set) when there is nothing to show. */
+    suspend fun produce(s: CommitMessageTask.Style): String? {
+        val globs = runtime.globs()
+        val diffText = withGitSession(projectPath) { session ->
+            val staged = session.stagedDiffText()
+            if (staged is GitResult.Ok && staged.value.isNotBlank()) {
+                staged.value.take(MAX_DIFF_CHARS)
+            } else {
+                val wt = session.workTreeDiffText()
+                if (wt is GitResult.Ok) wt.value.take(MAX_DIFF_CHARS) else ""
+            }
+        }.let { Redactor.scrubDiff(it, globs) }
+        if (diffText.isBlank()) {
+            error = "No changes to describe"
+            return null
+        }
+        val (provider, model, key) = runtime.resolve()
+        var out = ""
+        CommitMessageTask(provider, key, model).stream(diffText, s).collect { ev ->
+            when (ev) {
+                is AiEvent.Delta -> out += ev.text
+                AiEvent.Done -> Unit
+                is AiEvent.Error -> throw AiException(ev.error)
+            }
+        }
+        val text = out.trim().removePrefix("```").removeSuffix("```").trim()
+        if (text.isBlank()) {
+            error = "The model returned an empty message — try again"
+            return null
+        }
+        return text
+    }
+
+    /** [fill] = tap flow: success goes straight to the commit box, failure opens the sheet with the error. */
+    fun generate(fill: Boolean) {
+        if (busy) return
         scope.launch {
             busy = true
             error = null
-            message = ""
+            if (!fill) message = ""
             try {
-                val globs = runtime.globs()
-                val diffText = withGitSession(projectPath) { session ->
-                    val staged = session.stagedDiffText()
-                    if (staged is GitResult.Ok && staged.value.isNotBlank()) {
-                        staged.value.take(MAX_DIFF_CHARS)
-                    } else {
-                        val wt = session.workTreeDiffText()
-                        if (wt is GitResult.Ok) wt.value.take(MAX_DIFF_CHARS) else ""
-                    }
-                }.let { Redactor.scrubDiff(it, globs) }
-                if (diffText.isBlank()) {
-                    error = "No changes to describe"
-                    return@launch
+                if (!styleLoaded) {
+                    val saved = prefs.commitStyle.first()
+                    CommitMessageTask.Style.entries.firstOrNull { it.name == saved }?.let { style = it }
+                    styleLoaded = true
                 }
-                val (provider, model, key) = runtime.resolve()
-                var out = ""
-                CommitMessageTask(provider, key, model).stream(diffText, style).collect { ev ->
-                    when (ev) {
-                        is AiEvent.Delta -> out += ev.text
-                        AiEvent.Done -> Unit
-                        is AiEvent.Error -> throw AiException(ev.error)
-                    }
+                val result = produce(style)
+                if (result != null) {
+                    message = result
+                    generatedOnce = true
+                    if (fill) onFill(result)
                 }
-                message = out.trim().removePrefix("```").removeSuffix("```").trim()
-                generatedOnce = true
-                if (message.isBlank()) error = "The model returned an empty message — try again"
             } catch (e: AiException) {
                 error = e.error.message
             } catch (e: Exception) {
                 error = e.message ?: "Failed to generate"
             } finally {
                 busy = false
+                if (fill && error != null) open = true
             }
         }
     }
+
+    Box(
+        Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .alpha(if (hasChanges) 1f else 0.38f)
+            .combinedClickable(
+                enabled = hasChanges,
+                role = Role.Button,
+                onClickLabel = "Generate commit message",
+                onClick = { generate(fill = true) },
+                onLongClickLabel = "AI commit message settings",
+                onLongClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    open = true
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (busy && !open) {
+            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+        } else {
+            Icon(XIcons.AutoAwesome, contentDescription = "Generate commit message with AI (long press for options)")
+        }
+    }
+    if (!open) return
 
     ModalBottomSheet(onDismissRequest = { open = false }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -103,14 +173,18 @@ fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -
                 CommitMessageTask.Style.entries.forEach { s ->
                     FilterChip(
                         selected = style == s,
-                        onClick = { style = s; if (generatedOnce && !busy) generate() },
+                        onClick = {
+                            style = s
+                            scope.launch { prefs.setCommitStyle(s.name) }
+                            if (generatedOnce && !busy) generate(fill = false)
+                        },
                         label = { Text(s.label) },
                         modifier = Modifier.padding(end = 6.dp),
                     )
                 }
             }
-            Button(onClick = { generate() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text(if (generatedOnce) "Regenerate" else "Generate")
+            Button(onClick = { generate(fill = false) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                Text(if (busy) "Generating…" else if (generatedOnce) "Regenerate" else "Generate")
             }
             error?.let {
                 Text(
