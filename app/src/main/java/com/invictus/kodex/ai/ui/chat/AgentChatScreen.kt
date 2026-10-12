@@ -38,7 +38,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -604,8 +603,8 @@ private fun MessageItem(
                 SelectionContainer { MarkdownContent(m.text, Modifier.padding(top = if (m.steps.isNotEmpty()) 8.dp else 0.dp), onApplyCode) }
             } else if (m.streaming && m.steps.none { it.status == StepStatus.RUNNING }) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp)) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(stringResource(R.string.ai_chat_thinking), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp))
+                    ClaudeSpinner(size = 20.dp)
+                    ThinkingLabel(seed = m.id, modifier = Modifier.padding(start = 10.dp))
                 }
             }
             if (!m.streaming && m.text.isNotBlank()) {
@@ -670,16 +669,20 @@ private fun StepsBlock(m: UiMessage) {
                 .padding(vertical = 8.dp, horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (m.streaming) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = muted)
+            if (m.streaming) ClaudeSpinner(size = 20.dp)
             else Icon(XIcons.Schedule, contentDescription = null, tint = muted, modifier = Modifier.size(18.dp))
-            Text(
-                headline,
-                style = MaterialTheme.typography.bodyMedium,
-                color = muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
-            )
+            if (m.streaming) {
+                ShimmerText(headline, modifier = Modifier.weight(1f).padding(horizontal = 10.dp))
+            } else {
+                Text(
+                    headline,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+                )
+            }
             Icon(
                 XIcons.ChevronRight, contentDescription = if (expanded) stringResource(R.string.ai_chat_hide_steps) else stringResource(R.string.ai_chat_show_steps), tint = muted,
                 modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = chevron },
@@ -710,7 +713,7 @@ private fun StepsBlock(m: UiMessage) {
                             modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
                         )
                         when (st.status) {
-                            StepStatus.RUNNING -> CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp, color = muted)
+                            StepStatus.RUNNING -> ClaudeSpinner(size = 14.dp)
                             StepStatus.DONE -> Icon(XIcons.Check, contentDescription = stringResource(R.string.ai_chat_done), tint = muted, modifier = Modifier.size(14.dp))
                             StepStatus.FAILED -> Icon(XIcons.ErrorCircle, contentDescription = stringResource(R.string.ai_chat_failed), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
                         }

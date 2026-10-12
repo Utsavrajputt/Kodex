@@ -23,6 +23,7 @@ import com.invictus.kodex.R
 class GhNotifier(context: Context) {
     private val ctx = context.applicationContext
     private val nm = NotificationManagerCompat.from(ctx)
+    private val accent = ContextCompat.getColor(ctx, R.color.notif_accent)
 
     init {
         if (Build.VERSION.SDK_INT >= 26) {
@@ -78,7 +79,8 @@ class GhNotifier(context: Context) {
      */
     fun live(spec: LiveSpec): Notification {
         val b = NotificationCompat.Builder(ctx, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setSmallIcon(R.drawable.ic_stat_download)
+            .setColor(accent)
             .setContentTitle(spec.title)
             .setContentText(spec.text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(spec.text))
@@ -116,7 +118,8 @@ class GhNotifier(context: Context) {
         // No "download complete" / "app installed" notifications; failures are still shown.
         if (ok && (kind == KIND_DOWNLOAD || kind == KIND_INSTALL)) return
         val n = NotificationCompat.Builder(ctx, CHANNEL)
-            .setSmallIcon(if (ok) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
+            .setSmallIcon(if (ok) R.drawable.ic_stat_check else R.drawable.ic_stat_error)
+            .setColor(accent)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -130,7 +133,8 @@ class GhNotifier(context: Context) {
     /** A new ARM64 build exists (audible channel: this is the one the user asked to hear about). */
     fun newBuild(title: String, text: String, projectPath: String? = null) {
         val n = NotificationCompat.Builder(ctx, CHANNEL_BUILDS)
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setSmallIcon(R.drawable.ic_stat_package)
+            .setColor(accent)
             .setContentTitle(title)
             .setContentText(text)
             .setAutoCancel(true)
@@ -142,7 +146,8 @@ class GhNotifier(context: Context) {
     /** A watched build finished (audible channel). One notification per run. */
     fun buildDone(runId: Long, title: String, text: String, ok: Boolean, projectPath: String? = null) {
         val n = NotificationCompat.Builder(ctx, CHANNEL_BUILDS)
-            .setSmallIcon(if (ok) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
+            .setSmallIcon(if (ok) R.drawable.ic_stat_check else R.drawable.ic_stat_error)
+            .setColor(accent)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -150,6 +155,34 @@ class GhNotifier(context: Context) {
             .setContentIntent(openApp(projectPath))
             .build()
         post(RESULT_BASE + 100 + (runId % 1000).toInt(), n)
+    }
+
+    /**
+     * The system installer's confirmation, held back while the app is not on screen: tapping this opens it in
+     * the foreground (like a browser download), instead of the installer popping up over whatever the user is doing.
+     */
+    fun installReady(confirm: Intent) {
+        val pi = PendingIntent.getActivity(
+            ctx, RESULT_BASE + KIND_INSTALL_READY, confirm,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val title = ctx.getString(R.string.gh_notif_install_ready_title)
+        val text = ctx.getString(R.string.gh_notif_install_ready_text)
+        val n = NotificationCompat.Builder(ctx, CHANNEL_BUILDS)
+            .setSmallIcon(R.drawable.ic_stat_download)
+            .setColor(accent)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        post(RESULT_BASE + KIND_INSTALL_READY, n)
+    }
+
+    fun clearInstallReady() {
+        try { nm.cancel(RESULT_BASE + KIND_INSTALL_READY) } catch (_: SecurityException) { }
     }
 
     private fun post(id: Int, n: Notification) {
@@ -178,5 +211,6 @@ class GhNotifier(context: Context) {
         const val KIND_CLEANUP = 4
         const val KIND_DISPATCH = 5
         const val KIND_NEW_BUILD = 6
+        const val KIND_INSTALL_READY = 7
     }
 }

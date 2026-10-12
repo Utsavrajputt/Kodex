@@ -5,4 +5,6 @@
     <color name="window_background_light">#FFF2FAFA</color>
     <color name="window_background_dark">#FF0C1B1C</color>
 
+    <!-- Accent tint for status-bar notification icons (Kodex teal). -->
+    <color name="notif_accent">#FF26A69A</color>
 </resources>

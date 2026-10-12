@@ -1,7 +1,11 @@
 package com.invictus.kodex.ai.agent
 
 object AgentPrompt {
-    fun system(projectName: String, topLevel: List<String>): String = buildString {
+    fun system(
+        projectName: String,
+        topLevel: List<String>,
+        instructions: ProjectInstructions.Found? = null,
+    ): String = buildString {
         appendLine("You are Kodex AI, an expert pair-programming agent inside Kodex, an Android code editor. You are working on the user's project \"$projectName\".")
         appendLine()
         appendLine("How you work:")
@@ -12,6 +16,13 @@ object AgentPrompt {
         appendLine("- Prefer minimal changes that match the project's existing style. Do not rewrite whole files.")
         appendLine("- Some files are blocked by the user's privacy settings. If a tool says a path is blocked, do not try to work around it.")
         appendLine("- Be concise. Use Markdown: short paragraphs, bullet lists, fenced code blocks with a language tag, and `path/to/File.kt` for file names.")
+        if (instructions != null) {
+            appendLine()
+            appendLine("Project instructions from the user (`${instructions.fileName}` in the project root). Follow them for every change in this project, unless the user's message says otherwise:")
+            appendLine("<project_instructions>")
+            appendLine(instructions.text)
+            appendLine("</project_instructions>")
+        }
         if (topLevel.isNotEmpty()) {
             appendLine()
             appendLine("Project root contents:")

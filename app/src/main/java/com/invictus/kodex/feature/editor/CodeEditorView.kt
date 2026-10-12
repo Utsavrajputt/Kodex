@@ -66,7 +66,10 @@ fun CodeEditorView(
     /** M11: code-search jump requests (path to 1-based line) for this tab's view. */
     path: String = "",
     jumpToLine: SharedFlow<JumpRequest>? = null,
+    /** Non-null when AI is on: adds "Explain" to the selection popup, called with the selected code. */
+    onExplainSelection: ((String) -> Unit)? = null,
 ) {
+    val currentOnExplain by rememberUpdatedState(onExplainSelection)
     val currentOnEdited by rememberUpdatedState(onEdited)
     val currentOnJump by rememberUpdatedState(jumpToLine)
     val currentOnViewState by rememberUpdatedState(onViewState)
@@ -100,7 +103,7 @@ fun CodeEditorView(
                 if (buffer.textSizePx > 0f) textSizePx = buffer.textSizePx
                 applyLook(this, buffer, textMate, darkTheme, highlightReady, themeId)
                 getComponent(EditorAutoCompletion::class.java).isEnabled = autocompleteEnabled
-                installSelectionPopup(this)
+                installSelectionPopup(this) { currentOnExplain }
                 // TextMate schemes listen to the global ThemeRegistry and reset their colours whenever
                 // any editor switches theme, which silently wiped our selection colour. Re-assert it.
                 val selfEditor = this

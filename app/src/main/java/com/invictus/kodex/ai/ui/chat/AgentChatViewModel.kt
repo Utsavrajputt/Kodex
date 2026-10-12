@@ -11,6 +11,7 @@ import com.invictus.kodex.ai.notify.AppVisibility
 import com.invictus.kodex.ai.AiRuntime
 import com.invictus.kodex.ai.Redactor
 import com.invictus.kodex.ai.agent.AgentPrompt
+import com.invictus.kodex.ai.agent.ProjectInstructions
 import com.invictus.kodex.ai.agent.AgentRunner
 import com.invictus.kodex.ai.agent.AgentSink
 import com.invictus.kodex.ai.agent.AgentTools
@@ -279,7 +280,8 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                 }
                 val r = AgentRunner(provider, key, model, AgentTools(files, pending), budget)
                 runner = r
-                r.run(AgentPrompt.system(root.name, topLevel), history, sink)
+                val instructions = ProjectInstructions.load(files)
+                r.run(AgentPrompt.system(root.name, topLevel, instructions), history, sink)
                 if (_messages.value.lastOrNull()?.let { it.text.isBlank() && it.steps.isEmpty() } == true) {
                     rollback(startPos, text, "")
                     _error.value = "The model returned an empty response"

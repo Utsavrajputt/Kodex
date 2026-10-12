@@ -31,9 +31,9 @@ import java.util.WeakHashMap
  * It only appears once the selection has settled (handle drag / scroll hide it), and never for
  * programmatic selections such as a search-match flash.
  */
-internal fun installSelectionPopup(editor: CodeEditor) {
+internal fun installSelectionPopup(editor: CodeEditor, explainProvider: () -> ((String) -> Unit)? = { null }) {
     runCatching { editor.getComponent(EditorTextActionWindow::class.java).isEnabled = false }
-    val popup = SelectionPopup(editor)
+    val popup = SelectionPopup(editor, explainProvider)
     popups[editor] = popup
     editor.subscribeEvent(SelectionChangeEvent::class.java) { _, _ -> popup.onSelectionChanged() }
     editor.subscribeEvent(ScrollEvent::class.java) { _, _ -> popup.onScrolled() }
@@ -53,7 +53,10 @@ private val popups = WeakHashMap<CodeEditor, SelectionPopup>()
 private const val SETTLE_DELAY_MS = 350L
 private const val SUPPRESS_MS = 800L
 
-private class SelectionPopup(private val editor: CodeEditor) {
+private class SelectionPopup(
+    private val editor: CodeEditor,
+    private val explainProvider: () -> ((String) -> Unit)?,
+) {
     private val handler = Handler(Looper.getMainLooper())
     private val showRunnable = Runnable { showNow() }
     private var window: PopupWindow? = null
@@ -190,6 +193,15 @@ private class SelectionPopup(private val editor: CodeEditor) {
         if (editable) add(R.string.qa_cut) { editor.cutText() }
         add(R.string.qa_copy) { editor.copyText() }
         if (editable && hasClip) add(R.string.qa_paste) { editor.pasteText() }
+        // Only when AI is on: hands the selected code to the editor's AI panel.
+        explainProvider()?.let { explain ->
+            add(R.string.qa_explain) {
+                val code = runCatching {
+                    editor.text.subSequence(editor.cursor.left, editor.cursor.right).toString()
+                }.getOrDefault("")
+                if (code.isNotBlank()) explain(code)
+            }
+        }
         return row
     }
 }

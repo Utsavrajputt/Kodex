@@ -64,6 +64,16 @@ fun EditorAiPanel(vm: AgentChatViewModel, editor: EditorViewModel, handle: Edito
         onDispose { vm.contextProvider = null }
     }
 
+    // "Explain" from the editor's selection popup: send the prompt it left behind, once.
+    val request by com.invictus.kodex.ai.AiEditorRequests.pending.collectAsState()
+    val busy by vm.busy.collectAsState()
+    LaunchedEffect(request, busy) {
+        val r = request ?: return@LaunchedEffect
+        if (busy) return@LaunchedEffect // sent as soon as the running answer is done
+        com.invictus.kodex.ai.AiEditorRequests.pending.value = null
+        vm.send(r, emptyList())
+    }
+
     val relPath = activePath?.let { runCatching { File(it).relativeTo(File(vm.projectPath)).path }.getOrNull() }
         ?.takeIf { !it.startsWith("..") }
     val selectionLen = handle.editor?.let { e ->

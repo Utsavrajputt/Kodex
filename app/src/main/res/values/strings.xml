@@ -183,6 +183,7 @@
     <string name="qa_cut">Cut</string>
     <string name="qa_copy">Copy</string>
     <string name="qa_paste">Paste</string>
+    <string name="qa_explain">Explain</string>
     <string name="qa_copy_file">Copy file content</string>
     <string name="qa_copy_file_done">File content copied</string>
     <string name="qa_duplicate_line">Duplicate line</string>
@@ -786,7 +787,6 @@
     <string name="ai_chat_show_steps">Show steps</string>
     <string name="ai_chat_steps_failed">" · %1$s failed"</string>
     <string name="ai_chat_stop">Stop</string>
-    <string name="ai_chat_thinking">Thinking…</string>
     <string name="ai_chat_two_quick_things_and_the">Two quick things and the agent is ready. Your key stays encrypted on this device.</string>
     <string name="ai_chat_undo">Undo</string>
     <string name="ai_chat_using">Using %1$s · %2$s</string>
@@ -1158,6 +1158,8 @@
     <string name="gh_notif_install_ok_title">App installed</string>
     <string name="gh_notif_install_ok_text">The new version was installed.</string>
     <string name="gh_notif_install_failed_title">Install failed</string>
+    <string name="gh_notif_install_ready_title">Ready to install</string>
+    <string name="gh_notif_install_ready_text">Tap to continue installing the downloaded app.</string>
 
     <string name="gh_notif_saved_title">APK saved</string>
     <string name="gh_notif_save_failed_title">Could not save the file</string>

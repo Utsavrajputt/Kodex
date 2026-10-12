@@ -10,6 +10,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.invictus.kodex.R
+import com.invictus.kodex.ai.notify.AppVisibility
 import com.invictus.kodex.github.notify.GhNotifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -62,6 +63,11 @@ class ApkInstaller(private val context: Context) {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setSize(apk.length())
+        // Android 12+ may otherwise apply an update silently, with no installer screen at all.
+        // Always ask, so the install happens in front of the user.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+        }
         val id = installer.createSession(params)
         var session: PackageInstaller.Session? = null
         try {
@@ -109,10 +115,18 @@ class InstallResultReceiver : BroadcastReceiver() {
                 }
                 confirm?.let {
                     it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    runCatching { context.startActivity(it) }
+                    if (AppVisibility.visible) {
+                        // App is on screen: show the installer right now, in the foreground.
+                        runCatching { context.startActivity(it) }
+                    } else {
+                        // App is in the background: never start the installer behind the user's back.
+                        // A tap on this notification opens it in the foreground instead.
+                        GhNotifier(context).installReady(it)
+                    }
                 }
             }
             PackageInstaller.STATUS_SUCCESS -> {
+                GhNotifier(context).clearInstallReady()
                 // Remember which commit now runs, before anyone reacts to the event.
                 InstalledBuilds(context).commit(context, intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME))
                 InstallEvents.emit(InstallResult.Success)
@@ -121,8 +135,12 @@ class InstallResultReceiver : BroadcastReceiver() {
                     context.getString(R.string.gh_notif_install_ok_text),
                 )
             }
-            PackageInstaller.STATUS_FAILURE_ABORTED -> InstallEvents.emit(InstallResult.Cancelled)
+            PackageInstaller.STATUS_FAILURE_ABORTED -> {
+                GhNotifier(context).clearInstallReady()
+                InstallEvents.emit(InstallResult.Cancelled)
+            }
             else -> {
+                GhNotifier(context).clearInstallReady()
                 val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
                 InstallEvents.emit(InstallResult.Failed(message))
                 GhNotifier(context).result(

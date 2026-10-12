@@ -84,6 +84,7 @@ import com.invictus.kodex.feature.preview.PreviewPane
 import com.invictus.kodex.feature.preview.SplitDragHandle
 import com.invictus.kodex.ui.components.FileTypeIcon
 import com.invictus.kodex.ui.icons.XIcons
+import com.invictus.kodex.ai.AiEditorRequests
 import com.invictus.kodex.ai.AiGate
 import io.github.rosemoe.sora.widget.EditorSearcher
 import kotlinx.coroutines.Dispatchers
@@ -365,6 +366,10 @@ fun EditorScreen(
                                     viewModel.onViewState(path, line, column, size, scrollX, scrollY)
                                 },
                                 onHistoryChanged = { historyTick++ },
+                                onExplainSelection = if (AiGate != null) { code ->
+                                    AiEditorRequests.pending.value = AiEditorRequests.explainPrompt(File(path).name, code)
+                                    showAi = true
+                                } else null,
                                 modifier = m,
                             )
                         }

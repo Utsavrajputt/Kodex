@@ -19,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import com.invictus.kodex.R
 
 /**
  * Keeps an AI chat turn alive while the app is minimized: a foreground service (so Android does not kill the
@@ -93,7 +94,8 @@ class AiNotifier(context: Context) {
 
     /** The foreground-service notification. */
     fun live(): Notification = NotificationCompat.Builder(ctx, CHANNEL_LIVE)
-        .setSmallIcon(android.R.drawable.stat_notify_chat)
+        .setSmallIcon(R.drawable.ic_stat_ai)
+        .setColor(ContextCompat.getColor(ctx, R.color.notif_accent))
         .setContentTitle("Kodex AI")
         .setContentText(AiBackground.workingText())
         .setOngoing(false)
@@ -110,7 +112,8 @@ class AiNotifier(context: Context) {
         val title = if (ok) "Kodex AI replied" else "Kodex AI couldn't finish"
         val body = text.trim().replace(Regex("\\s+"), " ").take(160).ifEmpty { project }
         val n = NotificationCompat.Builder(ctx, CHANNEL_DONE)
-            .setSmallIcon(if (ok) android.R.drawable.stat_notify_chat else android.R.drawable.stat_notify_error)
+            .setSmallIcon(if (ok) R.drawable.ic_stat_ai else R.drawable.ic_stat_error)
+            .setColor(ContextCompat.getColor(ctx, R.color.notif_accent))
             .setContentTitle(if (project.isBlank()) title else "$title · $project")
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
