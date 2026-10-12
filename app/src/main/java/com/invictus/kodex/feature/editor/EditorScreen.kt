@@ -77,9 +77,6 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.invictus.kodex.R
 import com.invictus.kodex.core.editor.EditorSettingsStore
-import com.invictus.kodex.feature.git.GitEvent
-import com.invictus.kodex.feature.git.GitViewModel
-import com.invictus.kodex.feature.git.SourceControlDrawerSheet
 import java.io.File
 import com.invictus.kodex.core.preview.PreviewMode
 import com.invictus.kodex.core.preview.PreviewType
@@ -122,22 +119,7 @@ fun EditorScreen(
     val symbolBar by viewModel.symbolBar.collectAsStateWithLifecycle()
     val symbolBarVisible by viewModel.symbolBarVisible.collectAsStateWithLifecycle()
 
-    // M7 Source Control drawer: shares the project root with the editor session.
     val projectRoot = viewModel.projectRoot
-    val gitViewModel: GitViewModel? = projectRoot
-        ?.takeIf { File(it, ".git").isDirectory }
-        ?.let { root ->
-            androidx.lifecycle.viewmodel.compose.viewModel(
-                key = "git-drawer:${root.path}",
-                factory = GitViewModel.factory(root.path),
-            )
-        }
-    // Fallback flow keeps collectAsStateWithLifecycle unconditional (composition safety
-    // if the project root flips between null/non-null across recompositions).
-    val gitStateFlow = gitViewModel?.uiState
-        ?: kotlinx.coroutines.flow.MutableStateFlow(GitViewModel.UiState())
-    val gitState by gitStateFlow.collectAsStateWithLifecycle()
-    var showGitSheet by remember { mutableStateOf(false) }
     var showFileSearch by remember { mutableStateOf(false) }
     // Bumped whenever the editor content/undo stack changes, so undo/redo enabled-state recomputes.
     var historyTick by remember { mutableIntStateOf(0) }
@@ -146,18 +128,6 @@ fun EditorScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { snackbarHostState.showSnackbar(it.resolve(context)) }
-    }
-    LaunchedEffect(gitViewModel) {
-        gitViewModel?.effects?.collect { effect ->
-            when (effect) {
-                is GitViewModel.Effect.OpenFile -> {
-                    showGitSheet = false
-                    viewModel.onEvent(EditorEvent.Open(effect.file))
-                }
-                is GitViewModel.Effect.Message ->
-                    snackbarHostState.showSnackbar(effect.text.resolve(context))
-            }
-        }
     }
     // Last tab closed: nothing left to show here.
     LaunchedEffect(state.tabs.isEmpty()) {
@@ -459,38 +429,16 @@ fun EditorScreen(
                         }
                     }
                 }
-                // Floating actions (replace the old top-bar AI icon): AI on top, Source Control below.
-                // The AI button hides while the AI panel is open (the panel has its own close handle)
-                // and whenever AI is switched off in Settings > Behavior.
-                val showAiFab = AiGate != null && activePath != null && !showAi
-                val showGitFab = gitViewModel != null && activePath != null
-                if (showAiFab || showGitFab) {
-                    Column(
+                // Floating AI button (hidden while the AI panel is open and whenever AI is switched off
+                // in Settings > Behavior). Source Control no longer floats over the editor.
+                if (AiGate != null && activePath != null && !showAi) {
+                    SmallFloatingActionButton(
+                        onClick = { showAi = true },
                         modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     ) {
-                        if (showAiFab) {
-                            SmallFloatingActionButton(
-                                onClick = { showAi = true },
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            ) {
-                                Icon(XIcons.AutoAwesome, contentDescription = "AI Assistant")
-                            }
-                        }
-                        if (showGitFab) {
-                            val changedCount = gitState.status?.changes?.size ?: 0
-                            BadgedBox(badge = { if (changedCount > 0) Badge { Text("$changedCount") } }) {
-                                SmallFloatingActionButton(
-                                    onClick = { showGitSheet = true },
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                ) {
-                                    Icon(XIcons.Commit, contentDescription = stringResource(R.string.git_title))
-                                }
-                            }
-                        }
+                        Icon(XIcons.AutoAwesome, contentDescription = "AI Assistant")
                     }
                 }
             }
@@ -521,21 +469,6 @@ fun EditorScreen(
             },
         )
         androidx.activity.compose.BackHandler { showFileSearch = false }
-    }
-
-    if (showGitSheet && gitViewModel != null && projectRoot != null) {
-        ModalBottomSheet(
-            onDismissRequest = { showGitSheet = false },
-            // Open at the content's height instead of half-way: the half-open state left the
-            // changes list running off the bottom edge of the screen.
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        ) {
-            SourceControlDrawerSheet(
-                state = gitState,
-                projectRoot = projectRoot,
-                onEvent = gitViewModel::onEvent,
-            )
-        }
     }
 
     state.pendingClose?.let { pending ->

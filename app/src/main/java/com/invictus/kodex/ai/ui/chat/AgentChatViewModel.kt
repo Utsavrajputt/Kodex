@@ -11,6 +11,7 @@ import com.invictus.kodex.ai.agent.AgentPrompt
 import com.invictus.kodex.ai.agent.AgentRunner
 import com.invictus.kodex.ai.agent.AgentSink
 import com.invictus.kodex.ai.agent.AgentTools
+import com.invictus.kodex.ai.agent.RateLimitInfo
 import com.invictus.kodex.ai.agent.ApprovedChange
 import com.invictus.kodex.ai.agent.ChangeKind
 import com.invictus.kodex.ai.agent.ChatMeta
@@ -23,9 +24,14 @@ import com.invictus.kodex.ai.agent.StoredChat
 import com.invictus.kodex.ai.agent.StoredMessage
 import com.invictus.kodex.ai.agent.StoredStep
 import com.invictus.kodex.ai.agent.WorkspaceIo
+import com.invictus.kodex.ai.keys.AiKeyStore
 import com.invictus.kodex.ai.prefs.AiPrefs
 import com.invictus.kodex.ai.provider.AgentMessage
+import com.invictus.kodex.ai.provider.AiErrorInfo
+import com.invictus.kodex.ai.provider.AiErrorPresenter
 import com.invictus.kodex.ai.provider.AiException
+import com.invictus.kodex.ai.provider.AiModel
+import com.invictus.kodex.ai.provider.ProviderRegistry
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -35,6 +41,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -62,8 +69,25 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     data class UndoEntry(val path: String, val before: String?, val after: String?)
     data class UndoInfo(val entries: List<UndoEntry>)
 
+    /** Provider / model / readiness shown in the chat header and the first-run setup card. */
+    data class AiStatus(
+        val loaded: Boolean = false,
+        val providerId: String = "claude",
+        val providerName: String = "",
+        val modelId: String = "",
+        val modelLabel: String = "",
+        val contextTokens: Int = 0,
+        val hasKey: Boolean = true,
+        val consent: Boolean = true,
+        val keyedProviders: Set<String> = emptySet(),
+        val customModelActive: Boolean = false,
+    ) {
+        val ready get() = hasKey && consent
+    }
+
     private val prefs = AiPrefs(app)
     private val runtime = AiRuntime(app)
+    private val keyStore = AiKeyStore(app)
     private val store = ChatStore(app, projectPath)
     private val root = File(projectPath)
     private var io: WorkspaceIo = DiskIo
@@ -78,6 +102,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     private var chatId = UUID.randomUUID().toString()
     private var job: Job? = null
     private var needSeparator = false
+    private var runner: AgentRunner? = null
 
     private val pending = PendingChanges { _changes.value = it }
 
@@ -87,6 +112,17 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+    private val _failure = MutableStateFlow<AiErrorInfo?>(null)
+    /** A structured, explained provider error (rate limit, bad key…); plain [error] strings cover everything else. */
+    val failure: StateFlow<AiErrorInfo?> = _failure.asStateFlow()
+    private val _rateLimit = MutableStateFlow<RateLimitInfo?>(null)
+    /** Set while a 429 is being waited out; drives the countdown card. */
+    val rateLimit: StateFlow<RateLimitInfo?> = _rateLimit.asStateFlow()
+    private val _status = MutableStateFlow(AiStatus())
+    val status: StateFlow<AiStatus> = _status.asStateFlow()
+    private val _contextUsed = MutableStateFlow(0)
+    /** Estimated tokens in this chat's latest request, for the context meter. */
+    val contextUsed: StateFlow<Int> = _contextUsed.asStateFlow()
     private val _applyError = MutableStateFlow<String?>(null)
     val applyError: StateFlow<String?> = _applyError.asStateFlow()
     private val _reviewOpen = MutableStateFlow(false)
@@ -108,6 +144,45 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             refreshChats()
             refreshIndex()
         }
+        refreshStatus()
+    }
+
+    /** Re-reads provider, model, key and consent (call on resume: they change in Settings). */
+    fun refreshStatus() {
+        viewModelScope.launch {
+            val provider = ProviderRegistry.byId(prefs.providerId.first())
+            val custom = prefs.customModel.first().trim()
+            val model = prefs.currentModel(provider.id, provider.defaultModels)
+            val known = provider.defaultModels.firstOrNull { it.id == model }
+            _status.value = AiStatus(
+                loaded = true,
+                providerId = provider.id,
+                providerName = provider.displayName,
+                modelId = model,
+                modelLabel = known?.label ?: model,
+                contextTokens = (known?.maxContextChars ?: 100_000) / 4,
+                hasKey = !keyStore.get(provider.id).isNullOrBlank(),
+                consent = prefs.consentGranted.first(),
+                keyedProviders = ProviderRegistry.all.filter { !keyStore.get(it.id).isNullOrBlank() }.map { it.id }.toSet(),
+                customModelActive = custom.isNotEmpty(),
+            )
+        }
+    }
+
+    /** Quick switch from the chat header; a custom model id would override the pick, so it is cleared. */
+    fun switchModel(providerId: String, model: AiModel) {
+        viewModelScope.launch {
+            prefs.setProviderId(providerId)
+            prefs.setModelId(providerId, model.id)
+            prefs.setCustomModel("")
+            _failure.value = null
+            refreshStatus()
+        }
+    }
+
+    /** Ends the rate-limit countdown and retries right now. */
+    fun retryNow() {
+        runner?.skipWait()
     }
 
     fun bindIo(io: WorkspaceIo) {
@@ -116,6 +191,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
 
     fun errorHandled() {
         _error.value = null
+        _failure.value = null
     }
 
     // ---- sending ----
@@ -161,6 +237,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
 
     private fun startTurn(text: String, attached: List<String>) {
         _error.value = null
+        _failure.value = null
         val startPos = history.size
         val cachedIndex = _fileIndex.value.toSet()
         val mentions = MENTION.findAll(text).map { it.groupValues[2] }.filter { cachedIndex.isEmpty() || it in cachedIndex }.toList()
@@ -184,8 +261,9 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                         .sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
                         .take(50).map { if (it.isDirectory) it.name + "/" else it.name }
                 }
-                AgentRunner(provider, key, model, AgentTools(files, pending), budget)
-                    .run(AgentPrompt.system(root.name, topLevel), history, sink)
+                val r = AgentRunner(provider, key, model, AgentTools(files, pending), budget)
+                runner = r
+                r.run(AgentPrompt.system(root.name, topLevel), history, sink)
                 if (_messages.value.lastOrNull()?.let { it.text.isBlank() && it.steps.isEmpty() } == true) {
                     rollback(startPos, text, "")
                     _error.value = "The model returned an empty response"
@@ -195,17 +273,22 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                 throw ce
             } catch (e: AiException) {
                 rollback(startPos, text, _messages.value.lastOrNull()?.text.orEmpty())
-                _error.value = e.error.message
+                _failure.value = AiErrorPresenter.describe(e.error, providerName())
             } catch (e: Exception) {
                 rollback(startPos, text, _messages.value.lastOrNull()?.text.orEmpty())
                 _error.value = e.message ?: "Request failed"
             } finally {
+                runner = null
+                _rateLimit.value = null
                 finishStreaming()
                 _busy.value = false
                 persistNow()
+                refreshStatus()
             }
         }
     }
+
+    private suspend fun providerName(): String = ProviderRegistry.byId(prefs.providerId.first()).displayName
 
     /** After a failed or stopped turn: drop the half-finished tool trail but keep the question (and any text streamed so far). */
     private fun rollback(startPos: Int, userText: String, partial: String) {
@@ -273,6 +356,14 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         override fun onStepStart(id: String, label: String) =
             updateLast { it.copy(steps = it.steps + UiStep(id, label, StepStatus.RUNNING)) }
 
+        override fun onRateLimit(info: RateLimitInfo?) {
+            _rateLimit.value = info
+        }
+
+        override fun onUsage(inputTokens: Int, outputTokens: Int) {
+            _contextUsed.value = inputTokens
+        }
+
         override fun onStepEnd(id: String, ok: Boolean) = updateLast { m ->
             m.copy(steps = m.steps.map { s -> if (s.id == id) s.copy(status = if (ok) StepStatus.DONE else StepStatus.FAILED) else s })
         }
@@ -331,12 +422,16 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         history.clear()
         _messages.value = emptyList()
         _error.value = null
+        _failure.value = null
+        _contextUsed.value = 0
     }
 
     fun openChat(id: String) {
         if (id == chatId) return
         job?.cancel()
         persistNow()
+        _failure.value = null
+        _contextUsed.value = 0
         viewModelScope.launch {
             val chat = withContext(Dispatchers.IO) { store.load(id) } ?: return@launch
             restore(chat)

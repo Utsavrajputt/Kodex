@@ -130,6 +130,22 @@ object AiHttp {
         }
     }.flowOn(Dispatchers.IO)
 
+    const val DAILY_QUOTA_SEC = 3600
+
+    /** Seconds to wait before retrying a 429: Retry-After header, else Gemini's `retryDelay` / "retry in 34s". */
+    fun parseRetryDelaySec(body: String, header: String?): Int? {
+        fun ceilSec(v: Double) = kotlin.math.ceil(v).toInt().coerceAtLeast(1)
+        header?.trim()?.toDoubleOrNull()?.let { return ceilSec(it) }
+        val patterns = listOf(
+            Regex("\"retryDelay\"\\s*:\\s*\"([0-9]+(?:\\.[0-9]+)?)s\""),
+            Regex("retry in ([0-9]+(?:\\.[0-9]+)?)\\s*s", RegexOption.IGNORE_CASE),
+        )
+        for (p in patterns) {
+            p.find(body)?.groupValues?.get(1)?.toDoubleOrNull()?.let { return ceilSec(it) }
+        }
+        return null
+    }
+
     fun mapHttpError(code: Int, body: String, retryAfter: String?): AiError {
         val msg = runCatching {
             val o = JSONObject(body)
@@ -140,7 +156,11 @@ object AiHttp {
         return when {
             code == 401 || lower.contains("invalid_api_key") || lower.contains("invalid x-api-key") ||
                 lower.contains("api key not valid") -> AiError.Unauthorized()
-            code == 429 -> AiError.RateLimited(retryAfter?.toIntOrNull())
+            code == 429 -> {
+                // A per-day quota will not clear within a retry window: report it as a long wait.
+                val daily = lower.contains("perday") || lower.contains("per day") || body.contains("PerDay")
+                AiError.RateLimited(if (daily) DAILY_QUOTA_SEC else parseRetryDelaySec(body, retryAfter), daily)
+            }
             (code == 400 || code == 413) && (lower.contains("context length") || lower.contains("context window") ||
                 lower.contains("too long") || lower.contains("too many tokens") || lower.contains("maximum context")) -> AiError.ContextTooLong()
             (code == 400 || code == 403) && (lower.contains("content_filter") || lower.contains("blocked") || lower.contains("safety")) -> AiError.ContentFiltered()

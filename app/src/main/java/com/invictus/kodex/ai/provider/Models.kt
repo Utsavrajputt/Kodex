@@ -38,7 +38,15 @@ sealed class AiError(val message: String) {
     class NoKey : AiError("API key not set — add one in Settings → AI")
     class NoConsent : AiError("AI is off for projects — enable \"Allow AI in projects\" in Settings → AI")
     class Unauthorized : AiError("Invalid or revoked API key (401)")
-    class RateLimited(val retryAfterSec: Int?) : AiError("Rate limited — try later")
+    /** [daily] = a per-day quota: waiting a few seconds will not help, the user must switch model/provider or wait for the reset. */
+    class RateLimited(val retryAfterSec: Int?, val daily: Boolean = false) : AiError(
+        when {
+            daily -> "Daily quota reached — try again later, or switch model/provider in Settings → AI"
+            retryAfterSec == null -> "Rate limited — try later"
+            retryAfterSec >= 300 -> "Quota reached — try again later, or switch model/provider in Settings → AI"
+            else -> "Rate limited — try again in ${retryAfterSec}s"
+        },
+    )
     class ContextTooLong : AiError("Context too long for this model")
     class ContentFiltered : AiError("Response blocked by the provider's safety filter")
     class Timeout : AiError("Request timed out")

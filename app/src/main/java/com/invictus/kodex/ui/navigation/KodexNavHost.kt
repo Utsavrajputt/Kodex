@@ -203,7 +203,12 @@ fun KodexNavHost(
                 if (!com.invictus.kodex.ai.AiSwitch.enabled) {
                     androidx.compose.runtime.LaunchedEffect(Unit) { navController.popBackStack() }
                 } else if (path != null) {
-                    gate.AgentScreen(projectPath = path, editor = editorViewModel, onBack = { navController.popBackStack() })
+                    gate.AgentScreen(
+                        projectPath = path,
+                        editor = editorViewModel,
+                        onBack = { navController.popBackStack() },
+                        onOpenSettings = { navController.navigate(gate.settingsRoute) },
+                    )
                 }
             }
         }

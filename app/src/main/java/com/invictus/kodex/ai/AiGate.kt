@@ -22,7 +22,7 @@ interface AiGateImpl {
 
     /** Full-screen AI agent for a project: reads/searches the whole project and stages multi-file changes for review. */
     @Composable
-    fun AgentScreen(projectPath: String, editor: EditorViewModel, onBack: () -> Unit)
+    fun AgentScreen(projectPath: String, editor: EditorViewModel, onBack: () -> Unit, onOpenSettings: () -> Unit)
 
     @Composable
     fun SettingsAiScreen(onBack: () -> Unit)

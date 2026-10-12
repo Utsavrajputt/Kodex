@@ -28,13 +28,13 @@ class RealAiGate(private val app: Application) : AiGateImpl {
     override fun agentRouteFor(projectPath: String) = "ai_agent/" + android.net.Uri.encode(projectPath)
 
     @Composable
-    override fun AgentScreen(projectPath: String, editor: EditorViewModel, onBack: () -> Unit) {
+    override fun AgentScreen(projectPath: String, editor: EditorViewModel, onBack: () -> Unit, onOpenSettings: () -> Unit) {
         val vm: AgentChatViewModel = viewModel(key = "agent:$projectPath", factory = AgentChatViewModel.factory(app, projectPath))
         androidx.compose.runtime.LaunchedEffect(vm, editor) {
             vm.bindIo(com.invictus.kodex.ai.agent.EditorIo(editor))
             vm.refreshIndex()
         }
-        AgentChatScreen(vm = vm, projectName = java.io.File(projectPath).name, onBack = onBack)
+        AgentChatScreen(vm = vm, projectName = java.io.File(projectPath).name, onBack = onBack, onOpenSettings = onOpenSettings)
     }
 
     @Composable

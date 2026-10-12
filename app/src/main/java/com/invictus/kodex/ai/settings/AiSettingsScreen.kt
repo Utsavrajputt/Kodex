@@ -1,31 +1,45 @@
 package com.invictus.kodex.ai.settings
 
 import android.app.Application
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,21 +50,34 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.invictus.kodex.ai.agent.AiUsage
 import com.invictus.kodex.ai.keys.AiKeyStore
 import com.invictus.kodex.ai.prefs.AiPrefs
+import com.invictus.kodex.ai.provider.AiErrorPresenter
 import com.invictus.kodex.ai.provider.AiException
 import com.invictus.kodex.ai.provider.AiMessage
 import com.invictus.kodex.ai.provider.AiModel
 import com.invictus.kodex.ai.provider.AiRequest
+import com.invictus.kodex.ai.provider.ModelInfo
 import com.invictus.kodex.ai.provider.ModelList
 import com.invictus.kodex.ai.provider.ProviderRegistry
+import com.invictus.kodex.ai.ui.chat.AiTag
+import com.invictus.kodex.ai.ui.chat.TierTag
 import com.invictus.kodex.ui.icons.XIcons
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -71,8 +98,8 @@ class AiSettingsViewModel(
     sealed interface TestState {
         data object Idle : TestState
         data object Testing : TestState
-        data object Ok : TestState
-        data class Failed(val message: String) : TestState
+        data class Ok(val millis: Long, val model: String) : TestState
+        data class Failed(val title: String, val detail: String) : TestState
     }
 
     val providerId: StateFlow<String> = prefs.providerId.stateIn(viewModelScope, SharingStarted.Eagerly, "claude")
@@ -93,6 +120,12 @@ class AiSettingsViewModel(
 
     private val _test = MutableStateFlow<TestState>(TestState.Idle)
     val test: StateFlow<TestState> = _test.asStateFlow()
+
+    private val _keyHint = MutableStateFlow<Map<String, String>>(emptyMap())
+    /** Masked tail of each saved key ("••••a1b2"), so the user can tell which key is stored without revealing it. */
+    val keyHint: StateFlow<Map<String, String>> = _keyHint.asStateFlow()
+
+    val usage: StateFlow<AiUsage.Snapshot> = AiUsage.state
 
     private val _messages = MutableStateFlow<String?>(null)
     val messages: StateFlow<String?> = _messages.asStateFlow()
@@ -128,6 +161,13 @@ class AiSettingsViewModel(
 
     fun refresh() {
         _hasKey.value = ProviderRegistry.all.associate { it.id to (keyStore.get(it.id) != null) }
+        _keyHint.value = ProviderRegistry.all.mapNotNull { p ->
+            keyStore.get(p.id)?.takeIf { it.isNotBlank() }?.let { p.id to "••••" + it.takeLast(4) }
+        }.toMap()
+    }
+
+    fun resetUsage() {
+        AiUsage.reset()
     }
 
     fun messageHandled() {
@@ -135,6 +175,7 @@ class AiSettingsViewModel(
     }
 
     fun selectProvider(id: String) {
+        _test.value = TestState.Idle
         viewModelScope.launch {
             prefs.setProviderId(id)
             _modelId.value = prefs.modelId(id).first()
@@ -177,12 +218,13 @@ class AiSettingsViewModel(
         val provider = ProviderRegistry.byId(providerId.value)
         val key = keyStore.get(provider.id)
         if (key == null) {
-            _test.value = TestState.Failed("No key saved for ${provider.displayName}")
+            _test.value = TestState.Failed("No key saved", "Paste your ${provider.displayName} API key above, save it, then test again.")
             return
         }
         val model = _modelId.value.ifEmpty { provider.defaultModels.first().id }
         _test.value = TestState.Testing
         viewModelScope.launch {
+            val started = System.nanoTime()
             _test.value = try {
                 provider.complete(
                     key, model,
@@ -191,11 +233,12 @@ class AiSettingsViewModel(
                         maxOutputTokens = 16, temperature = 0.0, model = model,
                     ),
                 )
-                TestState.Ok
+                TestState.Ok((System.nanoTime() - started) / 1_000_000, model)
             } catch (e: AiException) {
-                TestState.Failed(e.error.message)
+                val info = AiErrorPresenter.describe(e.error, provider.displayName)
+                TestState.Failed(info.title, info.explanation)
             } catch (e: Exception) {
-                TestState.Failed(e.message ?: "failed")
+                TestState.Failed("Test failed", e.message ?: "Unexpected error")
             }
         }
     }
@@ -217,9 +260,12 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
     val consent by vm.consent.collectAsState()
     val globs by vm.globs.collectAsState()
     val hasKey by vm.hasKey.collectAsState()
+    val keyHint by vm.keyHint.collectAsState()
     val test by vm.test.collectAsState()
+    val usage by vm.usage.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val message by vm.messages.collectAsState()
+    val uriHandler = LocalUriHandler.current
 
     LaunchedEffect(message) {
         message?.let { snackbar.showSnackbar(it); vm.messageHandled() }
@@ -227,6 +273,14 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
 
     val provider = ProviderRegistry.byId(providerId)
     var keyDraft by remember(providerId) { mutableStateOf("") }
+    var reveal by remember(providerId) { mutableStateOf(false) }
+    var showAllModels by remember(providerId) { mutableStateOf(false) }
+    val keySaved = hasKey[providerId] == true
+    val modelList = models.ifEmpty { provider.defaultModels }
+    val selectedId = modelId.ifEmpty { provider.defaultModels.first().id }
+    val activeId = customModel.trim().ifEmpty { selectedId }
+    val activeModel = modelList.firstOrNull { it.id == activeId } ?: provider.defaultModels.firstOrNull { it.id == activeId }
+    val ready = keySaved && consent
 
     Scaffold(
         topBar = {
@@ -246,118 +300,367 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text("Provider", style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.height(4.dp))
-            var providerMenu by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(expanded = providerMenu, onExpandedChange = { providerMenu = it }) {
-                OutlinedTextField(
-                    value = provider.displayName,
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(providerMenu) },
-                    modifier = Modifier.fillMaxWidth().menuAnchor(),
-                )
-                ExposedDropdownMenu(expanded = providerMenu, onDismissRequest = { providerMenu = false }) {
-                    ProviderRegistry.all.forEach { p ->
-                        DropdownMenuItem(text = { Text(p.displayName) }, onClick = { vm.selectProvider(p.id); providerMenu = false })
+            // ---- status hero ----
+            Surface(shape = RoundedCornerShape(24.dp), color = Color.Transparent) {
+                Column(
+                    Modifier
+                        .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer)))
+                        .padding(18.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(XIcons.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                            Text(
+                                activeModel?.label ?: activeId,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                provider.displayName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
+                            )
+                        }
+                        AiTag(
+                            if (ready) "Ready" else "Setup needed",
+                            container = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            content = if (ready) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onError,
+                        )
                     }
+                    Spacer(Modifier.height(12.dp))
+                    HeroCheck(keySaved, if (keySaved) "API key saved" else "Add an API key to begin")
+                    HeroCheck(consent, if (consent) "AI allowed in projects" else "Turn on \"Allow AI in projects\" below")
+                    activeModel?.let { HeroCheck(true, ModelInfo.contextLabel(it.maxContextChars) + " window") }
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
-            Text("Model", style = MaterialTheme.typography.labelLarge)
-            Spacer(Modifier.height(4.dp))
-            var modelMenu by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(expanded = modelMenu, onExpandedChange = { modelMenu = it }) {
-                OutlinedTextField(
-                    value = modelId.ifEmpty { "Default (${provider.defaultModels.first().id})" },
-                    onValueChange = {},
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(modelMenu) },
-                    modifier = Modifier.fillMaxWidth().menuAnchor(),
-                )
-                ExposedDropdownMenu(expanded = modelMenu, onDismissRequest = { modelMenu = false }) {
-                    models.ifEmpty { provider.defaultModels }.forEach { m ->
-                        DropdownMenuItem(
-                            text = { Text("${m.label} (${m.id})") },
-                            onClick = { vm.selectModel(m.id); modelMenu = false },
+            // ---- provider ----
+            SectionCard("Provider", XIcons.Cloud, "Who runs the model. Each provider uses its own API key.") {
+                ProviderRegistry.all.forEach { p ->
+                    SelectableRow(
+                        selected = p.id == providerId,
+                        onClick = { vm.selectProvider(p.id) },
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(p.displayName, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                if (hasKey[p.id] == true) "Key saved ${keyHint[p.id].orEmpty()}" else "No key yet",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        AiTag(
+                            "${p.defaultModels.size} models",
+                            container = MaterialTheme.colorScheme.surfaceVariant,
                         )
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            SyncedTextField(
-                value = customModel,
-                onValueChange = { vm.setCustomModel(it) },
-                label = { Text("Custom model id (optional, overrides)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
 
-            Spacer(Modifier.height(16.dp))
-            Text("API key (${provider.displayName})", style = MaterialTheme.typography.labelLarge)
-            Text(
-                "Stored encrypted on-device (Keystore + AES/GCM). It only ever leaves the device to reach ${provider.displayName}.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Spacer(Modifier.height(4.dp))
-            OutlinedTextField(
-                value = keyDraft,
-                onValueChange = { keyDraft = it },
-                label = { Text(if (hasKey[providerId] == true) "Key saved — enter to replace" else "Paste API key") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-            Row {
-                Button(onClick = { vm.saveKey(providerId, keyDraft); keyDraft = "" }, enabled = keyDraft.isNotBlank()) {
-                    Text("Save key")
+            // ---- model ----
+            SectionCard(
+                "Model",
+                XIcons.Tune,
+                "Bigger models reason better but are slower and hit limits sooner. Tags are a rough guide.",
+            ) {
+                val visible = if (showAllModels) modelList else modelList.take(6)
+                visible.forEach { m ->
+                    SelectableRow(selected = m.id == selectedId, onClick = { vm.selectModel(m.id) }) {
+                        Column(Modifier.weight(1f)) {
+                            Text(m.label, style = MaterialTheme.typography.titleSmall)
+                            Text(m.id, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                ModelInfo.tier(m.id)?.let { TierTag(it) }
+                                if (m.maxContextChars > 0) AiTag(ModelInfo.contextLabel(m.maxContextChars))
+                            }
+                        }
+                    }
                 }
-                Spacer(Modifier.weight(1f))
-                if (hasKey[providerId] == true) {
-                    OutlinedButton(onClick = { vm.clearKey(providerId) }) { Text("Remove") }
+                if (modelList.size > 6) {
+                    TextButton(onClick = { showAllModels = !showAllModels }) {
+                        Text(if (showAllModels) "Show fewer" else "Show all ${modelList.size} models")
+                    }
                 }
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(onClick = { vm.testConnection() }, enabled = test != AiSettingsViewModel.TestState.Testing) {
-                    Text("Test connection")
-                }
-                if (test == AiSettingsViewModel.TestState.Testing) {
-                    Spacer(Modifier.padding(4.dp))
-                    CircularProgressIndicator(Modifier.padding(4.dp))
-                }
-            }
-            when (val t = test) {
-                AiSettingsViewModel.TestState.Ok -> Text("Connected ✓", color = MaterialTheme.colorScheme.primary)
-                is AiSettingsViewModel.TestState.Failed -> Text(t.message, color = MaterialTheme.colorScheme.error)
-                else -> Unit
-            }
-
-            Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Allow AI in projects", style = MaterialTheme.typography.labelLarge)
-                    Text(
-                        "When on, selected code and file contents are sent to ${provider.displayName} when you use AI features.",
-                        style = MaterialTheme.typography.bodySmall,
+                if (customModel.isNotBlank()) {
+                    InfoNote(
+                        "A custom model id is active (${customModel.trim()}). It overrides the selection above until you clear it.",
+                        warn = true,
                     )
                 }
-                Switch(checked = consent, onCheckedChange = { vm.setConsent(it) })
+                SyncedTextField(
+                    value = customModel,
+                    onValueChange = { vm.setCustomModel(it) },
+                    label = { Text("Custom model id (optional)") },
+                    supportingText = { Text("For a model that isn't listed yet. Leave empty to use the selection above.") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
+            // ---- key & connection ----
+            SectionCard("API key & connection", XIcons.Key, "Stored encrypted on this device (Keystore + AES/GCM). It only leaves the device to reach ${provider.displayName}.") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (keySaved) XIcons.CheckCircle else XIcons.ErrorCircle,
+                        contentDescription = null,
+                        tint = if (keySaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        if (keySaved) "Key saved  ${keyHint[providerId].orEmpty()}" else "No key saved for ${provider.displayName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(start = 8.dp).weight(1f),
+                    )
+                    KEY_URLS[providerId]?.let { url ->
+                        TextButton(onClick = { runCatching { uriHandler.openUri(url) } }) {
+                            Text("Get a key")
+                            Icon(XIcons.OpenInNew, contentDescription = null, modifier = Modifier.padding(start = 4.dp).size(14.dp))
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = keyDraft,
+                    onValueChange = { keyDraft = it },
+                    label = { Text(if (keySaved) "Replace key" else "Paste API key") },
+                    singleLine = true,
+                    visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { reveal = !reveal }) {
+                            Icon(if (reveal) XIcons.VisibilityOff else XIcons.Visibility, contentDescription = if (reveal) "Hide key" else "Show key")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { vm.saveKey(providerId, keyDraft); keyDraft = "" }, enabled = keyDraft.isNotBlank()) {
+                        Text("Save key")
+                    }
+                    if (keySaved) {
+                        OutlinedButton(onClick = { vm.clearKey(providerId) }) { Text("Remove") }
+                    }
+                }
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FilledTonalButton(onClick = { vm.testConnection() }, enabled = test !is AiSettingsViewModel.TestState.Testing) {
+                        Text("Test connection")
+                    }
+                    if (test is AiSettingsViewModel.TestState.Testing) {
+                        CircularProgressIndicator(Modifier.padding(start = 12.dp).size(20.dp), strokeWidth = 2.dp)
+                        Text("  Contacting ${provider.displayName}…", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                when (val t = test) {
+                    is AiSettingsViewModel.TestState.Ok -> StatusPanel(
+                        ok = true,
+                        title = "Connected · ${t.millis} ms",
+                        detail = "${provider.displayName} accepted your key and answered using ${t.model}.",
+                    )
+                    is AiSettingsViewModel.TestState.Failed -> StatusPanel(ok = false, title = t.title, detail = t.detail)
+                    else -> Unit
+                }
+            }
+
+            // ---- usage ----
+            SectionCard("Usage this session", XIcons.Bolt, "Counted since the app started. Token numbers are estimates, not your provider's bill.") {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StatTile("Requests", usage.requests.toString(), Modifier.weight(1f))
+                    StatTile("Limit hits", usage.rateLimitHits.toString(), Modifier.weight(1f), warn = usage.rateLimitHits > 0)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    StatTile("Sent (est.)", "~" + ModelInfo.formatTokens(usage.inputTokens), Modifier.weight(1f))
+                    StatTile("Received (est.)", "~" + ModelInfo.formatTokens(usage.outputTokens), Modifier.weight(1f))
+                }
+                val total = usage.inputTokens + usage.outputTokens
+                if (total > 0) {
+                    LinearProgressIndicator(
+                        progress = { usage.inputTokens.toFloat() / total },
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                        trackColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    )
+                    Text(
+                        "Sent vs received. Every agent step re-sends the conversation, so \"sent\" is usually much larger.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                usage.lastRateLimitAt?.let { at ->
+                    val agoSec = ((System.currentTimeMillis() - at) / 1000).toInt().coerceAtLeast(0)
+                    InfoNote(
+                        "Last limit hit ${AiErrorPresenter.formatWait(agoSec)} ago — " +
+                            if (usage.lastRateLimitDaily) "a daily quota (resets later)."
+                            else "a short-term limit" + (usage.lastRateLimitWaitSec?.let { ", Kodex waited ${AiErrorPresenter.formatWait(it)}." } ?: "."),
+                        warn = true,
+                    )
+                }
+                TextButton(onClick = { vm.resetUsage() }, enabled = usage.requests > 0 || usage.rateLimitHits > 0) { Text("Reset counters") }
+            }
+
+            // ---- limits explainer ----
+            var limitsOpen by remember { mutableStateOf(false) }
+            SectionCard("Understanding rate limits", XIcons.Info, null, onHeaderClick = { limitsOpen = !limitsOpen }, trailing = {
+                Icon(if (limitsOpen) XIcons.KeyboardArrowUp else XIcons.KeyboardArrowDown, contentDescription = null)
+            }) {
+                if (limitsOpen) {
+                    LimitPoint("Short-term limit", "Too many requests in a short window. Kodex waits the time the provider asks for (shown as a countdown in the chat) and retries up to 4 times, or you can tap Retry now.")
+                    LimitPoint("Daily quota", "A per-day cap, common on free plans. Waiting seconds won't help — switch model or provider, or come back after the reset.")
+                    LimitPoint("Why agents hit limits", "One message can trigger many requests (read files, search, edit). Lighter models usually allow more requests per minute.")
+                    LimitPoint("What to do", "Use the model chip in the chat to switch on the spot, or add another provider's key here and switch to it.")
+                } else {
+                    Text("Tap to see what the countdown and quota messages mean.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            // ---- privacy ----
+            SectionCard("Privacy", XIcons.Visibility, "You decide what the assistant may see.") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Allow AI in projects", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "When on, selected code and file contents are sent to ${provider.displayName} when you use AI features.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = consent, onCheckedChange = { vm.setConsent(it) })
+                }
+                SyncedTextField(
+                    value = globs,
+                    onValueChange = { vm.setGlobs(it) },
+                    label = { Text("Never send files matching") },
+                    supportingText = { Text("Comma-separated, e.g. .env, *.pem, secrets/**") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                InfoNote("Obvious secrets (API keys, tokens, private keys) are masked before anything is sent.")
+            }
             Spacer(Modifier.height(16.dp))
-            SyncedTextField(
-                value = globs,
-                onValueChange = { vm.setGlobs(it) },
-                label = { Text("Never send files matching (comma-separated)") },
-                supportingText = { Text("e.g. .env, *.pem, secrets/**") },
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
+    }
+}
+
+private val KEY_URLS = mapOf(
+    "claude" to "https://console.anthropic.com/settings/keys",
+    "openai" to "https://platform.openai.com/api-keys",
+    "gemini" to "https://aistudio.google.com/app/apikey",
+)
+
+@Composable
+private fun SectionCard(
+    title: String,
+    icon: ImageVector,
+    subtitle: String?,
+    onHeaderClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                Modifier.fillMaxWidth().then(if (onHeaderClick != null) Modifier.clickable { onHeaderClick() } else Modifier),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(34.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(18.dp)) }
+                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    if (subtitle != null) {
+                        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                trailing?.invoke()
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SelectableRow(selected: Boolean, onClick: () -> Unit, content: @Composable RowScope.() -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = selected, onClick = null)
+            Spacer(Modifier.width(10.dp))
+            content()
+        }
+    }
+}
+
+@Composable
+private fun HeroCheck(ok: Boolean, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+        Icon(
+            if (ok) XIcons.CheckCircle else XIcons.ErrorCircle,
+            contentDescription = null,
+            tint = if (ok) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(start = 8.dp))
+    }
+}
+
+@Composable
+private fun StatTile(label: String, value: String, modifier: Modifier = Modifier, warn: Boolean = false) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (warn) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surface,
+        modifier = modifier,
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun StatusPanel(ok: Boolean, title: String, detail: String) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (ok) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+    ) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.Top) {
+            val fg = if (ok) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+            Icon(if (ok) XIcons.CheckCircle else XIcons.ErrorCircle, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
+            Column(Modifier.padding(start = 10.dp)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, color = fg)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = fg)
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoNote(text: String, warn: Boolean = false) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (warn) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.surface,
+    ) {
+        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.Top) {
+            Icon(XIcons.Info, contentDescription = null, modifier = Modifier.size(16.dp).padding(top = 1.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 8.dp))
+        }
+    }
+}
+
+@Composable
+private fun LimitPoint(title: String, body: String) {
+    Column {
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

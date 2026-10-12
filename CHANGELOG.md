@@ -16,6 +16,10 @@ pick the matching section as the GitHub Release notes.
 - 💬 **Premium chat** — full Markdown (headings, lists, tables, quotes, bold/italic/links), syntax-highlighted code blocks with **Copy** and **Apply to file**, `@file` mentions and an attach picker, regenerate / copy / edit-and-resend, and **saved chats per project**.
 - 🤖 **Live Gemini model list** — the AI Assistant model dropdown now loads every chat-capable Gemini model available to your API key (newest first, curated picks on top), so new releases show up without an app update. Falls back to the built-in list when offline or without a key.
 
+- 🎨 **Redesigned AI section** — AI Assistant settings are now cards: a status hero (ready / setup needed), provider cards showing key status, model cards with context size and Fast / Balanced / Most-capable tags, key health with a masked tail and a timed **Test connection**, privacy controls, and session **usage** (requests, estimated tokens, limit hits).
+- ⏱️ **Clear rate-limit handling** — a live countdown card in the chat explains what happened, retries automatically (attempt N of 4) and offers **Retry now**, **Switch model** and **Stop**. Daily quotas are told apart from short-term limits, with advice instead of a pointless wait. A new *Understanding rate limits* explainer lives in settings.
+- 🧭 **Better chat panel** — model chip in the header (tap to switch provider/model without leaving the chat), context-window meter, first-run setup card, explained error cards with next-step buttons, icon-coded tool steps, and a cleaner input bar.
+
 ### 🔄 Changed
 - 🤖 The editor's AI panel now runs on the same agent engine: the open file and selection travel with each message, and the agent can still look at the rest of the project.
 - 🤖 Gemini defaults are now **Gemini 3.8 Flash** and **Gemini 3.1 Pro**. A saved Gemini 2.5 Flash / 2.5 Pro selection is moved to 3.8 Flash automatically.
