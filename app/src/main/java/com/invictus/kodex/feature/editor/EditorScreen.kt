@@ -116,7 +116,7 @@ fun EditorScreen(
     var showSymbolCustomize by remember { mutableStateOf(false) }
     var showFind by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(false) }
-    // M17 (ai flavor only): AI panel in a bottom split; gate is null in the normal flavor.
+    // M17: AI panel in a bottom split; gate is null in the normal flavor.
     var showAi by remember { mutableStateOf(false) }
     val findState = remember { FindReplaceState() }
     val symbolBar by viewModel.symbolBar.collectAsStateWithLifecycle()
@@ -251,11 +251,6 @@ fun EditorScreen(
                                 PreviewMode.PREVIEW -> XIcons.Visibility to R.string.preview_mode_preview
                             }
                             Icon(icon, contentDescription = stringResource(description))
-                        }
-                    }
-                    AiGate?.let {
-                        IconButton(onClick = { showAi = !showAi }) {
-                            Icon(XIcons.AutoAwesome, contentDescription = "AI Assistant")
                         }
                     }
                     Box {
@@ -464,18 +459,37 @@ fun EditorScreen(
                         }
                     }
                 }
-                if (gitViewModel != null && activePath != null) {
-                    val changedCount = gitState.status?.changes?.size ?: 0
-                    BadgedBox(
-                        badge = { if (changedCount > 0) Badge { Text("$changedCount") } },
+                // Floating actions (replace the old top-bar AI icon): AI on top, Source Control below.
+                // The AI button hides while the AI panel is open (the panel has its own close handle)
+                // and whenever AI is switched off in Settings > Behavior.
+                val showAiFab = AiGate != null && activePath != null && !showAi
+                val showGitFab = gitViewModel != null && activePath != null
+                if (showAiFab || showGitFab) {
+                    Column(
                         modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        SmallFloatingActionButton(
-                            onClick = { showGitSheet = true },
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        ) {
-                            Icon(XIcons.Commit, contentDescription = stringResource(R.string.git_title))
+                        if (showAiFab) {
+                            SmallFloatingActionButton(
+                                onClick = { showAi = true },
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            ) {
+                                Icon(XIcons.AutoAwesome, contentDescription = "AI Assistant")
+                            }
+                        }
+                        if (showGitFab) {
+                            val changedCount = gitState.status?.changes?.size ?: 0
+                            BadgedBox(badge = { if (changedCount > 0) Badge { Text("$changedCount") } }) {
+                                SmallFloatingActionButton(
+                                    onClick = { showGitSheet = true },
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                ) {
+                                    Icon(XIcons.Commit, contentDescription = stringResource(R.string.git_title))
+                                }
+                            }
                         }
                     }
                 }

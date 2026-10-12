@@ -189,14 +189,20 @@ fun KodexNavHost(
         composable(Routes.SETTINGS_GITHUB) {
             SettingsGitHubScreen(onBack = { navController.popBackStack() })
         }
-        // M17 (ai flavor only): the normal flavor has gate == null, so no AI route is registered.
-        AiGate?.let { gate ->
+        // AI routes are always registered; they bounce straight back when AI is switched off.
+        com.invictus.kodex.ai.AiFlavor.gate?.let { gate ->
             composable(gate.settingsRoute) {
-                gate.SettingsAiScreen(onBack = { navController.popBackStack() })
+                if (com.invictus.kodex.ai.AiSwitch.enabled) {
+                    gate.SettingsAiScreen(onBack = { navController.popBackStack() })
+                } else {
+                    androidx.compose.runtime.LaunchedEffect(Unit) { navController.popBackStack() }
+                }
             }
             composable(gate.agentRoute) { entry ->
                 val path = entry.arguments?.getString("projectPath")
-                if (path != null) {
+                if (!com.invictus.kodex.ai.AiSwitch.enabled) {
+                    androidx.compose.runtime.LaunchedEffect(Unit) { navController.popBackStack() }
+                } else if (path != null) {
                     gate.AgentScreen(projectPath = path, editor = editorViewModel, onBack = { navController.popBackStack() })
                 }
             }

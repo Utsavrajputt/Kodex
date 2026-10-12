@@ -66,7 +66,7 @@ fun GitCommitDetailScreen(
     onCherryPick: () -> Unit,
     onReset: () -> Unit,
     onCancel: () -> Unit,
-    aiExplain: (@Composable () -> Unit)? = null,   // M20 (ai flavor only)
+    aiExplain: (@Composable () -> Unit)? = null,   // M20
 ) {
     Scaffold(
         topBar = {

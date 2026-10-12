@@ -94,7 +94,7 @@ fun CrashLogsScreen(
                         }) {
                             Icon(XIcons.CloudUpload, contentDescription = stringResource(R.string.action_share))
                         }
-                        // M20: explain the selected crash log with AI (ai flavor only)
+                        // M20: explain the selected crash log with AI
                         AiGate?.let { g ->
                             g.ExplainErrorAi(
                                 errorText = selectedText.orEmpty(),

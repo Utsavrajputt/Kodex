@@ -131,6 +131,17 @@ fun SettingsBehaviorScreen(
 
             SettingsSectionCard {
                 SwitchSettingRow(
+                    title = stringResource(R.string.settings_ai_enable),
+                    subtitle = stringResource(R.string.settings_ai_enable_desc),
+                    checked = com.invictus.kodex.ai.AiSwitch.enabled,
+                    onCheckedChange = { com.invictus.kodex.ai.AiSwitch.set(appContext, it) },
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            SettingsSectionCard {
+                SwitchSettingRow(
                     title = stringResource(R.string.settings_search_default_strings),
                     subtitle = stringResource(R.string.settings_search_default_strings_desc),
                     checked = searchDefaultStringsOnly,

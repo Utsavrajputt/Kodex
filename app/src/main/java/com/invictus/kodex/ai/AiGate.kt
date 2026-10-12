@@ -5,11 +5,11 @@ import com.invictus.kodex.feature.editor.EditorHandle
 import com.invictus.kodex.feature.editor.EditorViewModel
 
 /**
- * Flavor seam (M17): the `ai` flavor provides a gate via AiFlavor.init(); the
- * `normal` flavor leaves gate == null, so no AI route, settings row, editor
- * button or panel exists anywhere in the normal APK. This interface is inert.
+ * AI seam: null whenever the user turned AI off (Settings > Behavior > Enable AI), so no AI
+ * settings row, workspace/editor button, panel or git/diagnostics helper is shown or reachable.
+ * Reads Compose state ([AiSwitch]), so callers inside composition update live.
  */
-val AiGate: AiGateImpl? get() = AiFlavor.gate
+val AiGate: AiGateImpl? get() = if (AiSwitch.enabled) AiFlavor.gate else null
 
 interface AiGateImpl {
     val settingsRoute: String

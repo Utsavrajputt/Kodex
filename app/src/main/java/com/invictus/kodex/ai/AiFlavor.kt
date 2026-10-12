@@ -12,7 +12,7 @@ import com.invictus.kodex.ai.ui.chat.EditorAiPanel
 import com.invictus.kodex.feature.editor.EditorHandle
 import com.invictus.kodex.feature.editor.EditorViewModel
 
-/** AI flavor bootstrap: called once from KodexApp.onCreate. */
+/** AI bootstrap: called once from KodexApp.onCreate. Whether AI is visible is decided by [AiSwitch]. */
 object AiFlavor {
     var gate: AiGateImpl? = null
         private set

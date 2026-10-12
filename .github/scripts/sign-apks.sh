@@ -4,8 +4,8 @@
 #   usage: sign-apks.sh [--require-secrets]
 #
 # Reads from the environment: KEYSTORE_BASE64, KEY_ALIAS, KEYSTORE_PASSWORD, KEY_PASSWORD.
-# Input : app/build/outputs/apk/<flavor>/release/app-<flavor>-<abi>-release-unsigned.apk
-# Output: app/build/outputs/apk/signed/kodex-<flavor>-<abi>.apk   (...-unsigned.apk if unsigned)
+# Input : app/build/outputs/apk/release/app-<abi>-release-unsigned.apk
+# Output: app/build/outputs/apk/signed/kodex-<abi>.apk   (...-unsigned.apk if unsigned)
 #
 # Without --require-secrets (normal CI builds, fork PRs) missing secrets just leave the APKs
 # unsigned. With it (release / pre-release) any missing secret fails the job.
@@ -14,7 +14,7 @@ set -euo pipefail
 require=false
 [[ "${1:-}" == "--require-secrets" ]] && require=true
 
-in_dirs=(app/build/outputs/apk/normal/release app/build/outputs/apk/ai/release)
+in_dirs=(app/build/outputs/apk/release)
 out_dir=app/build/outputs/apk/signed
 mkdir -p "$out_dir"
 

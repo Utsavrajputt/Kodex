@@ -29,7 +29,7 @@ fun SettingsRootScreen(
     onOpenDiagnostics: () -> Unit,
     onOpenGitHub: () -> Unit,
     onOpenAbout: () -> Unit,
-    /** M17 (ai flavor only): null in the normal flavor hides the row. */
+    /** M17: null in the normal flavor hides the row. */
     onOpenAi: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {

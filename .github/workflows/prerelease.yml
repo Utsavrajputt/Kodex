@@ -67,7 +67,7 @@ jobs:
       - name: Build unsigned release APKs
         shell: bash
         run: |
-          ./gradlew assembleNormalRelease assembleAiRelease \
+          ./gradlew assembleRelease \
             -PappVersionName="$VERSION_NAME" \
             -PappVersionCode="$VERSION_CODE" \
             --stacktrace --no-daemon
@@ -89,7 +89,7 @@ jobs:
           mkdir -p release-assets
           apks=(app/build/outputs/apk/signed/kodex-*.apk)
           # arm64-v8a, armeabi-v7a, universal
-          test ${#apks[@]} -eq 6
+          test ${#apks[@]} -eq 3
 
           for src in "${apks[@]}"; do
             abi="$(basename "$src" .apk)"; abi="${abi#kodex-}"

@@ -340,16 +340,14 @@ private fun WorkspaceTopBar(
             }
         },
         actions = {
-            IconButton(onClick = { onEvent(FileTreeEvent.Refresh) }) {
-                Icon(XIcons.Refresh, contentDescription = stringResource(R.string.action_refresh))
-            }
-            IconButton(onClick = onOpenCodeSearch) {
-                Icon(XIcons.Search, contentDescription = stringResource(R.string.search_code_title))
-            }
+            // AI sits where Refresh used to be; Refresh now lives in the 3-dot menu.
             if (onOpenAi != null) {
                 IconButton(onClick = onOpenAi) {
                     Icon(XIcons.AutoAwesome, contentDescription = "AI Agent")
                 }
+            }
+            IconButton(onClick = onOpenCodeSearch) {
+                Icon(XIcons.Search, contentDescription = stringResource(R.string.search_code_title))
             }
             if (onOpenGit != null) {
                 IconButton(onClick = onOpenGit) {
@@ -361,6 +359,14 @@ private fun WorkspaceTopBar(
                     Icon(XIcons.MoreVert, contentDescription = stringResource(R.string.action_more))
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.action_refresh)) },
+                        leadingIcon = { Icon(XIcons.Refresh, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onEvent(FileTreeEvent.Refresh)
+                        },
+                    )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.menu_show_hidden)) },
                         leadingIcon = {

@@ -671,7 +671,7 @@ private fun BranchCard(
 private fun CommitCard(
     state: GitViewModel.UiState,
     onEvent: (GitEvent) -> Unit,
-    aiGenerator: (@Composable () -> Unit)? = null,   // M20 (ai flavor only)
+    aiGenerator: (@Composable () -> Unit)? = null,   // M20
 ) {
     val clipboard = LocalClipboardManager.current
     Column(
@@ -694,6 +694,7 @@ private fun CommitCard(
             Spacer(Modifier.weight(1f))
             // Borderless on purpose: an outlined circle next to the Amend chip and the filled
             // Commit button read as a third competing control.
+            aiGenerator?.invoke()   // AI icon sits to the left of Paste
             IconButton(
                 onClick = {
                     clipboard.getText()?.text?.takeIf { it.isNotEmpty() }
@@ -709,7 +710,6 @@ private fun CommitCard(
                 )
             }
             Spacer(Modifier.width(8.dp))
-            aiGenerator?.invoke()
             Button(
                 onClick = { onEvent(GitEvent.Commit) },
                 enabled = (state.commitMessage.isNotBlank() || state.amend) &&

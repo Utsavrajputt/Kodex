@@ -130,7 +130,7 @@ fun RunLogScreen(
                         IconButton(onClick = viewModel::copyFull, enabled = !state.loading && state.hasLogFile) {
                             Icon(XIcons.FileCopy, contentDescription = stringResource(R.string.gh_copy_full_log))
                         }
-                        // M20: explain the visible log with AI (ai flavor only)
+                        // M20: explain the visible log with AI
                         AiGate?.let { g ->
                             val explainText = state.excerptLines.takeIf { it.isNotEmpty() }?.joinToString("\n")
                                 ?: state.fullLines?.takeIf { it.isNotEmpty() }?.joinToString("\n")

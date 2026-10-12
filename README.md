@@ -300,10 +300,10 @@ a plugin system and a real Compose/XML/Flutter layout preview.
   <sub>Built with ⚡ by <a href="https://github.com/Utsavrajputt">Utsav</a></sub>
 </div>
 
-## M17–M20: AI Assistant (ai flavor only)
-- New `ai` product flavor: AI ships as `kodex-ai` (applicationId `.ai`, label "Kodex AI"); the `normal` flavor contains no AI code.
+## M17–M20: AI Assistant (single APK, runtime toggle)
+- One APK variant (no product flavors): AI is built in and controlled by **Settings → Behavior → Enable AI**. Turning it off hides the AI settings row, workspace/editor buttons, commit-message/explain helpers and disables every AI route.
 - Providers: Anthropic Claude, OpenAI, Google Gemini — BYOK, Keystore-AES/GCM vault (Settings → AI), manual SSE over OkHttp.
 - Editor AI panel (bottom split): streaming chat with file context + token estimate, secret redaction, exclusion globs.
 - Inline edit: selection → "Edit with AI" → search/replace proposal → per-hunk diff review → single-undo-step apply with stale-file protection.
 - Commit message generation (Git stage), explain-diff (commit detail + diff review), explain-error (Run log, Diagnostics) with optional reviewed fix patch.
-- Diagnostics logs redact AI/git tokens. CI builds both flavors: 6 APKs per build (`kodex-normal-*`, `kodex-ai-*`).
+- Diagnostics logs redact AI/git tokens. CI builds 3 APKs per build (`kodex-arm64-v8a`, `kodex-armeabi-v7a`, `kodex-universal`).
