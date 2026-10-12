@@ -40,6 +40,21 @@ android {
         }
     }
 
+    // M17: the AI assistant ships only in the "ai" flavor (applicationIdSuffix .ai, label "Kodex AI").
+    // "normal" compiles src/main + src/normal only, so it contains no AI code at all.
+    flavorDimensions += "edition"
+    productFlavors {
+        create("normal") {
+            dimension = "edition"
+        }
+        create("ai") {
+            dimension = "edition"
+            applicationIdSuffix = ".ai"
+            versionNameSuffix = "-ai"
+            resValue("string", "app_name", "Kodex AI")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

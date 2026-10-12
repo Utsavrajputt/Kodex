@@ -29,6 +29,8 @@ fun SettingsRootScreen(
     onOpenDiagnostics: () -> Unit,
     onOpenGitHub: () -> Unit,
     onOpenAbout: () -> Unit,
+    /** M17 (ai flavor only): null in the normal flavor hides the row. */
+    onOpenAi: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -92,6 +94,16 @@ fun SettingsRootScreen(
                     subtitle = stringResource(R.string.settings_category_github_desc),
                     onClick = onOpenGitHub,
                 )
+                if (onOpenAi != null) {
+                    CategoryRowGap()
+                    CategoryRow(
+                        icon = XIcons.AutoAwesome,
+                        chevron = XIcons.ChevronRight,
+                        title = "AI Assistant",
+                        subtitle = "Provider, model and API key",
+                        onClick = onOpenAi,
+                    )
+                }
                 CategoryRowGap()
                 CategoryRow(
                     icon = XIcons.Info,

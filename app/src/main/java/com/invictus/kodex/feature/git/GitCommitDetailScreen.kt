@@ -66,6 +66,7 @@ fun GitCommitDetailScreen(
     onCherryPick: () -> Unit,
     onReset: () -> Unit,
     onCancel: () -> Unit,
+    aiExplain: (@Composable () -> Unit)? = null,   // M20 (ai flavor only)
 ) {
     Scaffold(
         topBar = {
@@ -82,6 +83,7 @@ fun GitCommitDetailScreen(
                         Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
+                actions = { aiExplain?.invoke() },   // M20
             )
         },
         bottomBar = {

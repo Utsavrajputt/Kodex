@@ -10,7 +10,15 @@ pick the matching section as the GitHub Release notes.
 
 ## [Unreleased]
 
-_Nothing yet._
+### ✨ Added
+- 🤖 **Live Gemini model list** — the AI Assistant model dropdown now loads every chat-capable Gemini model available to your API key (newest first, curated picks on top), so new releases show up without an app update. Falls back to the built-in list when offline or without a key.
+
+### 🔄 Changed
+- 🤖 Gemini defaults are now **Gemini 3.8 Flash** and **Gemini 3.1 Pro**. A saved Gemini 2.5 Flash / 2.5 Pro selection is moved to 3.8 Flash automatically.
+
+### 🐛 Fixed
+- 🤖 Gemini **Test connection** returned `404 … no longer available to new users` because the default model (2.5 Flash) was retired.
+- ⌨️ **AI Assistant text fields** (Custom model id, Never send files matching) dropped and scrambled characters while typing.
 
 ## [1.1.0] - 2026-10-09
 
@@ -137,3 +145,11 @@ banner gets a livelier glass-panel animation.
 - 🔋 The battery-optimisation step from onboarding and the *Go to file* entry from the overflow menus.
 - 🗺️ The milestone checklist from the README (replaced by this changelog).
 - 🔖 The old single combined build/release workflow and its `v*` tag trigger in `android-build.yml`.
+
+## M17–M20: AI Assistant (ai flavor only)
+- New `ai` product flavor: AI ships as `kodex-ai` (applicationId `.ai`, label "Kodex AI"); the `normal` flavor contains no AI code.
+- Providers: Anthropic Claude, OpenAI, Google Gemini — BYOK, Keystore-AES/GCM vault (Settings → AI), manual SSE over OkHttp.
+- Editor AI panel (bottom split): streaming chat with file context + token estimate, secret redaction, exclusion globs.
+- Inline edit: selection → "Edit with AI" → search/replace proposal → per-hunk diff review → single-undo-step apply with stale-file protection.
+- Commit message generation (Git stage), explain-diff (commit detail + diff review), explain-error (Run log, Diagnostics) with optional reviewed fix patch.
+- Diagnostics logs redact AI/git tokens. CI builds both flavors: 6 APKs per build (`kodex-normal-*`, `kodex-ai-*`).

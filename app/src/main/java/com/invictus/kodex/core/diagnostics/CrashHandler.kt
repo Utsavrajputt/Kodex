@@ -65,6 +65,17 @@ object CrashHandler {
     private fun logDir(context: Context): File =
         File(context.filesDir, DIR_NAME).apply { mkdirs() }
 
+    /** M20 redaction audit: AI/git tokens must never persist in crash logs. */
+    private val sensitive = listOf(
+        Regex("""sk-[A-Za-z0-9]{16,}"""),
+        Regex("""AIza[0-9A-Za-z_-]{20,}"""),
+        Regex("""Bearer\s+[A-Za-z0-9._-]{10,}"""),
+        Regex("""gh[pousr]_[A-Za-z0-9]{20,}"""),
+    )
+
+    private fun redact(text: String): String =
+        sensitive.fold(text) { acc, re -> acc.replace(re, "«redacted»") }
+
     private fun write(context: Context, source: String, throwable: Throwable, fatal: Boolean) {
         val dir = logDir(context)
         val now = Date()
@@ -79,7 +90,7 @@ object CrashHandler {
             pw.println()
             throwable.printStackTrace(pw)
         }
-        File(dir, name).writeText(sw.toString())
+        File(dir, name).writeText(redact(sw.toString()))
         prune(dir)
     }
 

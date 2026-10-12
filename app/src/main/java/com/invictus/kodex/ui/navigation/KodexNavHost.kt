@@ -54,6 +54,7 @@ import com.invictus.kodex.feature.search.CodeSearchScreen
 import com.invictus.kodex.feature.search.SearchBus
 import com.invictus.kodex.feature.settings.SettingsRootScreen
 import com.invictus.kodex.feature.workspace.WorkspaceScreen
+import com.invictus.kodex.ai.AiGate
 
 /** Shared-axis-X (slide + fade) screen transition, tween-based — cheap on low-end devices. */
 private const val NavMotionDurationMs = 260
@@ -171,6 +172,7 @@ fun KodexNavHost(
                 onOpenBehavior = { navController.navigate(Routes.SETTINGS_BEHAVIOR) },
                 onOpenDiagnostics = { navController.navigate(Routes.SETTINGS_DIAGNOSTICS) },
                 onOpenGitHub = { navController.navigate(Routes.SETTINGS_GITHUB) },
+                onOpenAi = AiGate?.let { g -> { navController.navigate(g.settingsRoute) } },
                 onOpenAbout = { navController.navigate(Routes.SETTINGS_ABOUT) },
             )
         }
@@ -185,6 +187,12 @@ fun KodexNavHost(
         }
         composable(Routes.SETTINGS_GITHUB) {
             SettingsGitHubScreen(onBack = { navController.popBackStack() })
+        }
+        // M17 (ai flavor only): the normal flavor has gate == null, so no AI route is registered.
+        AiGate?.let { gate ->
+            composable(gate.settingsRoute) {
+                gate.SettingsAiScreen(onBack = { navController.popBackStack() })
+            }
         }
         composable(Routes.SETTINGS_DIAGNOSTICS) {
             SettingsDiagnosticsScreen(

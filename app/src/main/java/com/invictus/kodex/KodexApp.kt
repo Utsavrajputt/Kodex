@@ -19,6 +19,8 @@ class KodexApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // M17: no-op in the normal flavor, builds the AI gate in the ai flavor.
+        com.invictus.kodex.ai.AiFlavor.init(this)
         CrashHandler.install(this)
         GitLog.init(this)
         ThemeSettings.init(this)

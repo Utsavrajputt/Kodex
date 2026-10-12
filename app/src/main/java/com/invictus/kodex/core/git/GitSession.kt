@@ -671,6 +671,24 @@ class GitSession(
         return base
     }
 
+    /** Raw `git diff --cached` patch text (empty when nothing staged). M20: AI commit messages. */
+    suspend fun stagedDiffText(): GitResult<String> = ioOp(TITLE_DIFF) {
+        readOnly {
+            val out = java.io.ByteArrayOutputStream()
+            git.diff().setCached(true).setOutputStream(out).call()
+            out.toString("UTF-8")
+        }
+    }
+
+    /** Raw `git diff` patch text (index vs worktree). M20: fallback when nothing is staged. */
+    suspend fun workTreeDiffText(): GitResult<String> = ioOp(TITLE_DIFF) {
+        readOnly {
+            val out = java.io.ByteArrayOutputStream()
+            git.diff().setOutputStream(out).call()
+            out.toString("UTF-8")
+        }
+    }
+
     // ---- remotes / branches -------------------------------------------------
 
     suspend fun listRemotes(): GitResult<List<GitRemoteInfo>> = ioOp(TITLE_STATUS) {

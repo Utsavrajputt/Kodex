@@ -1,5 +1,6 @@
 package com.invictus.kodex.feature.diagnostics
 
+import com.invictus.kodex.ai.AiGate
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -92,6 +93,14 @@ fun CrashLogsScreen(
                             context.startActivity(Intent.createChooser(send, null))
                         }) {
                             Icon(XIcons.CloudUpload, contentDescription = stringResource(R.string.action_share))
+                        }
+                        // M20: explain the selected crash log with AI (ai flavor only)
+                        AiGate?.let { g ->
+                            g.ExplainErrorAi(
+                                errorText = selectedText.orEmpty(),
+                                projectPath = null,
+                                app = context.applicationContext as android.app.Application,
+                            )
                         }
                     } else if (logs.isNotEmpty()) {
                         IconButton(onClick = {

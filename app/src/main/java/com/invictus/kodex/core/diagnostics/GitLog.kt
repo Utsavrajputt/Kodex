@@ -120,6 +120,17 @@ object GitLog {
     private fun dir(context: Context): File =
         File(context.filesDir, DIR).apply { mkdirs() }
 
+    /** M20 redaction audit: AI/git tokens must never persist in diagnostics logs. */
+    private val sensitive = listOf(
+        Regex("""sk-[A-Za-z0-9]{16,}"""),
+        Regex("""AIza[0-9A-Za-z_-]{20,}"""),
+        Regex("""Bearer\s+[A-Za-z0-9._-]{10,}"""),
+        Regex("""gh[pousr]_[A-Za-z0-9]{20,}"""),
+    )
+
+    private fun redact(text: String): String =
+        sensitive.fold(text) { acc, re -> acc.replace(re, "«redacted»") }
+
     private fun append(context: Context, line: String) {
         val dir = dir(context)
         val f = File(dir, FILE)
@@ -128,7 +139,7 @@ object GitLog {
             old.delete()
             f.renameTo(old)
         }
-        f.appendText(line + "\n")
+        f.appendText(redact(line) + "\n")
     }
 
     /** Exception chain (up to 4 causes) plus the top stack frames, flattened to one line. */

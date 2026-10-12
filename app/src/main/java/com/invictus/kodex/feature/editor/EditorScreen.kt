@@ -87,6 +87,7 @@ import com.invictus.kodex.feature.preview.PreviewPane
 import com.invictus.kodex.feature.preview.SplitDragHandle
 import com.invictus.kodex.ui.components.FileTypeIcon
 import com.invictus.kodex.ui.icons.XIcons
+import com.invictus.kodex.ai.AiGate
 import io.github.rosemoe.sora.widget.EditorSearcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -115,6 +116,8 @@ fun EditorScreen(
     var showSymbolCustomize by remember { mutableStateOf(false) }
     var showFind by remember { mutableStateOf(false) }
     var showQuickActions by remember { mutableStateOf(false) }
+    // M17 (ai flavor only): AI panel in a bottom split; gate is null in the normal flavor.
+    var showAi by remember { mutableStateOf(false) }
     val findState = remember { FindReplaceState() }
     val symbolBar by viewModel.symbolBar.collectAsStateWithLifecycle()
     val symbolBarVisible by viewModel.symbolBarVisible.collectAsStateWithLifecycle()
@@ -248,6 +251,11 @@ fun EditorScreen(
                                 PreviewMode.PREVIEW -> XIcons.Visibility to R.string.preview_mode_preview
                             }
                             Icon(icon, contentDescription = stringResource(description))
+                        }
+                    }
+                    AiGate?.let {
+                        IconButton(onClick = { showAi = !showAi }) {
+                            Icon(XIcons.AutoAwesome, contentDescription = "AI Assistant")
                         }
                     }
                     Box {
@@ -398,7 +406,25 @@ fun EditorScreen(
                         // Preview never applies to a paged large file -- PreviewRouter only routes
                         // markdown/html, and a file that size is never one of those in practice,
                         // but the guard keeps the two M4/M5 features from ever fighting over `key`.
-                        if (previewType == PreviewType.NONE || previewMode == PreviewMode.EDITOR || buffer.isPaged) {
+                        val aiGate = AiGate
+                        if (showAi && aiGate != null && (previewType == PreviewType.NONE || previewMode == PreviewMode.EDITOR || buffer.isPaged)) {
+                            // AI split: editor on top, drag handle, AI panel below (mirrors the M5 preview split).
+                            BoxWithConstraints(Modifier.fillMaxSize()) {
+                                val totalHeightPx = with(density) { maxHeight.toPx() }
+                                var aiRatio by remember(path) { mutableFloatStateOf(0.5f) }
+                                Column(Modifier.fillMaxSize()) {
+                                    editorContent(Modifier.weight(aiRatio).fillMaxWidth())
+                                    SplitDragHandle(onClose = { showAi = false }, onDragDeltaPx = { deltaY ->
+                                        if (totalHeightPx > 0f) {
+                                            aiRatio = (aiRatio + deltaY / totalHeightPx).coerceIn(0.2f, 0.8f)
+                                        }
+                                    })
+                                    Box(Modifier.weight(1f - aiRatio).fillMaxWidth()) {
+                                        aiGate.AiEditorPanel(viewModel, handle, onClose = { showAi = false })
+                                    }
+                                }
+                            }
+                        } else if (previewType == PreviewType.NONE || previewMode == PreviewMode.EDITOR || buffer.isPaged) {
                             editorContent(Modifier.fillMaxSize())
                         } else if (previewMode == PreviewMode.PREVIEW) {
                             PreviewPane(

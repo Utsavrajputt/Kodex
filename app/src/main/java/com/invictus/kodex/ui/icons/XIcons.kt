@@ -18,6 +18,9 @@ import com.composables.icons.materialsymbols.roundedfilled.Edit
 import com.composables.icons.materialsymbols.roundedfilled.Folder
 import com.composables.icons.materialsymbols.roundedfilled.Folder_open
 import com.composables.icons.materialsymbols.roundedfilled.Article
+import com.composables.icons.materialsymbols.roundedfilled.Auto_awesome
+import com.composables.icons.materialsymbols.roundedfilled.Send
+import com.composables.icons.materialsymbols.roundedfilled.Stop_circle
 import com.composables.icons.materialsymbols.roundedfilled.Monetization_on
 import com.composables.icons.materialsymbols.roundedfilled.Open_in_new
 import com.composables.icons.materialsymbols.roundedfilled.Keyboard_arrow_down
@@ -434,4 +437,8 @@ object XIcons {
                 fill = SolidColor(Color.Black),
             )
             .build()
+    // M17 AI Assistant icons.
+    val AutoAwesome: ImageVector = MaterialSymbols.RoundedFilled.Auto_awesome
+    val Send: ImageVector = MaterialSymbols.RoundedFilled.Send
+    val StopCircle: ImageVector = MaterialSymbols.RoundedFilled.Stop_circle
 }

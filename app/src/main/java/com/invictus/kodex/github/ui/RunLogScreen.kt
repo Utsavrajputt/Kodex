@@ -1,5 +1,6 @@
 package com.invictus.kodex.github.ui
 
+import com.invictus.kodex.ai.AiGate
 import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -128,6 +129,18 @@ fun RunLogScreen(
                         }
                         IconButton(onClick = viewModel::copyFull, enabled = !state.loading && state.hasLogFile) {
                             Icon(XIcons.FileCopy, contentDescription = stringResource(R.string.gh_copy_full_log))
+                        }
+                        // M20: explain the visible log with AI (ai flavor only)
+                        AiGate?.let { g ->
+                            val explainText = state.excerptLines.takeIf { it.isNotEmpty() }?.joinToString("\n")
+                                ?: state.fullLines?.takeIf { it.isNotEmpty() }?.joinToString("\n")
+                            if (explainText != null && !state.loading) {
+                                g.ExplainErrorAi(
+                                    errorText = explainText,
+                                    projectPath = projectPath,
+                                    app = LocalContext.current.applicationContext as android.app.Application,
+                                )
+                            }
                         }
                     }
                 },

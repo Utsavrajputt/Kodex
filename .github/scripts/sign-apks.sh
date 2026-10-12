@@ -4,8 +4,8 @@
 #   usage: sign-apks.sh [--require-secrets]
 #
 # Reads from the environment: KEYSTORE_BASE64, KEY_ALIAS, KEYSTORE_PASSWORD, KEY_PASSWORD.
-# Input : app/build/outputs/apk/release/app-<abi>-release-unsigned.apk
-# Output: app/build/outputs/apk/signed/kodex-<abi>.apk   (kodex-<abi>-unsigned.apk if unsigned)
+# Input : app/build/outputs/apk/<flavor>/release/app-<flavor>-<abi>-release-unsigned.apk
+# Output: app/build/outputs/apk/signed/kodex-<flavor>-<abi>.apk   (...-unsigned.apk if unsigned)
 #
 # Without --require-secrets (normal CI builds, fork PRs) missing secrets just leave the APKs
 # unsigned. With it (release / pre-release) any missing secret fails the job.
@@ -14,14 +14,15 @@ set -euo pipefail
 require=false
 [[ "${1:-}" == "--require-secrets" ]] && require=true
 
-in_dir=app/build/outputs/apk/release
+in_dirs=(app/build/outputs/apk/normal/release app/build/outputs/apk/ai/release)
 out_dir=app/build/outputs/apk/signed
 mkdir -p "$out_dir"
 
 shopt -s nullglob
-unsigned=("$in_dir"/*-unsigned.apk)
+unsigned=()
+for d in "${in_dirs[@]}"; do unsigned+=("$d"/*-unsigned.apk); done
 if [[ ${#unsigned[@]} -eq 0 ]]; then
-  echo "Missing expected unsigned release APKs in $in_dir" >&2
+  echo "Missing expected unsigned release APKs in ${in_dirs[*]}" >&2
   find app/build/outputs/apk -type f -name '*.apk' -print || true
   exit 1
 fi

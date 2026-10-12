@@ -1,5 +1,6 @@
 package com.invictus.kodex.feature.git
 
+import com.invictus.kodex.ai.AiGate
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -13,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -559,6 +561,16 @@ fun GitHistoryScreen(projectPath: String, filePath: String? = null, onBack: () -
             onCherryPick = { vm.cherryPick(c.id) },
             onReset = { vm.openReset(c) },
             onCancel = vm::dismissDetail,
+            aiExplain = AiGate?.let { g ->
+                {
+                    g.ExplainDiffAi(
+                        projectPath = projectPath,
+                        commitId = c.id,
+                        filePaths = ui.files.map { it.path },
+                        app = LocalContext.current.applicationContext as android.app.Application,
+                    )
+                }
+            },
         )
     }
     }

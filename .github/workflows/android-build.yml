@@ -44,8 +44,14 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      # AI-flavor unit tests (redaction, glob matching, diff apply, edit parser). Reported but
+      # non-blocking so a flaky test never stops an APK from being built.
+      - name: Unit tests (ai flavor)
+        continue-on-error: true
+        run: ./gradlew testAiDebugUnitTest --no-daemon
+
       - name: Build unsigned release APKs
-        run: ./gradlew assembleRelease --stacktrace --no-daemon
+        run: ./gradlew assembleNormalRelease assembleAiRelease --stacktrace --no-daemon
 
       # Each ABI gets its own APK with only its own native libs, plus a universal one.
       # Fork PRs have no secrets, so those APKs are simply left unsigned.
@@ -58,26 +64,51 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: bash .github/scripts/sign-apks.sh
 
-      - name: Upload arm64-v8a APK
+      # M17: two flavors (normal = no AI, ai = AI assistant), each split by ABI + universal.
+      - name: Upload normal arm64-v8a APK
         uses: actions/upload-artifact@v4
         with:
-          name: kodex-arm64-v8a-${{ env.SHORT_SHA }}
-          path: app/build/outputs/apk/signed/kodex-arm64-v8a*.apk
+          name: kodex-normal-arm64-v8a-${{ env.SHORT_SHA }}
+          path: app/build/outputs/apk/signed/kodex-normal-arm64-v8a*.apk
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload armeabi-v7a APK
+      - name: Upload normal armeabi-v7a APK
         uses: actions/upload-artifact@v4
         with:
-          name: kodex-armeabi-v7a-${{ env.SHORT_SHA }}
-          path: app/build/outputs/apk/signed/kodex-armeabi-v7a*.apk
+          name: kodex-normal-armeabi-v7a-${{ env.SHORT_SHA }}
+          path: app/build/outputs/apk/signed/kodex-normal-armeabi-v7a*.apk
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload universal APK
+      - name: Upload normal universal APK
         uses: actions/upload-artifact@v4
         with:
-          name: kodex-universal-${{ env.SHORT_SHA }}
-          path: app/build/outputs/apk/signed/kodex-universal*.apk
+          name: kodex-normal-universal-${{ env.SHORT_SHA }}
+          path: app/build/outputs/apk/signed/kodex-normal-universal*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload AI arm64-v8a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kodex-ai-arm64-v8a-${{ env.SHORT_SHA }}
+          path: app/build/outputs/apk/signed/kodex-ai-arm64-v8a*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload AI armeabi-v7a APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kodex-ai-armeabi-v7a-${{ env.SHORT_SHA }}
+          path: app/build/outputs/apk/signed/kodex-ai-armeabi-v7a*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload AI universal APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kodex-ai-universal-${{ env.SHORT_SHA }}
+          path: app/build/outputs/apk/signed/kodex-ai-universal*.apk
           if-no-files-found: error
           retention-days: 14

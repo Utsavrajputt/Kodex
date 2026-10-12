@@ -68,6 +68,7 @@ import com.invictus.kodex.core.git.model.GitRepoSnapshot
 import com.invictus.kodex.core.git.model.GitStageState
 import com.invictus.kodex.core.git.model.GitWorkingState
 import com.invictus.kodex.ui.icons.XIcons
+import com.invictus.kodex.ai.AiGate
 import com.invictus.kodex.ui.navigation.Routes
 import kotlinx.coroutines.launch
 
@@ -335,6 +336,7 @@ fun GitScreen(
                     }
                 }
                 else -> GitContent(
+                    projectPath = projectPath,
                     state = state,
                     canSync = canSync,
                     onEvent = viewModel::onEvent,
@@ -347,6 +349,7 @@ fun GitScreen(
 
 @Composable
 private fun GitContent(
+    projectPath: String,
     state: GitViewModel.UiState,
     canSync: Boolean,
     onEvent: (GitEvent) -> Unit,
@@ -362,7 +365,20 @@ private fun GitContent(
         item(key = "branch") {
             BranchCard(snapshot, state, onEvent, onClick = onBranchClick)
         }
-        item(key = "commit") { CommitCard(state, onEvent) }
+        item(key = "commit") { CommitCard(
+                state, onEvent,
+                aiGenerator = AiGate?.let { g ->
+                    {
+                        g.CommitMessageAi(
+                            projectPath = projectPath,
+                            // Staged diff is preferred; the generator falls back to the work-tree diff, so any change counts.
+                            hasChanges = state.status?.isClean == false,
+                            onFill = { msg -> onEvent(GitEvent.PasteCommitText(msg)) },
+                            app = androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application,
+                        )
+                    }
+                },
+            ) }
         item(key = "sync") { SyncRow(canSync, snapshot, onEvent) }
         if (status != null && status.isClean) {
             item(key = "clean") {
@@ -652,7 +668,11 @@ private fun BranchCard(
 }
 
 @Composable
-private fun CommitCard(state: GitViewModel.UiState, onEvent: (GitEvent) -> Unit) {
+private fun CommitCard(
+    state: GitViewModel.UiState,
+    onEvent: (GitEvent) -> Unit,
+    aiGenerator: (@Composable () -> Unit)? = null,   // M20 (ai flavor only)
+) {
     val clipboard = LocalClipboardManager.current
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -689,6 +709,7 @@ private fun CommitCard(state: GitViewModel.UiState, onEvent: (GitEvent) -> Unit)
                 )
             }
             Spacer(Modifier.width(8.dp))
+            aiGenerator?.invoke()
             Button(
                 onClick = { onEvent(GitEvent.Commit) },
                 enabled = (state.commitMessage.isNotBlank() || state.amend) &&
