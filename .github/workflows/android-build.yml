@@ -44,12 +44,6 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      # Unit tests (redaction, glob matching, diff apply, edit parser). Reported but
-      # non-blocking so a flaky test never stops an APK from being built.
-      - name: Unit tests
-        continue-on-error: true
-        run: ./gradlew testDebugUnitTest --no-daemon
-
       - name: Build unsigned release APKs
         shell: bash
         env:

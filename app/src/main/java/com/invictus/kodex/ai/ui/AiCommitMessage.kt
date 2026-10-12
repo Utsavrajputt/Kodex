@@ -48,6 +48,8 @@ import com.invictus.kodex.ai.tasks.CommitMessageTask
 import com.invictus.kodex.core.git.GitResult
 import com.invictus.kodex.ui.icons.XIcons
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.invictus.kodex.R
 
 private const val MAX_DIFF_CHARS = 60_000
 
@@ -148,9 +150,9 @@ fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -
             .combinedClickable(
                 enabled = hasChanges,
                 role = Role.Button,
-                onClickLabel = "Generate commit message",
+                onClickLabel = stringResource(R.string.ai_commit_generate_commit_message),
                 onClick = { generate(fill = true) },
-                onLongClickLabel = "AI commit message settings",
+                onLongClickLabel = stringResource(R.string.ai_commit_ai_commit_message_settings),
                 onLongClick = {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     open = true
@@ -161,14 +163,14 @@ fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -
         if (busy && !open) {
             CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
         } else {
-            Icon(XIcons.AutoAwesome, contentDescription = "Generate commit message with AI (long press for options)")
+            Icon(XIcons.AutoAwesome, contentDescription = stringResource(R.string.ai_commit_generate_commit_message_with_ai))
         }
     }
     if (!open) return
 
     ModalBottomSheet(onDismissRequest = { open = false }) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
-            Text("Generate commit message", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.ai_commit_generate_commit_message), style = MaterialTheme.typography.titleMedium)
             Row(Modifier.padding(vertical = 8.dp)) {
                 CommitMessageTask.Style.entries.forEach { s ->
                     FilterChip(
@@ -184,7 +186,7 @@ fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -
                 }
             }
             Button(onClick = { generate(fill = false) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text(if (busy) "Generating…" else if (generatedOnce) "Regenerate" else "Generate")
+                Text(if (busy) stringResource(R.string.ai_commit_generating) else if (generatedOnce) stringResource(R.string.ai_chat_regenerate) else stringResource(R.string.ai_commit_generate))
             }
             error?.let {
                 Text(
@@ -196,7 +198,7 @@ fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -
                 OutlinedTextField(
                     value = message,
                     onValueChange = { message = it },
-                    label = { Text("Commit message (editable)") },
+                    label = { Text(stringResource(R.string.ai_commit_commit_message_editable)) },
                     minLines = 2,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 )
@@ -204,10 +206,10 @@ fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -
                     onClick = { onFill(message); open = false },
                     enabled = message.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("Use message") }
+                ) { Text(stringResource(R.string.ai_commit_use_message)) }
                 Spacer(Modifier.padding(4.dp))
                 Text(
-                    "Fills the commit box only — committing stays your action.",
+                    stringResource(R.string.ai_commit_fills_the_commit_box_only),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

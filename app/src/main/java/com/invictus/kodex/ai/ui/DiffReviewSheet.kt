@@ -25,6 +25,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.invictus.kodex.ai.diff.DiffHunk
 import com.invictus.kodex.ai.diff.LineType
+import androidx.compose.ui.res.stringResource
+import com.invictus.kodex.R
 
 /**
  * Diff review (plan 9.5): nothing is written until Apply. Per-hunk accept/reject
@@ -47,7 +49,7 @@ fun DiffReviewSheet(
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
-            Text("Review changes — $fileName", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.ai_diff_review_changes, fileName), style = MaterialTheme.typography.titleMedium)
             if (explanation.isNotBlank()) {
                 Text(explanation, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 4.dp))
             }
@@ -60,7 +62,7 @@ fun DiffReviewSheet(
                     val h = hunks[i]
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = included[i], onCheckedChange = { v -> included[i] = v })
-                        Text("Hunk ${i + 1}", style = MaterialTheme.typography.labelMedium)
+                        Text(stringResource(R.string.ai_diff_hunk, i + 1), style = MaterialTheme.typography.labelMedium)
                     }
                     h.lines.forEach { l ->
                         val (glyph, color) = when (l.type) {
@@ -79,16 +81,16 @@ fun DiffReviewSheet(
             }
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                if (onExplain != null) TextButton(onClick = onExplain) { Text("Explain") }
-                TextButton(onClick = onReject) { Text("Reject") }
-                TextButton(onClick = { onRegenerate(null) }) { Text("Regenerate") }
+                if (onExplain != null) TextButton(onClick = onExplain) { Text(stringResource(R.string.ai_diff_explain)) }
+                TextButton(onClick = onReject) { Text(stringResource(R.string.ai_diff_reject)) }
+                TextButton(onClick = { onRegenerate(null) }) { Text(stringResource(R.string.ai_chat_regenerate)) }
                 Row(Modifier.weight(1f)) {}
-                OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+                OutlinedButton(onClick = onDismiss) { Text(stringResource(R.string.ai_chat_cancel)) }
                 Button(
                     onClick = { onApply(hunks.mapIndexed { i, h -> h.copy(included = included[i]) }) },
                     enabled = included.any { it },
                     modifier = Modifier.padding(start = 8.dp),
-                ) { Text("Apply") }
+                ) { Text(stringResource(R.string.ai_diff_apply)) }
             }
         }
     }

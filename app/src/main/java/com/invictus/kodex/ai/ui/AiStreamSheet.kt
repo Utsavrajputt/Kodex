@@ -28,6 +28,8 @@ import com.invictus.kodex.ai.AiRuntime
 import com.invictus.kodex.ai.provider.AiEvent
 import com.invictus.kodex.ai.provider.AiException
 import kotlinx.coroutines.flow.Flow
+import androidx.compose.ui.res.stringResource
+import com.invictus.kodex.R
 
 /** Generic streamed-AI bottom sheet shared by all M20 explainers. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,9 +69,9 @@ fun AiStreamSheet(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 if (text.isNotEmpty()) {
-                    TextButton(onClick = { clipboard.setText(AnnotatedString(text)) }) { Text("Copy") }
+                    TextButton(onClick = { clipboard.setText(AnnotatedString(text)) }) { Text(stringResource(R.string.ai_chat_copy)) }
                 }
-                TextButton(onClick = onClose) { Text("Close") }
+                TextButton(onClick = onClose) { Text(stringResource(R.string.ai_stream_close)) }
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 4.dp))
             error?.let {

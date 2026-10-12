@@ -13,6 +13,8 @@ import com.invictus.kodex.ai.Redactor
 import com.invictus.kodex.ai.tasks.ExplainDiffTask
 import com.invictus.kodex.core.git.GitResult
 import com.invictus.kodex.ui.icons.XIcons
+import androidx.compose.ui.res.stringResource
+import com.invictus.kodex.R
 
 private const val MAX_FILES = 30
 
@@ -33,14 +35,14 @@ private fun rowsToUnified(rows: List<com.invictus.kodex.core.git.model.GitDiffRo
 fun ExplainDiffAi(projectPath: String, commitId: String, filePaths: List<String>, app: Application) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }, enabled = filePaths.isNotEmpty()) {
-        Icon(XIcons.AutoAwesome, contentDescription = "Explain changes with AI")
+        Icon(XIcons.AutoAwesome, contentDescription = stringResource(R.string.ai_explain_explain_changes_with_ai))
     }
     if (!open) return
 
     val runtime = remember { AiRuntime(app) }
 
     AiStreamSheet(
-        title = "Explain changes",
+        title = stringResource(R.string.ai_explain_explain_changes),
         runtime = runtime,
         onClose = { open = false },
     ) {

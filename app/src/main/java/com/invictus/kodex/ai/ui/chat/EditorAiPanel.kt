@@ -32,6 +32,8 @@ import com.invictus.kodex.feature.editor.EditorHandle
 import com.invictus.kodex.feature.editor.EditorViewModel
 import com.invictus.kodex.ui.icons.XIcons
 import java.io.File
+import androidx.compose.ui.res.stringResource
+import com.invictus.kodex.R
 
 /**
  * The editor's AI panel, now on the same agent engine as the workspace screen: the open file and selection
@@ -77,19 +79,19 @@ fun EditorAiPanel(vm: AgentChatViewModel, editor: EditorViewModel, handle: Edito
         applyPathHint = relPath,
         title = {
             Text(
-                relPath?.let { "AI · ${it.substringAfterLast('/')}" } ?: "AI Assistant",
+                relPath?.let { stringResource(R.string.ai_editor_ai, it.substringAfterLast('/')) } ?: stringResource(R.string.ai_settings_ai_assistant),
                 style = MaterialTheme.typography.titleSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         },
-        trailing = { IconButton(onClick = onClose) { Icon(XIcons.Close, contentDescription = "Close AI panel") } },
+        trailing = { IconButton(onClick = onClose) { Icon(XIcons.Close, contentDescription = stringResource(R.string.ai_editor_close_ai_panel)) } },
         aboveInput = {
             if (selectionLen != null) {
                 Surface(color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Selection: $selectionLen chars", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { editInstruction = "" }) { Text("Edit with AI") }
+                        Text(stringResource(R.string.ai_editor_selection_chars, selectionLen), style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { editInstruction = "" }) { Text(stringResource(R.string.ai_editor_edit_with_ai)) }
                     }
                 }
             }
@@ -99,12 +101,12 @@ fun EditorAiPanel(vm: AgentChatViewModel, editor: EditorViewModel, handle: Edito
     editInstruction?.let { draft ->
         AlertDialog(
             onDismissRequest = { editInstruction = null },
-            title = { Text("Edit selection with AI") },
+            title = { Text(stringResource(R.string.ai_editor_edit_selection_with_ai)) },
             text = {
                 OutlinedTextField(
                     value = draft,
                     onValueChange = { editInstruction = it },
-                    label = { Text("What should change?") },
+                    label = { Text(stringResource(R.string.ai_editor_what_should_change)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
             },
@@ -115,9 +117,9 @@ fun EditorAiPanel(vm: AgentChatViewModel, editor: EditorViewModel, handle: Edito
                         vm.send("Edit the selected code in the open file: ${draft.trim()}", emptyList())
                         editInstruction = null
                     },
-                ) { Text("Edit") }
+                ) { Text(stringResource(R.string.ai_chat_edit)) }
             },
-            dismissButton = { TextButton(onClick = { editInstruction = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { editInstruction = null }) { Text(stringResource(R.string.ai_chat_cancel)) } },
         )
     }
 }

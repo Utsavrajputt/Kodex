@@ -83,6 +83,8 @@ import com.invictus.kodex.ai.ui.chat.AgentChatViewModel.UiMessage
 import com.invictus.kodex.ui.icons.XIcons
 import java.text.DateFormat
 import java.util.Date
+import androidx.compose.ui.res.stringResource
+import com.invictus.kodex.R
 
 private val MENTION_TAIL = Regex("(^|\\s)@(\\S*)$")
 
@@ -95,16 +97,16 @@ fun AgentChatScreen(vm: AgentChatViewModel, projectName: String, onBack: () -> U
             TopAppBar(
                 title = {
                     Column {
-                        Text("Kodex AI")
+                        Text(stringResource(R.string.ai_chat_kodex_ai))
                         Text(projectName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(XIcons.ArrowBack, contentDescription = "Back") } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.ai_settings_back)) } },
                 actions = {
                     IconButton(onClick = { vm.refreshChats(); showHistory = true }) {
-                        Icon(XIcons.Restore, contentDescription = "Chat history")
+                        Icon(XIcons.Restore, contentDescription = stringResource(R.string.ai_chat_chat_history))
                     }
-                    IconButton(onClick = { vm.newChat() }) { Icon(XIcons.Add, contentDescription = "New chat") }
+                    IconButton(onClick = { vm.newChat() }) { Icon(XIcons.Add, contentDescription = stringResource(R.string.ai_chat_new_chat)) }
                 },
             )
         },
@@ -201,11 +203,11 @@ fun AgentChatContent(
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { title() }
             if (changes.isNotEmpty()) {
-                TextButton(onClick = { vm.openReview() }) { Text("Review ${changes.size}") }
+                TextButton(onClick = { vm.openReview() }) { Text(stringResource(R.string.ai_chat_review, changes.size)) }
             }
             if (headerActions) {
-                IconButton(onClick = { vm.refreshChats(); setHistory(true) }) { Icon(XIcons.Restore, contentDescription = "Chat history") }
-                IconButton(onClick = { vm.newChat() }) { Icon(XIcons.Add, contentDescription = "New chat") }
+                IconButton(onClick = { vm.refreshChats(); setHistory(true) }) { Icon(XIcons.Restore, contentDescription = stringResource(R.string.ai_chat_chat_history)) }
+                IconButton(onClick = { vm.newChat() }) { Icon(XIcons.Add, contentDescription = stringResource(R.string.ai_chat_new_chat)) }
             }
             trailing()
         }
@@ -273,18 +275,18 @@ fun AgentChatContent(
                         Icon(XIcons.Diff, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
                         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                             Text(
-                                "${changes.size} file${if (changes.size == 1) "" else "s"} changed by AI",
+                                if (changes.size == 1) stringResource(R.string.ai_chat_files_changed_one) else stringResource(R.string.ai_chat_files_changed_many, changes.size),
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                             )
                             Text(
-                                "Nothing is written until you approve",
+                                stringResource(R.string.ai_chat_nothing_is_written_until_you),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                             )
                         }
-                        TextButton(onClick = { vm.discardChanges() }) { Text("Discard") }
-                        Button(onClick = { vm.openReview() }) { Text("Review") }
+                        TextButton(onClick = { vm.discardChanges() }) { Text(stringResource(R.string.ai_chat_discard)) }
+                        Button(onClick = { vm.openReview() }) { Text(stringResource(R.string.ai_chat_review_2)) }
                     }
                 }
             }
@@ -293,13 +295,13 @@ fun AgentChatContent(
                     Row(Modifier.padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(XIcons.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(20.dp))
                         Text(
-                            "Applied ${u.entries.size} file${if (u.entries.size == 1) "" else "s"}",
+                            if (u.entries.size == 1) stringResource(R.string.ai_chat_applied_one) else stringResource(R.string.ai_chat_applied_many, u.entries.size),
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onTertiaryContainer,
                             modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
                         )
-                        TextButton(onClick = { vm.undoLast() }) { Text("Undo") }
-                        IconButton(onClick = { vm.dismissUndo() }) { Icon(XIcons.Close, contentDescription = "Dismiss") }
+                        TextButton(onClick = { vm.undoLast() }) { Text(stringResource(R.string.ai_chat_undo)) }
+                        IconButton(onClick = { vm.dismissUndo() }) { Icon(XIcons.Close, contentDescription = stringResource(R.string.ai_chat_dismiss)) }
                     }
                 }
             }
@@ -329,7 +331,7 @@ fun AgentChatContent(
                         selected = false,
                         onClick = { attached.remove(path) },
                         label = { Text(path.substringAfterLast('/'), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        trailingIcon = { Icon(XIcons.Close, contentDescription = "Remove", modifier = Modifier.size(16.dp)) },
+                        trailingIcon = { Icon(XIcons.Close, contentDescription = stringResource(R.string.ai_settings_remove), modifier = Modifier.size(16.dp)) },
                     )
                 }
             }
@@ -344,7 +346,7 @@ fun AgentChatContent(
                 TextField(
                     value = input,
                     onValueChange = { input = it },
-                    placeholder = { Text("Ask the agent…  @ to mention files") },
+                    placeholder = { Text(stringResource(R.string.ai_chat_ask_the_agent_to_mention)) },
                     maxLines = 6,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = Color.Transparent,
@@ -358,7 +360,7 @@ fun AgentChatContent(
                 )
                 Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { vm.refreshIndex(); showPicker = true }) {
-                        Icon(XIcons.Add, contentDescription = "Attach files")
+                        Icon(XIcons.Add, contentDescription = stringResource(R.string.ai_chat_attach_files))
                     }
                     Spacer(Modifier.weight(1f))
                     if (status.loaded) {
@@ -366,7 +368,7 @@ fun AgentChatContent(
                         Spacer(Modifier.width(6.dp))
                     }
                     if (busy) {
-                        FilledIconButton(onClick = { vm.stop() }) { Icon(XIcons.StopCircle, contentDescription = "Stop") }
+                        FilledIconButton(onClick = { vm.stop() }) { Icon(XIcons.StopCircle, contentDescription = stringResource(R.string.ai_chat_stop)) }
                     } else {
                         FilledIconButton(
                             enabled = input.isNotBlank(),
@@ -375,7 +377,7 @@ fun AgentChatContent(
                                 input = ""
                                 attached.clear()
                             },
-                        ) { Icon(XIcons.Send, contentDescription = "Send") }
+                        ) { Icon(XIcons.Send, contentDescription = stringResource(R.string.ai_chat_send)) }
                     }
                 }
             }
@@ -417,17 +419,17 @@ fun AgentChatContent(
         }
         AlertDialog(
             onDismissRequest = { applyDialog = null },
-            title = { Text("Apply to file") },
+            title = { Text(stringResource(R.string.ai_chat_apply_to_file)) },
             text = {
                 Column {
-                    Text("Project-relative path. An existing file is replaced with this code; a new path creates a file. You review the diff before anything is written.", style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(value = path, onValueChange = { path = it }, singleLine = true, label = { Text("Path") }, modifier = Modifier.padding(top = 8.dp).fillMaxWidth())
+                    Text(stringResource(R.string.ai_chat_project_relative_path_an_existing), style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(value = path, onValueChange = { path = it }, singleLine = true, label = { Text(stringResource(R.string.ai_chat_path)) }, modifier = Modifier.padding(top = 8.dp).fillMaxWidth())
                 }
             },
             confirmButton = {
-                TextButton(enabled = path.isNotBlank(), onClick = { vm.stageCodeBlock(path, code); applyDialog = null }) { Text("Review change") }
+                TextButton(enabled = path.isNotBlank(), onClick = { vm.stageCodeBlock(path, code); applyDialog = null }) { Text(stringResource(R.string.ai_chat_review_change)) }
             },
-            dismissButton = { TextButton(onClick = { applyDialog = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { applyDialog = null }) { Text(stringResource(R.string.ai_chat_cancel)) } },
         )
     }
 }
@@ -462,25 +464,25 @@ private fun EmptyState(status: AgentChatViewModel.AiStatus, onPick: (String) -> 
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         HeroBadge()
-        Text("Kodex AI Agent", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
+        Text(stringResource(R.string.ai_chat_kodex_ai_agent), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
         Text(
-            "Ask about your project, or tell me what to change.",
+            stringResource(R.string.ai_chat_ask_about_your_project_or),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            CapabilityPill(XIcons.Search, "Searches your project")
-            CapabilityPill(XIcons.Edit, "Edits many files")
-            CapabilityPill(XIcons.CheckCircle, "You approve every change")
+            CapabilityPill(XIcons.Search, stringResource(R.string.ai_chat_searches_your_project))
+            CapabilityPill(XIcons.Edit, stringResource(R.string.ai_chat_edits_many_files))
+            CapabilityPill(XIcons.CheckCircle, stringResource(R.string.ai_chat_you_approve_every_change))
         }
         Spacer(Modifier.height(16.dp))
         listOf(
-            Triple(XIcons.AccountTree, "Explain the structure", "Explain how this project is structured"),
-            Triple(XIcons.Search, "Hunt for bugs", "Find likely bugs and list them with file and line"),
-            Triple(XIcons.DeleteSweep, "Find dead code", "Find unused code I can safely remove"),
-            Triple(XIcons.Code, "Write tests", "Write unit tests for @"),
+            Triple(XIcons.AccountTree, stringResource(R.string.ai_chat_explain_the_structure), stringResource(R.string.ai_chat_explain_how_this_project_is)),
+            Triple(XIcons.Search, stringResource(R.string.ai_chat_hunt_for_bugs), stringResource(R.string.ai_chat_find_likely_bugs_and_list)),
+            Triple(XIcons.DeleteSweep, stringResource(R.string.ai_chat_find_dead_code), stringResource(R.string.ai_chat_find_unused_code_i_can)),
+            Triple(XIcons.Code, stringResource(R.string.ai_chat_write_tests), stringResource(R.string.ai_chat_write_unit_tests_for)),
         ).forEach { (icon, label, prompt) ->
             Surface(
                 onClick = { onPick(prompt) },
@@ -502,7 +504,7 @@ private fun EmptyState(status: AgentChatViewModel.AiStatus, onPick: (String) -> 
         }
         if (status.loaded) {
             Text(
-                "Using ${status.modelLabel} · ${status.providerName}",
+                stringResource(R.string.ai_chat_using, status.modelLabel, status.providerName),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 16.dp),
@@ -520,20 +522,20 @@ private fun SetupCard(status: AgentChatViewModel.AiStatus, onOpenSettings: (() -
         verticalArrangement = Arrangement.Center,
     ) {
         HeroBadge()
-        Text("Set up AI to get started", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
+        Text(stringResource(R.string.ai_chat_set_up_ai_to_get), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
         Text(
-            "Two quick things and the agent is ready. Your key stays encrypted on this device.",
+            stringResource(R.string.ai_chat_two_quick_things_and_the),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
         )
-        SetupRow(status.hasKey, "API key for ${status.providerName}", if (status.hasKey) "Saved" else "Not added yet")
-        SetupRow(status.consent, "Allow AI in projects", if (status.consent) "On" else "Off — the agent can't read your files")
+        SetupRow(status.hasKey, stringResource(R.string.ai_chat_api_key_for, status.providerName), if (status.hasKey) stringResource(R.string.ai_chat_saved) else stringResource(R.string.ai_chat_not_added_yet))
+        SetupRow(status.consent, stringResource(R.string.ai_settings_allow_ai_in_projects), if (status.consent) stringResource(R.string.ai_chat_on) else stringResource(R.string.ai_chat_off_the_agent_can_t))
         if (onOpenSettings != null) {
-            Button(onClick = onOpenSettings, modifier = Modifier.padding(top = 16.dp)) { Text("Open AI settings") }
+            Button(onClick = onOpenSettings, modifier = Modifier.padding(top = 16.dp)) { Text(stringResource(R.string.ai_chat_open_ai_settings)) }
         } else {
-            Text("Open Settings → AI Assistant to finish.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 16.dp))
+            Text(stringResource(R.string.ai_chat_open_settings_ai_assistant_to), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 16.dp))
         }
     }
 }
@@ -586,7 +588,7 @@ private fun MessageItem(
                     m.attachments.forEach { AiTag(it.substringAfterLast('/')) }
                 }
             }
-            if (!busy) TextButton(onClick = onEdit) { Text("Edit", style = MaterialTheme.typography.labelMedium) }
+            if (!busy) TextButton(onClick = onEdit) { Text(stringResource(R.string.ai_chat_edit), style = MaterialTheme.typography.labelMedium) }
         }
     } else {
         Column(Modifier.fillMaxWidth()) {
@@ -595,7 +597,7 @@ private fun MessageItem(
                     Modifier.size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center,
                 ) { Icon(XIcons.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(13.dp)) }
-                Text("Kodex AI", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp))
+                Text(stringResource(R.string.ai_chat_kodex_ai), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp))
             }
             if (m.steps.isNotEmpty()) StepsBlock(m)
             if (m.text.isNotBlank()) {
@@ -603,14 +605,14 @@ private fun MessageItem(
             } else if (m.streaming && m.steps.none { it.status == StepStatus.RUNNING }) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp)) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Thinking…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp))
+                    Text(stringResource(R.string.ai_chat_thinking), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp))
                 }
             }
             if (!m.streaming && m.text.isNotBlank()) {
                 Row {
-                    IconButton(onClick = { clipboard.setText(AnnotatedString(m.text)) }) { Icon(XIcons.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(18.dp)) }
+                    IconButton(onClick = { clipboard.setText(AnnotatedString(m.text)) }) { Icon(XIcons.ContentCopy, contentDescription = stringResource(R.string.ai_chat_copy), modifier = Modifier.size(18.dp)) }
                     if (isLast && !busy) {
-                        IconButton(onClick = onRegenerate) { Icon(XIcons.Refresh, contentDescription = "Regenerate", modifier = Modifier.size(18.dp)) }
+                        IconButton(onClick = onRegenerate) { Icon(XIcons.Refresh, contentDescription = stringResource(R.string.ai_chat_regenerate), modifier = Modifier.size(18.dp)) }
                     }
                 }
             }
@@ -654,8 +656,8 @@ private fun StepsBlock(m: UiMessage) {
     val failed = m.steps.count { it.status == StepStatus.FAILED }
     val running = m.steps.lastOrNull { it.status == StepStatus.RUNNING }
     val headline = when {
-        m.streaming -> running?.label ?: m.steps.lastOrNull()?.label ?: "Working…"
-        else -> stepsSummary(m.steps) + if (failed > 0) " · $failed failed" else ""
+        m.streaming -> running?.label ?: m.steps.lastOrNull()?.label ?: stringResource(R.string.ai_chat_working)
+        else -> stepsSummary(m.steps) + if (failed > 0) stringResource(R.string.ai_chat_steps_failed, failed) else ""
     }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val chevron by animateFloatAsState(if (expanded) 90f else 0f, label = "stepsChevron")
@@ -679,7 +681,7 @@ private fun StepsBlock(m: UiMessage) {
                 modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
             )
             Icon(
-                XIcons.ChevronRight, contentDescription = if (expanded) "Hide steps" else "Show steps", tint = muted,
+                XIcons.ChevronRight, contentDescription = if (expanded) stringResource(R.string.ai_chat_hide_steps) else stringResource(R.string.ai_chat_show_steps), tint = muted,
                 modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = chevron },
             )
         }
@@ -709,8 +711,8 @@ private fun StepsBlock(m: UiMessage) {
                         )
                         when (st.status) {
                             StepStatus.RUNNING -> CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp, color = muted)
-                            StepStatus.DONE -> Icon(XIcons.Check, contentDescription = "Done", tint = muted, modifier = Modifier.size(14.dp))
-                            StepStatus.FAILED -> Icon(XIcons.ErrorCircle, contentDescription = "Failed", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
+                            StepStatus.DONE -> Icon(XIcons.Check, contentDescription = stringResource(R.string.ai_chat_done), tint = muted, modifier = Modifier.size(14.dp))
+                            StepStatus.FAILED -> Icon(XIcons.ErrorCircle, contentDescription = stringResource(R.string.ai_chat_failed), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -730,22 +732,22 @@ private fun ChatHistorySheet(
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Chats", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Button(onClick = onNew) { Text("New chat") }
+                Text(stringResource(R.string.ai_chat_chats), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Button(onClick = onNew) { Text(stringResource(R.string.ai_chat_new_chat)) }
             }
-            if (chats.isEmpty()) Text("No saved chats yet.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 12.dp))
+            if (chats.isEmpty()) Text(stringResource(R.string.ai_chat_no_saved_chats_yet), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 12.dp))
             LazyColumn(Modifier.height(360.dp)) {
                 items(chats, key = { it.id }) { c ->
                     Row(Modifier.fillMaxWidth().clickable { onOpen(c.id) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(c.title.ifBlank { "Chat" }, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(c.title.ifBlank { stringResource(R.string.ai_chat_chat) }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(c.updatedAt)),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        IconButton(onClick = { onDelete(c.id) }) { Icon(XIcons.Delete, contentDescription = "Delete chat") }
+                        IconButton(onClick = { onDelete(c.id) }) { Icon(XIcons.Delete, contentDescription = stringResource(R.string.ai_chat_delete_chat)) }
                     }
                 }
             }
@@ -762,20 +764,20 @@ private fun FilePickerDialog(index: List<String>, selected: Set<String>, onToggl
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Attach files") },
+        title = { Text(stringResource(R.string.ai_chat_attach_files)) },
         text = {
             Column {
-                OutlinedTextField(value = query, onValueChange = { query = it }, singleLine = true, label = { Text("Filter") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = query, onValueChange = { query = it }, singleLine = true, label = { Text(stringResource(R.string.ai_chat_filter)) }, modifier = Modifier.fillMaxWidth())
                 LazyColumn(Modifier.height(320.dp).padding(top = 8.dp)) {
                     items(filtered) { p ->
                         Row(Modifier.fillMaxWidth().clickable { onToggle(p) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(p, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            if (p in selected) Icon(XIcons.Check, contentDescription = "Attached", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            if (p in selected) Icon(XIcons.Check, contentDescription = stringResource(R.string.ai_chat_attached), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ai_chat_done)) } },
     )
 }

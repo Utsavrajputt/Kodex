@@ -40,6 +40,8 @@ import com.invictus.kodex.ai.diff.DiffHunk
 import com.invictus.kodex.ai.diff.DiffLine
 import com.invictus.kodex.ai.diff.LineType
 import com.invictus.kodex.ui.icons.XIcons
+import androidx.compose.ui.res.stringResource
+import com.invictus.kodex.R
 
 private const val MAX_LINES_SHOWN = 400
 
@@ -92,9 +94,9 @@ fun ChangeReviewSheet(
     val reviews = remember(changes) { changes.map { FileReview(it) } }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp)) {
-            Text("Review ${changes.size} changed file${if (changes.size == 1) "" else "s"}", style = MaterialTheme.typography.titleMedium)
+            Text(if (changes.size == 1) stringResource(R.string.ai_review_title_one) else stringResource(R.string.ai_review_title_many, changes.size), style = MaterialTheme.typography.titleMedium)
             Text(
-                "Nothing is written until you apply. Unchecked files and hunks are skipped and dropped.",
+                stringResource(R.string.ai_review_nothing_is_written_until_you),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp),
@@ -111,7 +113,7 @@ fun ChangeReviewSheet(
                             when (val row = rows[n]) {
                                 is Row2.Hunk -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 24.dp)) {
                                     Checkbox(checked = r.hunkOn[row.index], onCheckedChange = { r.hunkOn[row.index] = it })
-                                    Text("Hunk ${row.index + 1}", style = MaterialTheme.typography.labelMedium)
+                                    Text(stringResource(R.string.ai_diff_hunk, row.index + 1), style = MaterialTheme.typography.labelMedium)
                                 }
                                 is Row2.Line -> DiffLineRow(row.line)
                                 is Row2.Note -> Text(row.text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 24.dp, bottom = 4.dp))
@@ -121,10 +123,10 @@ fun ChangeReviewSheet(
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onDiscard) { Text("Discard all") }
+                TextButton(onClick = onDiscard) { Text(stringResource(R.string.ai_review_discard_all)) }
                 Spacer(Modifier.weight(1f))
                 Button(onClick = { onApply(reviews.mapNotNull { it.approved() }) }, enabled = reviews.any { it.included }) {
-                    Text("Apply selected")
+                    Text(stringResource(R.string.ai_review_apply_selected))
                 }
             }
         }

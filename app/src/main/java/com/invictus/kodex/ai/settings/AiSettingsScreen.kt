@@ -93,6 +93,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import androidx.compose.ui.res.stringResource
+import com.invictus.kodex.R
 
 class AiSettingsViewModel(
     private val app: Application,
@@ -213,7 +215,7 @@ class AiSettingsViewModel(
         if (trimmed.isEmpty()) return
         keyStore.put(provider, trimmed)
         refresh()
-        _messages.value = "Key saved for ${ProviderRegistry.byId(provider).displayName}"
+        _messages.value = app.getString(R.string.ai_settings_key_saved_for, ProviderRegistry.byId(provider).displayName)
         if (provider == providerId.value) loadModels(provider)
     }
 
@@ -227,7 +229,7 @@ class AiSettingsViewModel(
         val provider = ProviderRegistry.byId(providerId.value)
         val key = keyStore.get(provider.id)
         if (key == null) {
-            _test.value = TestState.Failed("No key saved", "Paste your ${provider.displayName} API key above, save it, then test again.")
+            _test.value = TestState.Failed(app.getString(R.string.ai_settings_no_key_saved), app.getString(R.string.ai_settings_paste_key_hint, provider.displayName))
             return
         }
         val model = _modelId.value.ifEmpty { provider.defaultModels.first().id }
@@ -247,7 +249,7 @@ class AiSettingsViewModel(
                 val info = AiErrorPresenter.describe(e.error, provider.displayName)
                 TestState.Failed(info.title, info.explanation)
             } catch (e: Exception) {
-                TestState.Failed("Test failed", e.message ?: "Unexpected error")
+                TestState.Failed(app.getString(R.string.ai_settings_test_failed), e.message ?: app.getString(R.string.ai_settings_unexpected_error))
             }
         }
     }
@@ -300,10 +302,10 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
             TopAppBar(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(XIcons.ArrowBack, contentDescription = "Back")
+                        Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.ai_settings_back))
                     }
                 },
-                title = { Text("AI Assistant") },
+                title = { Text(stringResource(R.string.ai_settings_ai_assistant)) },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -343,15 +345,15 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                             )
                         }
                         AiTag(
-                            if (ready) "Ready" else "Setup needed",
+                            if (ready) stringResource(R.string.ai_settings_ready) else stringResource(R.string.ai_settings_setup_needed),
                             container = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                             content = if (ready) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onError,
                         )
                     }
                     Spacer(Modifier.height(12.dp))
-                    HeroCheck(keySaved, if (keySaved) "API key saved" else "Add an API key to begin")
-                    HeroCheck(consent, if (consent) "AI allowed in projects" else "Turn on \"Allow AI in projects\" below")
-                    activeModel?.let { HeroCheck(true, ModelInfo.contextLabel(it.maxContextChars) + " window") }
+                    HeroCheck(keySaved, if (keySaved) stringResource(R.string.ai_settings_api_key_saved) else stringResource(R.string.ai_settings_add_an_api_key_to))
+                    HeroCheck(consent, if (consent) stringResource(R.string.ai_settings_ai_allowed_in_projects) else stringResource(R.string.ai_settings_turn_on_allow_ai_in))
+                    activeModel?.let { HeroCheck(true, stringResource(R.string.ai_settings_context_window, ModelInfo.contextLabel(it.maxContextChars))) }
                     HeroUsage(
                         view = UsageLedger.view(ledger, dailyLimits, providerId, activeId, nowMs),
                         nowMs = nowMs,
@@ -363,7 +365,7 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
             }
 
             // ---- provider ----
-            SectionCard("Provider", XIcons.Cloud, "Who runs the model. Each provider uses its own API key.") {
+            SectionCard(stringResource(R.string.ai_settings_provider), XIcons.Cloud, stringResource(R.string.ai_settings_who_runs_the_model_each)) {
                 ProviderRegistry.all.forEach { p ->
                     SelectableRow(
                         selected = p.id == providerId,
@@ -372,13 +374,13 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                         Column(Modifier.weight(1f)) {
                             Text(p.displayName, style = MaterialTheme.typography.titleSmall)
                             Text(
-                                if (hasKey[p.id] == true) "Key saved ${keyHint[p.id].orEmpty()}" else "No key yet",
+                                if (hasKey[p.id] == true) stringResource(R.string.ai_settings_key_saved, keyHint[p.id].orEmpty()) else stringResource(R.string.ai_settings_no_key_yet),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         AiTag(
-                            "${p.defaultModels.size} models",
+                            stringResource(R.string.ai_settings_models, p.defaultModels.size),
                             container = MaterialTheme.colorScheme.surfaceVariant,
                         )
                     }
@@ -387,9 +389,9 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
 
             // ---- model ----
             SectionCard(
-                "Model",
+                stringResource(R.string.ai_settings_model),
                 XIcons.Tune,
-                "Bigger models reason better but are slower and hit limits sooner. Tags are a rough guide.",
+                stringResource(R.string.ai_settings_bigger_models_reason_better_but),
             ) {
                 val visible = if (showAllModels) modelList else modelList.take(6)
                 visible.forEach { m ->
@@ -406,27 +408,27 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                 }
                 if (modelList.size > 6) {
                     TextButton(onClick = { showAllModels = !showAllModels }) {
-                        Text(if (showAllModels) "Show fewer" else "Show all ${modelList.size} models")
+                        Text(if (showAllModels) stringResource(R.string.ai_settings_show_fewer) else stringResource(R.string.ai_settings_show_all_models, modelList.size))
                     }
                 }
                 if (customModel.isNotBlank()) {
                     InfoNote(
-                        "A custom model id is active (${customModel.trim()}). It overrides the selection above until you clear it.",
+                        stringResource(R.string.ai_settings_a_custom_model_id_is, customModel.trim()),
                         warn = true,
                     )
                 }
                 SyncedTextField(
                     value = customModel,
                     onValueChange = { vm.setCustomModel(it) },
-                    label = { Text("Custom model id (optional)") },
-                    supportingText = { Text("For a model that isn't listed yet. Leave empty to use the selection above.") },
+                    label = { Text(stringResource(R.string.ai_settings_custom_model_id_optional)) },
+                    supportingText = { Text(stringResource(R.string.ai_settings_for_a_model_that_isn)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
 
             // ---- key & connection ----
-            SectionCard("API key & connection", XIcons.Key, "Stored encrypted on this device (Keystore + AES/GCM). It only leaves the device to reach ${provider.displayName}.") {
+            SectionCard(stringResource(R.string.ai_settings_api_key_connection), XIcons.Key, stringResource(R.string.ai_settings_stored_encrypted_on_this_device, provider.displayName)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         if (keySaved) XIcons.CheckCircle else XIcons.ErrorCircle,
@@ -435,13 +437,13 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                         modifier = Modifier.size(18.dp),
                     )
                     Text(
-                        if (keySaved) "Key saved  ${keyHint[providerId].orEmpty()}" else "No key saved for ${provider.displayName}",
+                        if (keySaved) stringResource(R.string.ai_settings_key_saved_2, keyHint[providerId].orEmpty()) else stringResource(R.string.ai_settings_no_key_saved_for, provider.displayName),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(start = 8.dp).weight(1f),
                     )
                     KEY_URLS[providerId]?.let { url ->
                         TextButton(onClick = { runCatching { uriHandler.openUri(url) } }) {
-                            Text("Get a key")
+                            Text(stringResource(R.string.ai_settings_get_a_key))
                             Icon(XIcons.OpenInNew, contentDescription = null, modifier = Modifier.padding(start = 4.dp).size(14.dp))
                         }
                     }
@@ -449,39 +451,39 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                 OutlinedTextField(
                     value = keyDraft,
                     onValueChange = { keyDraft = it },
-                    label = { Text(if (keySaved) "Replace key" else "Paste API key") },
+                    label = { Text(if (keySaved) stringResource(R.string.ai_settings_replace_key) else stringResource(R.string.ai_settings_paste_api_key)) },
                     singleLine = true,
                     visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { reveal = !reveal }) {
-                            Icon(if (reveal) XIcons.VisibilityOff else XIcons.Visibility, contentDescription = if (reveal) "Hide key" else "Show key")
+                            Icon(if (reveal) XIcons.VisibilityOff else XIcons.Visibility, contentDescription = if (reveal) stringResource(R.string.ai_settings_hide_key) else stringResource(R.string.ai_settings_show_key))
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { vm.saveKey(providerId, keyDraft); keyDraft = "" }, enabled = keyDraft.isNotBlank()) {
-                        Text("Save key")
+                        Text(stringResource(R.string.ai_settings_save_key))
                     }
                     if (keySaved) {
-                        OutlinedButton(onClick = { vm.clearKey(providerId) }) { Text("Remove") }
+                        OutlinedButton(onClick = { vm.clearKey(providerId) }) { Text(stringResource(R.string.ai_settings_remove)) }
                     }
                 }
                 HorizontalDivider(Modifier.padding(vertical = 4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     FilledTonalButton(onClick = { vm.testConnection() }, enabled = test !is AiSettingsViewModel.TestState.Testing) {
-                        Text("Test connection")
+                        Text(stringResource(R.string.ai_settings_test_connection))
                     }
                     if (test is AiSettingsViewModel.TestState.Testing) {
                         CircularProgressIndicator(Modifier.padding(start = 12.dp).size(20.dp), strokeWidth = 2.dp)
-                        Text("  Contacting ${provider.displayName}…", style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.ai_settings_contacting, provider.displayName), style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 when (val t = test) {
                     is AiSettingsViewModel.TestState.Ok -> StatusPanel(
                         ok = true,
-                        title = "Connected · ${t.millis} ms",
-                        detail = "${provider.displayName} accepted your key and answered using ${t.model}.",
+                        title = stringResource(R.string.ai_settings_connected_ms, t.millis),
+                        detail = stringResource(R.string.ai_settings_accepted_your_key_and_answered, provider.displayName, t.model),
                     )
                     is AiSettingsViewModel.TestState.Failed -> StatusPanel(ok = false, title = t.title, detail = t.detail)
                     else -> Unit
@@ -489,14 +491,14 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
             }
 
             // ---- usage ----
-            SectionCard("Usage this session", XIcons.Bolt, "Counted since the app started. Token numbers are estimates, not your provider's bill.") {
+            SectionCard(stringResource(R.string.ai_settings_usage_this_session), XIcons.Bolt, stringResource(R.string.ai_settings_counted_since_the_app_started)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile("Requests", usage.requests.toString(), Modifier.weight(1f))
-                    StatTile("Limit hits", usage.rateLimitHits.toString(), Modifier.weight(1f), warn = usage.rateLimitHits > 0)
+                    StatTile(stringResource(R.string.ai_settings_requests), usage.requests.toString(), Modifier.weight(1f))
+                    StatTile(stringResource(R.string.ai_settings_limit_hits), usage.rateLimitHits.toString(), Modifier.weight(1f), warn = usage.rateLimitHits > 0)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile("Sent (est.)", "~" + ModelInfo.formatTokens(usage.inputTokens), Modifier.weight(1f))
-                    StatTile("Received (est.)", "~" + ModelInfo.formatTokens(usage.outputTokens), Modifier.weight(1f))
+                    StatTile(stringResource(R.string.ai_settings_sent_est), "~" + ModelInfo.formatTokens(usage.inputTokens), Modifier.weight(1f))
+                    StatTile(stringResource(R.string.ai_settings_received_est), "~" + ModelInfo.formatTokens(usage.outputTokens), Modifier.weight(1f))
                 }
                 val total = usage.inputTokens + usage.outputTokens
                 if (total > 0) {
@@ -506,7 +508,7 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                         trackColor = MaterialTheme.colorScheme.tertiaryContainer,
                     )
                     Text(
-                        "Sent vs received. Every agent step re-sends the conversation, so \"sent\" is usually much larger.",
+                        stringResource(R.string.ai_settings_sent_vs_received_every_agent),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -514,45 +516,46 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                 usage.lastRateLimitAt?.let { at ->
                     val agoSec = ((System.currentTimeMillis() - at) / 1000).toInt().coerceAtLeast(0)
                     InfoNote(
-                        "Last limit hit ${AiErrorPresenter.formatWait(agoSec)} ago — " +
-                            if (usage.lastRateLimitDaily) "a daily quota (resets later)."
-                            else "a short-term limit" + (usage.lastRateLimitWaitSec?.let { ", Kodex waited ${AiErrorPresenter.formatWait(it)}." } ?: "."),
+                        if (usage.lastRateLimitDaily) stringResource(R.string.ai_settings_last_limit_daily, AiErrorPresenter.formatWait(agoSec))
+                        else usage.lastRateLimitWaitSec?.let {
+                            stringResource(R.string.ai_settings_last_limit_short_waited, AiErrorPresenter.formatWait(agoSec), AiErrorPresenter.formatWait(it))
+                        } ?: stringResource(R.string.ai_settings_last_limit_short, AiErrorPresenter.formatWait(agoSec)),
                         warn = true,
                     )
                 }
                 SyncedTextField(
                     value = dailyLimits[UsageLedger.key(providerId, activeId)]?.toString().orEmpty(),
                     onValueChange = { vm.setDailyLimit(providerId, activeId, it.filter(Char::isDigit).take(7).toIntOrNull() ?: 0) },
-                    label = { Text("Daily request limit (optional)") },
-                    supportingText = { Text("Your plan's real cap for this model. Leave empty to use Kodex's rough default, if there is one.") },
+                    label = { Text(stringResource(R.string.ai_settings_daily_request_limit_optional)) },
+                    supportingText = { Text(stringResource(R.string.ai_settings_your_plan_s_real_cap)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                TextButton(onClick = { vm.resetUsage() }, enabled = usage.requests > 0 || usage.rateLimitHits > 0) { Text("Reset counters") }
+                TextButton(onClick = { vm.resetUsage() }, enabled = usage.requests > 0 || usage.rateLimitHits > 0) { Text(stringResource(R.string.ai_settings_reset_counters)) }
             }
 
             // ---- limits explainer ----
             var limitsOpen by remember { mutableStateOf(false) }
-            SectionCard("Understanding rate limits", XIcons.Info, null, onHeaderClick = { limitsOpen = !limitsOpen }, trailing = {
+            SectionCard(stringResource(R.string.ai_settings_understanding_rate_limits), XIcons.Info, null, onHeaderClick = { limitsOpen = !limitsOpen }, trailing = {
                 Icon(if (limitsOpen) XIcons.KeyboardArrowUp else XIcons.KeyboardArrowDown, contentDescription = null)
             }) {
                 if (limitsOpen) {
-                    LimitPoint("Short-term limit", "Too many requests in a short window. Kodex waits the time the provider asks for (shown as a countdown in the chat) and retries up to 4 times, or you can tap Retry now.")
-                    LimitPoint("Daily quota", "A per-day cap, common on free plans. Waiting seconds won't help — switch model or provider, or come back after the reset.")
-                    LimitPoint("Why agents hit limits", "One message can trigger many requests (read files, search, edit). Lighter models usually allow more requests per minute.")
-                    LimitPoint("What to do", "Use the model chip in the chat to switch on the spot, or add another provider's key here and switch to it.")
+                    LimitPoint(stringResource(R.string.ai_settings_short_term_limit), stringResource(R.string.ai_settings_too_many_requests_in_a))
+                    LimitPoint(stringResource(R.string.ai_settings_daily_quota), stringResource(R.string.ai_settings_a_per_day_cap_common))
+                    LimitPoint(stringResource(R.string.ai_settings_why_agents_hit_limits), stringResource(R.string.ai_settings_one_message_can_trigger_many))
+                    LimitPoint(stringResource(R.string.ai_settings_what_to_do), stringResource(R.string.ai_settings_use_the_model_chip_in))
                 } else {
-                    Text("Tap to see what the countdown and quota messages mean.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.ai_settings_tap_to_see_what_the), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
             // ---- privacy ----
-            SectionCard("Privacy", XIcons.Visibility, "You decide what the assistant may see.") {
+            SectionCard(stringResource(R.string.ai_settings_privacy), XIcons.Visibility, stringResource(R.string.ai_settings_you_decide_what_the_assistant)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Allow AI in projects", style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.ai_settings_allow_ai_in_projects), style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "When on, selected code and file contents are sent to ${provider.displayName} when you use AI features.",
+                            stringResource(R.string.ai_settings_when_on_selected_code_and, provider.displayName),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -562,11 +565,11 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                 SyncedTextField(
                     value = globs,
                     onValueChange = { vm.setGlobs(it) },
-                    label = { Text("Never send files matching") },
-                    supportingText = { Text("Comma-separated, e.g. .env, *.pem, secrets/**") },
+                    label = { Text(stringResource(R.string.ai_settings_never_send_files_matching)) },
+                    supportingText = { Text(stringResource(R.string.ai_settings_comma_separated_e_g_env)) },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                InfoNote("Obvious secrets (API keys, tokens, private keys) are masked before anything is sent.")
+                InfoNote(stringResource(R.string.ai_settings_obvious_secrets_api_keys_tokens))
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -647,8 +650,8 @@ private fun HeroUsage(view: UsageView, nowMs: Long, contextTokens: Int, contextW
     HorizontalDivider(Modifier.padding(vertical = 10.dp), color = onHero.copy(alpha = 0.2f))
     val limit = view.dailyLimit
     Text(
-        "Today: ${view.day.requests}" + (if (limit != null) " / $limit" else "") + " requests · ~" +
-            ModelInfo.formatTokens(view.day.tokens) + " tokens",
+        if (limit != null) stringResource(R.string.ai_usage_today_limit, view.day.requests, limit, ModelInfo.formatTokens(view.day.tokens))
+        else stringResource(R.string.ai_usage_today, view.day.requests, ModelInfo.formatTokens(view.day.tokens)),
         style = MaterialTheme.typography.bodyMedium, color = onHero, fontWeight = FontWeight.Medium,
     )
     view.dailyFraction?.let { f ->
@@ -662,24 +665,24 @@ private fun HeroUsage(view: UsageView, nowMs: Long, contextTokens: Int, contextW
     }
     view.resetAtMillis?.let { at ->
         Text(
-            "Daily quota resets in ${UsageLedger.formatRemaining(at - nowMs)}" +
-                (if (resetsOnPacific) " (midnight Pacific)" else "") +
-                (if (view.limitIsCustom) "" else " · limit is a rough guess"),
+            stringResource(R.string.ai_usage_resets, UsageLedger.formatRemaining(at - nowMs)) +
+                (if (resetsOnPacific) stringResource(R.string.ai_usage_resets_pacific) else "") +
+                (if (view.limitIsCustom) "" else stringResource(R.string.ai_usage_limit_guess)),
             style = MaterialTheme.typography.labelSmall, color = onHero.copy(alpha = 0.75f), modifier = Modifier.padding(top = 4.dp),
         )
     }
     Text(
-        "This month: ${view.month.requests} requests · ~" + ModelInfo.formatTokens(view.month.tokens) + " tokens",
+        stringResource(R.string.ai_usage_month, view.month.requests, ModelInfo.formatTokens(view.month.tokens)),
         style = MaterialTheme.typography.bodySmall, color = onHero, modifier = Modifier.padding(top = 8.dp),
     )
     if (contextWindowTokens > 0 && contextTokens > 0) {
         Text(
-            "Last request: ~${ModelInfo.formatTokens(contextTokens.toLong())} of ${ModelInfo.formatTokens(contextWindowTokens.toLong())} window",
+            stringResource(R.string.ai_settings_last_request_of_window, ModelInfo.formatTokens(contextTokens.toLong()), ModelInfo.formatTokens(contextWindowTokens.toLong())),
             style = MaterialTheme.typography.bodySmall, color = onHero.copy(alpha = 0.85f), modifier = Modifier.padding(top = 2.dp),
         )
     }
     Text(
-        "The ~250K figure is the window per request, not a daily or monthly allowance. Tokens are estimates.",
+        stringResource(R.string.ai_settings_the_k_figure_is_the),
         style = MaterialTheme.typography.labelSmall, color = onHero.copy(alpha = 0.6f), modifier = Modifier.padding(top = 6.dp),
     )
 }

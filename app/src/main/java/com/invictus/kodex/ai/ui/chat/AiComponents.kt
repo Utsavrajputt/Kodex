@@ -53,6 +53,8 @@ import com.invictus.kodex.ai.provider.ProviderRegistry
 import com.invictus.kodex.ui.icons.XIcons
 import kotlinx.coroutines.delay
 import kotlin.math.ceil
+import androidx.compose.ui.res.stringResource
+import com.invictus.kodex.R
 
 /** Small rounded label ("Fast", "~200K context"…). Shared by the chat and the settings screen. */
 @Composable
@@ -132,28 +134,27 @@ fun RateLimitCard(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "Slowing down — rate limit reached",
+                        stringResource(R.string.ai_comp_slowing_down_rate_limit_reached),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onTertiaryContainer,
                     )
                     Text(
-                        "Retrying automatically · attempt ${info.attempt} of ${info.maxAttempts}",
+                        stringResource(R.string.ai_comp_retrying_automatically_attempt_of, info.attempt, info.maxAttempts),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
                     )
                 }
             }
             Text(
-                "${info.provider} limits how quickly ${info.model} can be called. Nothing is lost — your message is sent again " +
-                    "as soon as the timer ends. Agent runs make several requests per message, so big projects hit this sooner.",
+                stringResource(R.string.ai_comp_rate_limit_body, info.provider, info.model),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onTertiaryContainer,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                FilledTonalButton(onClick = onRetryNow) { Text("Retry now") }
-                OutlinedButton(onClick = onSwitchModel) { Text("Switch model") }
+                FilledTonalButton(onClick = onRetryNow) { Text(stringResource(R.string.ai_comp_retry_now)) }
+                OutlinedButton(onClick = onSwitchModel) { Text(stringResource(R.string.ai_comp_switch_model)) }
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onStop) { Text("Stop") }
+                TextButton(onClick = onStop) { Text(stringResource(R.string.ai_chat_stop)) }
             }
         }
     }
@@ -193,7 +194,7 @@ fun AiErrorCard(
                     )
                 }
                 IconButton(onClick = onDismiss) {
-                    Icon(XIcons.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onErrorContainer)
+                    Icon(XIcons.Close, contentDescription = stringResource(R.string.ai_chat_dismiss), tint = MaterialTheme.colorScheme.onErrorContainer)
                 }
             }
             if (actions.isNotEmpty()) {
@@ -215,7 +216,7 @@ fun SimpleErrorCard(message: String, onDismiss: () -> Unit, modifier: Modifier =
     Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.errorContainer, modifier = modifier.fillMaxWidth()) {
         Row(Modifier.padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.weight(1f).padding(vertical = 10.dp))
-            IconButton(onClick = onDismiss) { Icon(XIcons.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onErrorContainer) }
+            IconButton(onClick = onDismiss) { Icon(XIcons.Close, contentDescription = stringResource(R.string.ai_chat_dismiss), tint = MaterialTheme.colorScheme.onErrorContainer) }
         }
     }
 }
@@ -231,7 +232,7 @@ fun ModelChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier)
     ) {
         Row(Modifier.padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                label.ifBlank { "Choose model" },
+                label.ifBlank { stringResource(R.string.ai_comp_choose_model) },
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -261,8 +262,8 @@ fun ContextMeter(usedTokens: Int, maxTokens: Int, modifier: Modifier = Modifier)
             trackColor = MaterialTheme.colorScheme.surfaceVariant,
         )
         Text(
-            "Context ~${ModelInfo.formatTokens(usedTokens.toLong())} of ${ModelInfo.formatTokens(maxTokens.toLong())} tokens" +
-                if (fraction > 0.85f) " — nearly full, consider a new chat" else "",
+            stringResource(R.string.ai_comp_context_usage, ModelInfo.formatTokens(usedTokens.toLong()), ModelInfo.formatTokens(maxTokens.toLong())) +
+                if (fraction > 0.85f) stringResource(R.string.ai_comp_context_full) else "",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 2.dp),
@@ -282,9 +283,9 @@ fun ModelSwitchSheet(
     val provider = ProviderRegistry.byId(providerId)
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
-            Text("Switch model", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.ai_comp_switch_model), style = MaterialTheme.typography.titleMedium)
             Text(
-                "Takes effect on your next message. Providers without a saved key are greyed out.",
+                stringResource(R.string.ai_comp_takes_effect_on_your_next),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
@@ -296,13 +297,13 @@ fun ModelSwitchSheet(
                         selected = p.id == providerId,
                         onClick = { providerId = p.id },
                         enabled = keyed,
-                        label = { Text(if (keyed) p.displayName else "${p.displayName} · no key") },
+                        label = { Text(if (keyed) p.displayName else stringResource(R.string.ai_comp_no_key, p.displayName)) },
                     )
                 }
             }
             if (status.customModelActive) {
                 Text(
-                    "A custom model id is set in Settings. Picking a model here clears it.",
+                    stringResource(R.string.ai_comp_a_custom_model_id_is),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.padding(top = 8.dp),
@@ -325,7 +326,7 @@ fun ModelSwitchSheet(
                                     AiTag(ModelInfo.contextLabel(m.maxContextChars))
                                 }
                             }
-                            if (selected) Icon(XIcons.CheckCircle, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
+                            if (selected) Icon(XIcons.CheckCircle, contentDescription = stringResource(R.string.ai_comp_selected), tint = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
@@ -333,7 +334,7 @@ fun ModelSwitchSheet(
             if (onOpenSettings != null) {
                 TextButton(onClick = { onDismiss(); onOpenSettings() }, modifier = Modifier.padding(top = 6.dp)) {
                     Icon(XIcons.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("  More in AI settings")
+                    Text(stringResource(R.string.ai_comp_more_in_ai_settings))
                 }
             }
         }

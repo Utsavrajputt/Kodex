@@ -18,6 +18,8 @@ import com.invictus.kodex.ai.edit.EditParser
 import com.invictus.kodex.ai.tasks.ExplainErrorTask
 import com.invictus.kodex.ui.icons.XIcons
 import java.io.File
+import androidx.compose.ui.res.stringResource
+import com.invictus.kodex.R
 
 private val PATH_LINE = Regex("""([\w./-]+\.[A-Za-z0-9]{1,8}):(\d+)""")
 
@@ -56,7 +58,7 @@ private fun buildSnippet(projectRoot: File, errorText: String, globs: String): S
 fun ExplainErrorAi(errorText: String, projectPath: String?, app: Application) {
     var open by remember { mutableStateOf(false) }
     IconButton(onClick = { open = true }, enabled = errorText.isNotBlank()) {
-        Icon(XIcons.AutoAwesome, contentDescription = "Explain error with AI")
+        Icon(XIcons.AutoAwesome, contentDescription = stringResource(R.string.ai_explain_explain_error_with_ai))
     }
     if (!open) return
 
@@ -65,7 +67,7 @@ fun ExplainErrorAi(errorText: String, projectPath: String?, app: Application) {
     var applyError by remember { mutableStateOf<String?>(null) }
 
     AiStreamSheet(
-        title = "Explain error",
+        title = stringResource(R.string.ai_explain_explain_error),
         runtime = runtime,
         onClose = { open = false },
         stream = {
@@ -94,7 +96,7 @@ fun ExplainErrorAi(errorText: String, projectPath: String?, app: Application) {
                     }
                     if (conflict != null) applyError = conflict
                     else review = Triple(f.absolutePath, base, text)
-                }) { Text("Review fix patch") }
+                }) { Text(stringResource(R.string.ai_explain_review_fix_patch)) }
                 applyError?.let { Text(it) }
             }
         },
