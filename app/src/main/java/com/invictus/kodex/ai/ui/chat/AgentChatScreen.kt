@@ -3,6 +3,10 @@
 package com.invictus.kodex.ai.ui.chat
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollBy
@@ -91,7 +95,7 @@ fun AgentChatScreen(vm: AgentChatViewModel, projectName: String, onBack: () -> U
             TopAppBar(
                 title = {
                     Column {
-                        Text("AI Agent")
+                        Text("Kodex AI")
                         Text(projectName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
@@ -597,9 +601,9 @@ private fun MessageItem(
             if (m.text.isNotBlank()) {
                 SelectionContainer { MarkdownContent(m.text, Modifier.padding(top = if (m.steps.isNotEmpty()) 8.dp else 0.dp), onApplyCode) }
             } else if (m.streaming && m.steps.none { it.status == StepStatus.RUNNING }) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                    CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                    Text("  Thinking…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp)) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Thinking…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 10.dp))
                 }
             }
             if (!m.streaming && m.text.isNotBlank()) {
@@ -624,37 +628,90 @@ private fun stepIcon(label: String): ImageVector = when {
     else -> XIcons.Bolt
 }
 
+/** "Read 3 files · edited 1 file" style recap of what the agent did, for the collapsed row. */
+private fun stepsSummary(steps: List<AgentChatViewModel.UiStep>): String {
+    fun count(prefix: String) = steps.count { it.label.startsWith(prefix) }
+    fun plural(n: Int, one: String, many: String) = if (n == 1) "$n $one" else "$n $many"
+    val parts = buildList {
+        count("Reading").takeIf { it > 0 }?.let { add("read " + plural(it, "file", "files")) }
+        count("Searching").takeIf { it > 0 }?.let { add("searched " + plural(it, "time", "times")) }
+        count("Listing").takeIf { it > 0 }?.let { add("listed " + plural(it, "folder", "folders")) }
+        count("Editing").takeIf { it > 0 }?.let { add("edited " + plural(it, "file", "files")) }
+        count("Creating").takeIf { it > 0 }?.let { add("created " + plural(it, "file", "files")) }
+        count("Deleting").takeIf { it > 0 }?.let { add("deleted " + plural(it, "file", "files")) }
+    }
+    val text = if (parts.isEmpty()) plural(steps.size, "step", "steps") else parts.joinToString(", ")
+    return text.replaceFirstChar { it.uppercase() }
+}
+
+/**
+ * What the agent is doing, Claude style: one quiet line (clock + current action or a recap + chevron) that
+ * opens into a timeline of every step on tap.
+ */
 @Composable
 private fun StepsBlock(m: UiMessage) {
     var expanded by remember(m.id) { mutableStateOf(false) }
-    val collapsible = !m.streaming && m.steps.size > 3
-    val showAll = !collapsible || expanded
     val failed = m.steps.count { it.status == StepStatus.FAILED }
-    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(
-                Modifier.fillMaxWidth().then(if (collapsible) Modifier.clickable { expanded = !expanded } else Modifier),
-                verticalAlignment = Alignment.CenterVertically,
+    val running = m.steps.lastOrNull { it.status == StepStatus.RUNNING }
+    val headline = when {
+        m.streaming -> running?.label ?: m.steps.lastOrNull()?.label ?: "Working…"
+        else -> stepsSummary(m.steps) + if (failed > 0) " · $failed failed" else ""
+    }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val chevron by animateFloatAsState(if (expanded) 90f else 0f, label = "stepsChevron")
+    Column(Modifier.fillMaxWidth().animateContentSize()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { expanded = !expanded }
+                .padding(vertical = 8.dp, horizontal = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (m.streaming) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = muted)
+            else Icon(XIcons.Schedule, contentDescription = null, tint = muted, modifier = Modifier.size(18.dp))
+            Text(
+                headline,
+                style = MaterialTheme.typography.bodyMedium,
+                color = muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+            )
+            Icon(
+                XIcons.ChevronRight, contentDescription = if (expanded) "Hide steps" else "Show steps", tint = muted,
+                modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = chevron },
+            )
+        }
+        if (expanded) {
+            val rail = MaterialTheme.colorScheme.outlineVariant
+            val bg = MaterialTheme.colorScheme.background
+            Column(
+                Modifier
+                    .padding(start = 9.dp, bottom = 6.dp)
+                    .drawBehind {
+                        drawLine(rail, Offset(8.dp.toPx(), 8.dp.toPx()), Offset(8.dp.toPx(), size.height - 8.dp.toPx()), strokeWidth = 1.5.dp.toPx())
+                    },
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(
-                    (if (m.streaming) "Working · " else "") + "${m.steps.size} step${if (m.steps.size == 1) "" else "s"}" +
-                        if (failed > 0) " · $failed failed" else "",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                if (collapsible) {
-                    Icon(if (expanded) XIcons.KeyboardArrowUp else XIcons.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
-                }
-            }
-            if (showAll) m.steps.forEach { s ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(stepIcon(s.label), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(15.dp))
-                    Text(s.label, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
-                    when (s.status) {
-                        StepStatus.RUNNING -> CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                        StepStatus.DONE -> Icon(XIcons.CheckCircle, contentDescription = "Done", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
-                        StepStatus.FAILED -> Icon(XIcons.ErrorCircle, contentDescription = "Failed", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
+                m.steps.forEach { st ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.background(bg).padding(vertical = 1.dp)) {
+                            Icon(stepIcon(st.label), contentDescription = null, tint = muted, modifier = Modifier.size(16.dp))
+                        }
+                        Text(
+                            st.label,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (st.status == StepStatus.FAILED) MaterialTheme.colorScheme.error else muted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+                        )
+                        when (st.status) {
+                            StepStatus.RUNNING -> CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp, color = muted)
+                            StepStatus.DONE -> Icon(XIcons.Check, contentDescription = "Done", tint = muted, modifier = Modifier.size(14.dp))
+                            StepStatus.FAILED -> Icon(XIcons.ErrorCircle, contentDescription = "Failed", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
+                        }
                     }
                 }
             }

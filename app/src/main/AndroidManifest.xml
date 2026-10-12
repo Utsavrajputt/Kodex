@@ -1128,6 +1128,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Kodex AI: keeps an answer running while the app is minimized. -->
+        <service
+            android:name=".ai.notify.AiWorkService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <service
             android:name=".github.notify.ArmBuildJobService"
             android:exported="false"

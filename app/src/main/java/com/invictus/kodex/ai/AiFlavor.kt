@@ -18,7 +18,10 @@ object AiFlavor {
         private set
 
     fun init(app: Application) {
-        if (gate == null) gate = RealAiGate(app)
+        if (gate == null) {
+            gate = RealAiGate(app)
+            com.invictus.kodex.ai.notify.AppVisibility.register(app)
+        }
     }
 }
 
@@ -29,7 +32,7 @@ class RealAiGate(private val app: Application) : AiGateImpl {
 
     @Composable
     override fun AgentScreen(projectPath: String, editor: EditorViewModel, onBack: () -> Unit, onOpenSettings: () -> Unit) {
-        val vm: AgentChatViewModel = viewModel(key = "agent:$projectPath", factory = AgentChatViewModel.factory(app, projectPath))
+        val vm = AgentChatViewModel.obtain(app, projectPath)
         androidx.compose.runtime.LaunchedEffect(vm, editor) {
             vm.bindIo(com.invictus.kodex.ai.agent.EditorIo(editor))
             vm.refreshIndex()
@@ -49,7 +52,7 @@ class RealAiGate(private val app: Application) : AiGateImpl {
         if (root == null) {
             Text("Open a project to use the AI assistant.")
         } else {
-            val vm: AgentChatViewModel = viewModel(key = "agent:$root", factory = AgentChatViewModel.factory(app, root))
+            val vm = AgentChatViewModel.obtain(app, root)
             EditorAiPanel(vm = vm, editor = viewModel, handle = handle, onClose = onClose)
         }
     }

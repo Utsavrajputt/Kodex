@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.invictus.kodex.ai.notify.AiBackground
+import com.invictus.kodex.ai.notify.AiNotifier
+import com.invictus.kodex.ai.notify.AppVisibility
 import com.invictus.kodex.ai.AiRuntime
 import com.invictus.kodex.ai.Redactor
 import com.invictus.kodex.ai.agent.AgentPrompt
@@ -258,6 +261,10 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         }
         job = viewModelScope.launch {
             _busy.value = true
+            // Keeps the process alive (foreground service) so the answer finishes even when the app is minimized.
+            AiBackground.begin(app, root.name)
+            var cancelled = false
+            var failed = false
             try {
                 val files = ProjectFiles(root, globs.value, io)
                 history += AgentMessage.User(buildUserText(files, attachedAll, ctx, text))
@@ -278,12 +285,15 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                     _error.value = "The model returned an empty response"
                 }
             } catch (ce: CancellationException) {
+                cancelled = true
                 rollback(startPos, text, _messages.value.lastOrNull()?.text.orEmpty())
                 throw ce
             } catch (e: AiException) {
+                failed = true
                 rollback(startPos, text, _messages.value.lastOrNull()?.text.orEmpty())
                 _failure.value = AiErrorPresenter.describe(e.error, providerName())
             } catch (e: Exception) {
+                failed = true
                 rollback(startPos, text, _messages.value.lastOrNull()?.text.orEmpty())
                 _error.value = e.message ?: "Request failed"
             } finally {
@@ -293,6 +303,12 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                 _busy.value = false
                 persistNow()
                 refreshStatus()
+                AiBackground.end(app)
+                // Finished (or failed) while the app is minimized: tell the user. A Stop by the user stays silent.
+                if (!cancelled && !AppVisibility.visible) {
+                    val reply = _messages.value.lastOrNull { it.role == "assistant" }?.text.orEmpty()
+                    AiNotifier(app).done(root.name, reply, ok = !failed && _error.value == null && _failure.value == null)
+                }
             }
         }
     }
@@ -589,5 +605,14 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         fun factory(app: Application, projectPath: String) = viewModelFactory {
             initializer { AgentChatViewModel(app, projectPath) }
         }
+
+        private val sessions = java.util.concurrent.ConcurrentHashMap<String, AgentChatViewModel>()
+
+        /**
+         * One chat engine per project for the whole process. It is deliberately not tied to a screen's
+         * ViewModelStore, so leaving the AI screen (or the editor panel) does not cancel an answer in progress.
+         */
+        fun obtain(app: Application, projectPath: String): AgentChatViewModel =
+            sessions.getOrPut(projectPath) { AgentChatViewModel(app, projectPath) }
     }
 }
