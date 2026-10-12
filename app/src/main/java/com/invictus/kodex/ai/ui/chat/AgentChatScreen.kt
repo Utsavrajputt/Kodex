@@ -85,6 +85,7 @@ private val MENTION_TAIL = Regex("(^|\\s)@(\\S*)$")
 /** Full-screen workspace agent: top bar + the shared chat content. */
 @Composable
 fun AgentChatScreen(vm: AgentChatViewModel, projectName: String, onBack: () -> Unit, onOpenSettings: (() -> Unit)? = null) {
+    var showHistory by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -95,10 +96,21 @@ fun AgentChatScreen(vm: AgentChatViewModel, projectName: String, onBack: () -> U
                     }
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(XIcons.ArrowBack, contentDescription = "Back") } },
+                actions = {
+                    IconButton(onClick = { vm.refreshChats(); showHistory = true }) {
+                        Icon(XIcons.Restore, contentDescription = "Chat history")
+                    }
+                    IconButton(onClick = { vm.newChat() }) { Icon(XIcons.Add, contentDescription = "New chat") }
+                },
             )
         },
     ) { padding ->
-        AgentChatContent(vm, Modifier.padding(padding).fillMaxSize().imePadding(), onOpenSettings = onOpenSettings)
+        AgentChatContent(
+            vm, Modifier.padding(padding).fillMaxSize().imePadding(),
+            onOpenSettings = onOpenSettings,
+            historyOpen = showHistory, onHistoryOpenChange = { showHistory = it },
+            headerActions = false,
+        )
     }
 }
 
@@ -109,6 +121,11 @@ fun AgentChatContent(
     modifier: Modifier = Modifier,
     applyPathHint: String? = null,
     onOpenSettings: (() -> Unit)? = null,
+    /** Hoisted history-sheet state (the full screen opens it from its top bar); null = the chat owns it. */
+    historyOpen: Boolean? = null,
+    onHistoryOpenChange: ((Boolean) -> Unit)? = null,
+    /** History / New chat buttons in the chat's own header row (off when the host puts them in its top bar). */
+    headerActions: Boolean = true,
     title: @Composable () -> Unit = {},
     trailing: @Composable RowScope.() -> Unit = {},
     aboveInput: @Composable () -> Unit = {},
@@ -129,10 +146,20 @@ fun AgentChatContent(
 
     var input by remember { mutableStateOf("") }
     val attached = remember { mutableStateListOf<String>() }
-    var showHistory by remember { mutableStateOf(false) }
+    var ownHistory by remember { mutableStateOf(false) }
+    val showHistory = historyOpen ?: ownHistory
+    val setHistory: (Boolean) -> Unit = { open ->
+        if (onHistoryOpenChange != null) onHistoryOpenChange(open) else ownHistory = open
+    }
+    val newChatEpoch by vm.newChatEpoch.collectAsState()
     var showPicker by remember { mutableStateOf(false) }
     var showModels by remember { mutableStateOf(false) }
     var applyDialog by remember { mutableStateOf<String?>(null) }
+
+    // A new chat (from anywhere, e.g. the host's top bar) starts with an empty draft.
+    LaunchedEffect(newChatEpoch) {
+        if (newChatEpoch > 0) { input = ""; attached.clear() }
+    }
 
     // Provider, model, key and consent are edited in Settings; pick the change up when we come back.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshStatus() }
@@ -169,14 +196,13 @@ fun AgentChatContent(
     Column(modifier) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { title() }
-            if (status.loaded) {
-                ModelChip(status.modelLabel, onClick = { vm.refreshStatus(); showModels = true })
-            }
             if (changes.isNotEmpty()) {
                 TextButton(onClick = { vm.openReview() }) { Text("Review ${changes.size}") }
             }
-            IconButton(onClick = { vm.refreshChats(); showHistory = true }) { Icon(XIcons.Restore, contentDescription = "Chat history") }
-            IconButton(onClick = { vm.newChat(); input = ""; attached.clear() }) { Icon(XIcons.Add, contentDescription = "New chat") }
+            if (headerActions) {
+                IconButton(onClick = { vm.refreshChats(); setHistory(true) }) { Icon(XIcons.Restore, contentDescription = "Chat history") }
+                IconButton(onClick = { vm.newChat() }) { Icon(XIcons.Add, contentDescription = "New chat") }
+            }
             trailing()
         }
         ContextMeter(contextUsed, status.contextTokens)
@@ -309,10 +335,8 @@ fun AgentChatContent(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
         ) {
-            Row(Modifier.padding(start = 2.dp, end = 4.dp), verticalAlignment = Alignment.Bottom) {
-                IconButton(onClick = { vm.refreshIndex(); showPicker = true }, modifier = Modifier.padding(bottom = 2.dp)) {
-                    Icon(XIcons.Add, contentDescription = "Attach files")
-                }
+            // Like Claude: the text on top, then one row with attach on the left and model + send on the right.
+            Column {
                 TextField(
                     value = input,
                     onValueChange = { input = it },
@@ -326,9 +350,17 @@ fun AgentChatContent(
                         unfocusedIndicatorColor = Color.Transparent,
                         disabledIndicatorColor = Color.Transparent,
                     ),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                Box(Modifier.padding(start = 2.dp, bottom = 6.dp, end = 2.dp)) {
+                Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { vm.refreshIndex(); showPicker = true }) {
+                        Icon(XIcons.Add, contentDescription = "Attach files")
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (status.loaded) {
+                        ModelChip(status.modelLabel, onClick = { vm.refreshStatus(); showModels = true })
+                        Spacer(Modifier.width(6.dp))
+                    }
                     if (busy) {
                         FilledIconButton(onClick = { vm.stop() }) { Icon(XIcons.StopCircle, contentDescription = "Stop") }
                     } else {
@@ -358,10 +390,10 @@ fun AgentChatContent(
     if (showHistory) {
         ChatHistorySheet(
             chats = chats,
-            onOpen = { vm.openChat(it); showHistory = false },
+            onOpen = { vm.openChat(it); setHistory(false) },
             onDelete = { vm.deleteChat(it) },
-            onNew = { vm.newChat(); input = ""; attached.clear(); showHistory = false },
-            onDismiss = { showHistory = false },
+            onNew = { vm.newChat(); setHistory(false) },
+            onDismiss = { setHistory(false) },
         )
     }
     if (showModels) {

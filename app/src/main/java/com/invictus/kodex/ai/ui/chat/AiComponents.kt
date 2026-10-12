@@ -220,26 +220,25 @@ fun SimpleErrorCard(message: String, onDismiss: () -> Unit, modifier: Modifier =
     }
 }
 
-/** Header pill: current model, tap to switch. */
+/** Model selector in the input field: plain label + chevron (like Claude), tap to switch. */
 @Composable
 fun ModelChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
+        color = Color.Transparent,
         modifier = modifier,
     ) {
-        Row(Modifier.padding(start = 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(XIcons.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(14.dp))
+        Row(Modifier.padding(start = 10.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 label.ifBlank { "Choose model" },
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 5.dp).widthIn(max = 120.dp),
+                modifier = Modifier.widthIn(max = 160.dp),
             )
-            Icon(XIcons.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(16.dp))
+            Icon(XIcons.KeyboardArrowDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
         }
     }
 }

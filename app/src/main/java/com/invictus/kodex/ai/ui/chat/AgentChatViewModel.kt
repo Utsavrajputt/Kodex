@@ -100,6 +100,10 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     private val history = mutableListOf<AgentMessage>()
     private var nextId = 1L
     private var chatId = UUID.randomUUID().toString()
+        set(value) {
+            field = value
+            SessionChats.current[projectPath] = value
+        }
     private var job: Job? = null
     private var needSeparator = false
     private var runner: AgentRunner? = null
@@ -133,14 +137,19 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     val lastApplied: StateFlow<UndoInfo?> = _lastApplied.asStateFlow()
     private val _chats = MutableStateFlow<List<ChatMeta>>(emptyList())
     val chats: StateFlow<List<ChatMeta>> = _chats.asStateFlow()
+    private val _newChatEpoch = MutableStateFlow(0)
+    /** Bumped whenever the chat is reset to a blank one, so the UI can clear its draft input and attachments. */
+    val newChatEpoch: StateFlow<Int> = _newChatEpoch.asStateFlow()
     private val _fileIndex = MutableStateFlow<List<String>>(emptyList())
     /** Project-relative text files, for @mentions and the attach picker. */
     val fileIndex: StateFlow<List<String>> = _fileIndex.asStateFlow()
 
     init {
         viewModelScope.launch {
-            val chat = withContext(Dispatchers.IO) { store.list().firstOrNull()?.let { store.load(it.id) } }
-            if (chat != null && _messages.value.isEmpty()) restore(chat)
+            // A fresh process starts with a blank chat (older ones are in History). Within one process the
+            // chat of this project survives leaving and re-entering the screen.
+            val chat = withContext(Dispatchers.IO) { SessionChats.current[projectPath]?.let { store.load(it) } }
+            if (chat != null && _messages.value.isEmpty()) restore(chat) else chatId = chatId // remember the open chat
             refreshChats()
             refreshIndex()
         }
@@ -424,6 +433,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         _error.value = null
         _failure.value = null
         _contextUsed.value = 0
+        _newChatEpoch.value++
     }
 
     fun openChat(id: String) {
@@ -446,6 +456,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                 chatId = UUID.randomUUID().toString()
                 history.clear()
                 _messages.value = emptyList()
+                _newChatEpoch.value++
             }
             refreshChats()
         }
@@ -565,6 +576,11 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             if (skipped.isNotEmpty()) _error.value = "Not undone (changed since): ${skipped.joinToString()}"
             refreshIndex()
         }
+    }
+
+    /** The chat each project has open in this process (not persisted: a new process starts blank). */
+    private object SessionChats {
+        val current = java.util.concurrent.ConcurrentHashMap<String, String>()
     }
 
     companion object {

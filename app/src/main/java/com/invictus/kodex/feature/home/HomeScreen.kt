@@ -60,16 +60,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -200,17 +204,7 @@ fun HomeScreen(
                         InlineSearchField(query = query, onQueryChange = { query = it })
                     } else {
                         Column {
-                            val brand = MaterialTheme.colorScheme
-                            Text(
-                                text = stringResource(R.string.app_name),
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontFamily = BrandFontFamily,
-                                    fontSize = 34.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    letterSpacing = (-0.8).sp,
-                                    brush = Brush.linearGradient(listOf(brand.onSurface, brand.primary)),
-                                ),
-                            )
+                            Wordmark(stringResource(R.string.app_name))
                             Text(
                                 text = stringResource(R.string.home_tagline),
                                 style = MaterialTheme.typography.labelSmall.copy(
@@ -361,6 +355,34 @@ fun HomeScreen(
 }
 
 /** Round tonal 44dp button used for the header's search / settings actions. */
+/**
+ * The "Kodex" wordmark. The gradient is painted over the glyphs (SrcIn) instead of being a text-style
+ * brush, and size / line height are fixed, so the title can't come back smaller after navigating back.
+ */
+@Composable
+private fun Wordmark(text: String) {
+    val cs = MaterialTheme.colorScheme
+    val brush = remember(cs.onSurface, cs.primary) { Brush.linearGradient(listOf(cs.onSurface, cs.primary)) }
+    Text(
+        text = text,
+        maxLines = 1,
+        softWrap = false,
+        style = MaterialTheme.typography.titleLarge.copy(
+            fontFamily = BrandFontFamily,
+            fontSize = 34.sp,
+            lineHeight = 40.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.8).sp,
+        ),
+        modifier = Modifier
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                drawRect(brush, blendMode = BlendMode.SrcIn)
+            },
+    )
+}
+
 @Composable
 private fun HeaderIconButton(onClick: () -> Unit, content: @Composable () -> Unit) {
     FilledTonalIconButton(
