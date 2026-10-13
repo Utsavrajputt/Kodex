@@ -48,8 +48,12 @@ if [[ -z "${KEY_ALIAS:-}" || -z "${KEYSTORE_PASSWORD:-}" || -z "${KEY_PASSWORD:-
   exit 1
 fi
 
-build_tools_dir=$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -n1)
-apksigner="$ANDROID_HOME/build-tools/$build_tools_dir/apksigner"
+# Same signer as the Xmd project: apksigner from build-tools 34.0.0 (newest installed one only as a fallback).
+apksigner="$ANDROID_HOME/build-tools/34.0.0/apksigner"
+if [[ ! -x "$apksigner" ]]; then
+  build_tools_dir=$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -n1)
+  apksigner="$ANDROID_HOME/build-tools/$build_tools_dir/apksigner"
+fi
 test -x "$apksigner"
 
 echo "$KEYSTORE_BASE64" | base64 -d > release.jks
@@ -62,7 +66,6 @@ for apk in "${unsigned[@]}"; do
     --ks-key-alias "$KEY_ALIAS" \
     --ks-pass "pass:$KEYSTORE_PASSWORD" \
     --key-pass "pass:$KEY_PASSWORD" \
-    --v4-signing-enabled false \
     --out "$signed" \
     "$apk"
   "$apksigner" verify --verbose --print-certs "$signed"
