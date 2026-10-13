@@ -93,12 +93,12 @@ fun MemorySheet(docs: MemoryDocs, onDismiss: () -> Unit) {
                 )
             }
 
-            val docs = listOf(
+            val tabs = listOf(
                 ProjectMemory.Doc.MEMORY to R.string.ai_memory_tab_memory,
                 ProjectMemory.Doc.INSTRUCTIONS to R.string.ai_memory_tab_instructions,
             )
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                docs.forEachIndexed { index, (d, label) ->
+                tabs.forEachIndexed { index, (d, label) ->
                     SegmentedButton(
                         selected = doc == d,
                         onClick = {
@@ -107,7 +107,7 @@ fun MemorySheet(docs: MemoryDocs, onDismiss: () -> Unit) {
                                 doc = d
                             }
                         },
-                        shape = SegmentedButtonDefaults.itemShape(index, docs.size),
+                        shape = SegmentedButtonDefaults.itemShape(index, tabs.size),
                     ) { Text(stringResource(label)) }
                 }
             }
