@@ -1074,6 +1074,8 @@
     <string name="gh_transfer_pause">Pause</string>
     <string name="gh_transfer_resume">Resume</string>
     <string name="gh_transfer_eta">ETA %1$s</string>
+    <string name="gh_transfer_speed">%1$s/s</string>
+    <string name="gh_installing">Installing…</string>
     <string name="gh_transfer_preparing_save">Preparing file…</string>
     <string name="gh_download_too_large">The download is larger than the allowed size and was stopped.</string>
     <string name="gh_download_incomplete">The download was cut short. Try again.</string>
@@ -1161,7 +1163,7 @@
     <string name="gh_notif_download_progress">%1$d%%</string>
     <string name="gh_notif_download_preparing">Unpacking…</string>
     <string name="gh_notif_download_done_title">Download complete</string>
-    <string name="gh_notif_download_done_text">%1$s is ready. Open Kodex to install it.</string>
+    <string name="gh_notif_download_done_text">%1$s downloaded. Tap to install.</string>
     <string name="gh_notif_download_failed_title">Download failed</string>
 
     <string name="gh_notif_install_ok_title">App installed</string>

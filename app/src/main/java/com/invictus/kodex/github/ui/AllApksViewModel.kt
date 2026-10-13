@@ -97,6 +97,7 @@ data class RowTransfer(
     val downloaded: Long = 0L,
     val total: Long = 0L,
     val etaSeconds: Long? = null,
+    val speedBps: Long? = null,
     val paused: Boolean = false,
 )
 
@@ -105,6 +106,8 @@ data class AllApksState(
     val error: Int? = null,
     val builds: List<RepoBuild> = emptyList(),
     val transfer: RowTransfer? = null,
+    /** Artifact whose install was handed to the system installer and has not reported back yet. */
+    val installingId: Long? = null,
     /** Artifact ids whose APK is already on the device (row shows Install + Delete instead of Download). */
     val downloaded: Set<Long> = emptySet(),
     /** Install / Update / Open for each downloaded artifact id. */
@@ -147,7 +150,7 @@ class AllApksViewModel(
         ArmBuildWatch.schedule(appContext)
         refreshDownloaded()
         // An install finished (Install -> Open) while this screen is open.
-        viewModelScope.launch { InstallEvents.results.collect { refreshDownloaded() } }
+        viewModelScope.launch { InstallEvents.results.collect { _state.update { st -> st.copy(installingId = null) }; refreshDownloaded() } }
         load()
     }
 
@@ -262,6 +265,14 @@ class AllApksViewModel(
         }
     }
 
+    /** Safety net: if the system installer never reports back (e.g. its prompt was ignored), the button comes back. */
+    private fun armInstallingTimeout(id: Long) {
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(120_000)
+            _state.update { if (it.installingId == id) it.copy(installingId = null) else it }
+        }
+    }
+
     private fun start(row: ApkRow, installAfter: Boolean) {
         val current = _state.value.transfer
         // A paused download does not block: it is resumed (same row) or simply left with its partial file.
@@ -292,7 +303,7 @@ class AllApksViewModel(
                             val eta = meter.etaSeconds(bytes, size)
                             _state.update { st ->
                                 st.transfer?.takeIf { t -> !t.paused }
-                                    ?.let { t -> st.copy(transfer = t.copy(downloaded = bytes, total = size, etaSeconds = eta)) }
+                                    ?.let { t -> st.copy(transfer = t.copy(downloaded = bytes, total = size, etaSeconds = eta, speedBps = meter.speedBytesPerSec)) }
                                     ?: st
                             }
                             notifier.updateLive(title, p?.let { v -> appContext.getString(R.string.gh_notif_download_progress, (v * 100).toInt()) }.orEmpty(), p?.let { v -> (v * 100).toInt() })
@@ -308,10 +319,8 @@ class AllApksViewModel(
                         apk.delete()
                         _events.tryEmit(AllApksEvent.Snack(R.string.gh_apk_invalid))
                     }
-                    !installAfter -> notifier.result(
-                        GhNotifier.KIND_DOWNLOAD, appContext.getString(R.string.gh_notif_download_done_title),
-                        appContext.getString(R.string.gh_notif_download_done_text, row.artifact.name),
-                    )
+                    // Download only: tapping the notification opens the system installer for this APK.
+                    !installAfter -> notifier.downloadComplete(apk, row.artifact.name)
                     InstallDecision.isBlocked(inspected.kind) -> _events.tryEmit(AllApksEvent.Snack(R.string.apks_downgrade_blocked))
                     !installer.canRequestInstalls() -> _events.tryEmit(AllApksEvent.OpenSettings(installer.unknownSourcesIntent()))
                     else -> {
@@ -322,7 +331,15 @@ class AllApksViewModel(
                         // The package installer may replace this very app (killing the process): leave no stale bar behind.
                         notifier.clearLive()
                         installedBuilds.begin(inspected.info.packageName, row.artifact.sha?.takeIf { it.isNotBlank() } ?: BuildSha.fromArtifactName(row.artifact.name))
-                        installer.install(apk)
+                        notifier.clearDownloadComplete()
+                        _state.update { it.copy(installingId = row.artifact.id) }
+                        try {
+                            installer.install(apk)
+                        } catch (e: Exception) {
+                            _state.update { it.copy(installingId = null) }
+                            throw e
+                        }
+                        armInstallingTimeout(row.artifact.id)
                     }
                 }
             } catch (e: CancellationException) {
@@ -330,7 +347,7 @@ class AllApksViewModel(
                     // Paused: the .part file stays so Resume continues from there.
                     paused = true
                     pausedRow = PausedRow(row, installAfter)
-                    _state.update { st -> st.transfer?.let { t -> st.copy(transfer = t.copy(paused = true, etaSeconds = null)) } ?: st }
+                    _state.update { st -> st.transfer?.let { t -> st.copy(transfer = t.copy(paused = true, etaSeconds = null, speedBps = null)) } ?: st }
                 } else {
                     withContext(NonCancellable + Dispatchers.IO) { downloader.discardPartial(row.artifact.id) }
                 }

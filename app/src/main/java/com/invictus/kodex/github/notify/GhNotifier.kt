@@ -12,6 +12,8 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import java.io.File
 import com.invictus.kodex.MainActivity
 import com.invictus.kodex.R
 
@@ -183,6 +185,41 @@ class GhNotifier(context: Context) {
 
     fun clearInstallReady() {
         try { nm.cancel(RESULT_BASE + KIND_INSTALL_READY) } catch (_: SecurityException) { }
+        clearDownloadComplete()
+    }
+
+    /**
+     * "Download complete" for an APK that is now on the device (audible channel). Tapping it opens the system
+     * installer for that file directly (ACTION_VIEW + FileProvider); the system still asks for its own confirmation.
+     */
+    fun downloadComplete(apk: File, name: String) {
+        val uri = try {
+            FileProvider.getUriForFile(ctx, "${ctx.packageName}.ghfiles", apk)
+        } catch (_: IllegalArgumentException) {
+            return
+        }
+        val view = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        val pi = PendingIntent.getActivity(
+            ctx, RESULT_BASE + KIND_DOWNLOAD, view,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val text = ctx.getString(R.string.gh_notif_download_done_text, name)
+        val n = NotificationCompat.Builder(ctx, CHANNEL_BUILDS)
+            .setSmallIcon(R.drawable.ic_stat_check)
+            .setColor(accent)
+            .setContentTitle(ctx.getString(R.string.gh_notif_download_done_title))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        post(RESULT_BASE + KIND_DOWNLOAD, n)
+    }
+
+    fun clearDownloadComplete() {
+        try { nm.cancel(RESULT_BASE + KIND_DOWNLOAD) } catch (_: SecurityException) { }
     }
 
     private fun post(id: Int, n: Notification) {

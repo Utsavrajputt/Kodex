@@ -5,10 +5,17 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +34,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -42,9 +51,26 @@ import com.invictus.kodex.ui.icons.XIcons
 class DownloadMeter {
     private var startBytes = -1L
     private var startMs = 0L
+    private var lastBytes = 0L
+    private var lastMs = 0L
+    private var smoothed = 0.0
+
+    /** Smoothed current speed in bytes/s (null until two samples are in). Updated by [etaSeconds]. */
+    var speedBytesPerSec: Long? = null
+        private set
 
     fun etaSeconds(bytes: Long, total: Long, nowMs: Long = System.currentTimeMillis()): Long? {
-        if (startBytes < 0) { startBytes = bytes; startMs = nowMs; return null }
+        if (startBytes < 0) {
+            startBytes = bytes; startMs = nowMs; lastBytes = bytes; lastMs = nowMs
+            return null
+        }
+        val dt = nowMs - lastMs
+        if (dt > 0 && bytes > lastBytes) {
+            val instant = (bytes - lastBytes) * 1000.0 / dt
+            smoothed = if (smoothed <= 0.0) instant else 0.3 * instant + 0.7 * smoothed
+            lastBytes = bytes; lastMs = nowMs
+        }
+        speedBytesPerSec = smoothed.takeIf { it > 0.0 }?.toLong()
         if (total <= 0 || bytes >= total) return null
         val elapsed = nowMs - startMs
         val got = bytes - startBytes
@@ -62,8 +88,8 @@ fun formatEta(seconds: Long): String = when {
 }
 
 /**
- * Progress bar + status line + Pause/Resume and Cancel, used by every APK download.
- * Status: "Downloading • 37% • 2.1 MB / 5.8 MB • ETA 12s" (or "Paused • ...").
+ * Download card body used by every APK download: big percent + state + speed, the wavy bar, then
+ * "2.1 MB / 5.8 MB • ETA 12s" with round Pause/Resume and Cancel buttons.
  */
 @Composable
 fun TransferStatus(
@@ -79,20 +105,61 @@ fun TransferStatus(
     modifier: Modifier = Modifier,
     /** Pause is hidden once the whole file is in (extracting / verifying). */
     canPause: Boolean = true,
+    speedBytesPerSec: Long? = null,
 ) {
     val context = LocalContext.current
     val progress: Float? = if (total > 0) (downloaded.toFloat() / total).coerceIn(0f, 1f) else null
-    val state = stringResource(if (paused) R.string.gh_transfer_paused else R.string.gh_transfer_status_downloading)
-    val etaText = if (!paused && etaSeconds != null) stringResource(R.string.gh_transfer_eta, formatEta(etaSeconds)) else null
-    val parts = ArrayList<String>(4)
-    parts += state
-    if (progress != null) parts += "${(progress * 100).toInt()}%"
-    if (total > 0) parts += "${Formatter.formatShortFileSize(context, downloaded)} / ${Formatter.formatShortFileSize(context, total)}"
-    if (etaText != null) parts += etaText
+    val finishing = !paused && total > 0 && downloaded >= total
+    val state = stringResource(
+        when {
+            paused -> R.string.gh_transfer_paused
+            finishing -> R.string.gh_notif_download_preparing
+            else -> R.string.gh_transfer_status_downloading
+        },
+    )
+    val shown by animateFloatAsState(progress ?: 0f, tween(450, easing = LinearEasing), label = "download_progress")
+    val sizes = when {
+        total > 0 -> "${Formatter.formatShortFileSize(context, downloaded)} / ${Formatter.formatShortFileSize(context, total)}"
+        downloaded > 0 -> Formatter.formatShortFileSize(context, downloaded)
+        else -> ""
+    }
+    val etaText = if (!paused && !finishing && etaSeconds != null) stringResource(R.string.gh_transfer_eta, formatEta(etaSeconds)) else null
+    val speedText = if (!paused && !finishing && speedBytesPerSec != null && speedBytesPerSec > 0) {
+        stringResource(R.string.gh_transfer_speed, Formatter.formatShortFileSize(context, speedBytesPerSec))
+    } else null
 
-    Column(modifier.fillMaxWidth()) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            if (progress != null) {
+                Text(
+                    "${(progress * 100).toInt()}%",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = accent,
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(
+                state,
+                style = MaterialTheme.typography.bodySmall,
+                color = textColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(bottom = 3.dp),
+            )
+            if (speedText != null) {
+                Text(
+                    speedText,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accent,
+                    maxLines = 1,
+                    modifier = Modifier.padding(bottom = 3.dp),
+                )
+            }
+        }
         WaveProgressBar(
-            progress = progress ?: 0f,
+            progress = if (progress != null) shown else 0f,
             animating = !paused,
             indeterminate = progress == null,
             color = accent,
@@ -100,7 +167,7 @@ fun TransferStatus(
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                parts.joinToString(" \u2022 "),
+                listOfNotNull(sizes.ifBlank { null }, etaText).joinToString(" \u2022 "),
                 style = MaterialTheme.typography.bodySmall,
                 color = textColor,
                 maxLines = 1,
@@ -108,24 +175,31 @@ fun TransferStatus(
                 modifier = Modifier.weight(1f),
             )
             if (canPause) {
-                IconButton(onClick = onPauseResume, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        if (paused) XIcons.PlayArrow else XIcons.Pause,
-                        contentDescription = stringResource(if (paused) R.string.gh_transfer_resume else R.string.gh_transfer_pause),
-                        tint = accent,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-            }
-            IconButton(onClick = onCancel, modifier = Modifier.size(36.dp)) {
-                Icon(
-                    XIcons.Close,
-                    contentDescription = stringResource(R.string.action_cancel),
-                    tint = textColor,
-                    modifier = Modifier.size(20.dp),
+                RoundTransferButton(
+                    onClick = onPauseResume,
+                    icon = if (paused) XIcons.PlayArrow else XIcons.Pause,
+                    description = stringResource(if (paused) R.string.gh_transfer_resume else R.string.gh_transfer_pause),
+                    tint = accent,
                 )
+                Spacer(Modifier.width(8.dp))
             }
+            RoundTransferButton(
+                onClick = onCancel,
+                icon = XIcons.Close,
+                description = stringResource(R.string.action_cancel),
+                tint = textColor,
+            )
         }
+    }
+}
+
+@Composable
+private fun RoundTransferButton(onClick: () -> Unit, icon: ImageVector, description: String, tint: Color) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(34.dp).background(tint.copy(alpha = 0.14f), CircleShape),
+    ) {
+        Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(18.dp))
     }
 }
 

@@ -56,6 +56,8 @@ data class Transfer(
     val total: Long = 0L,
     /** Seconds left at the current speed; null = not known yet. */
     val etaSeconds: Long? = null,
+    /** Current download speed in bytes/s; null = not known yet. */
+    val speedBps: Long? = null,
     /** Stopped by the user; the partial file is kept and Resume continues it. */
     val paused: Boolean = false,
 )

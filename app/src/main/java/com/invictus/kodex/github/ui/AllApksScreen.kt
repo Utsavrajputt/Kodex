@@ -118,6 +118,7 @@ fun AllApksScreen(
                     BuildCard(
                         build = build,
                         transfer = state.transfer,
+                        installingId = state.installingId,
                         anyBusy = state.anyBusy,
                         downloaded = state.downloaded,
                         installInfo = state.installInfo,
@@ -139,6 +140,7 @@ fun AllApksScreen(
 private fun BuildCard(
     build: RepoBuild,
     transfer: RowTransfer?,
+    installingId: Long?,
     anyBusy: Boolean,
     downloaded: Set<Long>,
     installInfo: Map<Long, ApkInstallInfo>,
@@ -162,6 +164,7 @@ private fun BuildCard(
                 ApkVariantBlock(
                     row = row,
                     transfer = transfer?.takeIf { it.artifactId == row.artifact.id },
+                    installing = installingId == row.artifact.id,
                     downloaded = row.artifact.id in downloaded,
                     action = installInfo[row.artifact.id]?.action ?: ApkAction.Install,
                     anyBusy = anyBusy,
@@ -181,6 +184,7 @@ private fun BuildCard(
 private fun ApkVariantBlock(
     row: ApkRow,
     transfer: RowTransfer?,
+    installing: Boolean,
     downloaded: Boolean,
     action: ApkAction,
     anyBusy: Boolean,
@@ -225,7 +229,7 @@ private fun ApkVariantBlock(
         }
         if (transfer != null) {
             TransferStatus(
-                downloaded = transfer.downloaded, total = transfer.total, etaSeconds = transfer.etaSeconds, paused = transfer.paused,
+                downloaded = transfer.downloaded, total = transfer.total, etaSeconds = transfer.etaSeconds, speedBytesPerSec = transfer.speedBps, paused = transfer.paused,
                 onPauseResume = onPauseResume, onCancel = onCancel,
                 accent = cs.primary, track = cs.onPrimaryContainer.copy(alpha = 0.15f), textColor = cs.onPrimaryContainer.copy(alpha = 0.75f),
                 canPause = transfer.total <= 0 || transfer.downloaded < transfer.total,
@@ -235,12 +239,18 @@ private fun ApkVariantBlock(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(
                     onClick = if (action == ApkAction.Open) onOpen else onInstall,
-                    enabled = !anyBusy, modifier = Modifier.weight(1f).height(44.dp),
+                    enabled = !anyBusy && !installing, modifier = Modifier.weight(1f).height(44.dp),
                 ) {
-                    Text(stringResource(apkActionLabel(action)), style = MaterialTheme.typography.labelLarge)
+                    if (installing) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = cs.onPrimary)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.gh_installing), style = MaterialTheme.typography.labelLarge)
+                    } else {
+                        Text(stringResource(apkActionLabel(action)), style = MaterialTheme.typography.labelLarge)
+                    }
                 }
                 FilledTonalIconButton(
-                    onClick = onDelete, enabled = !anyBusy, modifier = Modifier.size(44.dp),
+                    onClick = onDelete, enabled = !anyBusy && !installing, modifier = Modifier.size(44.dp),
                     colors = IconButtonDefaults.filledTonalIconButtonColors(
                         containerColor = cs.errorContainer, contentColor = cs.onErrorContainer,
                     ),

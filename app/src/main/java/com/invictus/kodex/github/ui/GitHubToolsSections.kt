@@ -334,7 +334,7 @@ private fun ApkVariant(
         ApkHeader(projectPath, ownerLogin, apkBuildName(a.name, a.shortSha), facts)
         when {
             transfer != null -> TransferStatus(
-                downloaded = transfer.downloaded, total = transfer.total, etaSeconds = transfer.etaSeconds, paused = transfer.paused,
+                downloaded = transfer.downloaded, total = transfer.total, etaSeconds = transfer.etaSeconds, speedBytesPerSec = transfer.speedBps, paused = transfer.paused,
                 onPauseResume = if (transfer.paused) tools::resumeTransfer else tools::pauseTransfer,
                 onCancel = tools::cancelTransfer,
                 accent = p.accent, track = p.onCard.copy(alpha = 0.12f), textColor = p.onCardMuted,
@@ -371,6 +371,11 @@ private fun ApkActions(d: DownloadedApk, info: ApkInstallInfo?, installing: Bool
         ) {
             if (installing) {
                 CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = p.onInstall)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    stringResource(R.string.gh_installing),
+                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = p.onInstall,
+                )
             } else {
                 Icon(apkActionIcon(action), contentDescription = null, modifier = Modifier.size(22.dp), tint = p.onInstall)
                 Spacer(Modifier.width(10.dp))
@@ -440,8 +445,11 @@ fun ReadyApkBody(
                 modifier = Modifier.weight(1f).height(44.dp),
                 contentPadding = PaddingValues(horizontal = 12.dp),
             ) {
-                if (installing) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                else Text(stringResource(R.string.gh_install), maxLines = 1, softWrap = false)
+                if (installing) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.gh_installing), maxLines = 1, softWrap = false)
+                } else Text(stringResource(R.string.gh_install), maxLines = 1, softWrap = false)
             }
             OutlinedButton(
                 onClick = onSave,
@@ -569,7 +577,7 @@ private fun ArtifactRow(a: GhArtifact, state: GitHubToolsState, tools: GitHubToo
         }
         if (transfer != null) {
             TransferStatus(
-                downloaded = transfer.downloaded, total = transfer.total, etaSeconds = transfer.etaSeconds, paused = transfer.paused,
+                downloaded = transfer.downloaded, total = transfer.total, etaSeconds = transfer.etaSeconds, speedBytesPerSec = transfer.speedBps, paused = transfer.paused,
                 onPauseResume = if (transfer.paused) tools::resumeTransfer else tools::pauseTransfer,
                 onCancel = tools::cancelTransfer,
                 accent = p.accent, track = p.onCard.copy(alpha = 0.12f), textColor = p.onCardMuted,

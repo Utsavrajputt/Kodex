@@ -574,7 +574,7 @@ class GitHubToolsController(
                         val eta = meter.etaSeconds(bytes, artifact.sizeBytes)
                         _state.update { st ->
                             st.transfer?.takeIf { t -> !t.paused }
-                                ?.let { t -> st.copy(transfer = t.copy(progress = p, downloaded = bytes, total = artifact.sizeBytes, etaSeconds = eta)) }
+                                ?.let { t -> st.copy(transfer = t.copy(progress = p, downloaded = bytes, total = artifact.sizeBytes, etaSeconds = eta, speedBps = meter.speedBytesPerSec)) }
                                 ?: st
                         }
                         notifier.updateLive(title, p?.let { str(R.string.gh_notif_download_progress, (it * 100).toInt()) } ?: "", p?.let { (it * 100).toInt() })
@@ -587,14 +587,15 @@ class GitHubToolsController(
                     TransferPurpose.Save -> prepareSave(file, artifact)
                 }
                 if (purpose == TransferPurpose.Install) {
-                    notifier.result(GhNotifier.KIND_DOWNLOAD, str(R.string.gh_notif_download_done_title), str(R.string.gh_notif_download_done_text, artifact.name))
+                    // Tapping the notification opens the system installer for the downloaded APK.
+                    _state.value.ready?.file?.let { notifier.downloadComplete(it, artifact.name) }
                 }
             } catch (e: CancellationException) {
                 if (pauseRequested && zip == null) {
                     // Paused: the .part file stays so Resume continues from there.
                     paused = true
                     pausedTransfer = PausedTransfer(artifact, purpose, fromApkCard)
-                    _state.update { st -> st.transfer?.let { t -> st.copy(transfer = t.copy(paused = true, etaSeconds = null)) } ?: st }
+                    _state.update { st -> st.transfer?.let { t -> st.copy(transfer = t.copy(paused = true, etaSeconds = null, speedBps = null)) } ?: st }
                 } else {
                     zip?.delete()
                     withContext(NonCancellable + Dispatchers.IO) { downloader.discardPartial(artifact.id) }
@@ -737,6 +738,7 @@ class GitHubToolsController(
             try {
                 // The package installer may replace this very app (killing the process): leave no stale bar behind.
                 notifier.clearLive()
+                notifier.clearDownloadComplete()
                 installer.install(r.file)
             } catch (e: CancellationException) {
                 throw e
