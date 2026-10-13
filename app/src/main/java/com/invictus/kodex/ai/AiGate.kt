@@ -5,7 +5,7 @@ import com.invictus.kodex.feature.editor.EditorHandle
 import com.invictus.kodex.feature.editor.EditorViewModel
 
 /**
- * AI seam: null whenever the user turned AI off (Settings > Behavior > Enable AI), so no AI
+ * AI seam: null whenever the user turned AI off (Settings > AI Assistant > Enable AI), so no AI
  * settings row, workspace/editor button, panel or git/diagnostics helper is shown or reachable.
  * Reads Compose state ([AiSwitch]), so callers inside composition update live.
  */

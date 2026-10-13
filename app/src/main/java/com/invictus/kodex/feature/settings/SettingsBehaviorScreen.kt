@@ -39,7 +39,7 @@ import com.invictus.kodex.R
 import com.invictus.kodex.feature.editor.EditorViewModel
 import com.invictus.kodex.ui.icons.XIcons
 
-/** Behavior settings: what to do when a file changes on disk outside the app. */
+/** Workspace settings: files and tabs, project search. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsBehaviorScreen(
@@ -48,7 +48,6 @@ fun SettingsBehaviorScreen(
     modifier: Modifier = Modifier,
 ) {
     val autoReloadExternal by viewModel.autoReloadExternalChanges.collectAsStateWithLifecycle()
-    val gitStatusPollingEnabled by viewModel.gitStatusPollingEnabled.collectAsStateWithLifecycle()
     val restoreTabsOnOpen by viewModel.restoreTabsOnOpen.collectAsStateWithLifecycle()
     val searchDefaultStringsOnly by viewModel.searchDefaultStringsOnly.collectAsStateWithLifecycle()
     val fileTreeHScroll by viewModel.fileTreeHScrollLongNames.collectAsStateWithLifecycle()
@@ -78,6 +77,7 @@ fun SettingsBehaviorScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         ) {
+            SettingsSectionHeader(stringResource(R.string.settings_group_files))
             SettingsSectionCard {
                 RadioSettingRow(
                     title = stringResource(R.string.settings_external_changes_ask),
@@ -92,22 +92,14 @@ fun SettingsBehaviorScreen(
                     selected = autoReloadExternal,
                     onClick = { viewModel.setAutoReloadExternalChanges(true) },
                 )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            SettingsSectionCard {
+                SettingsDivider()
                 SwitchSettingRow(
                     title = stringResource(R.string.settings_restore_tabs),
                     subtitle = stringResource(R.string.settings_restore_tabs_desc),
                     checked = restoreTabsOnOpen,
                     onCheckedChange = viewModel::setRestoreTabsOnOpen,
                 )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            SettingsSectionCard {
+                SettingsDivider()
                 SwitchSettingRow(
                     title = stringResource(R.string.settings_tree_hscroll),
                     subtitle = stringResource(R.string.settings_tree_hscroll_desc),
@@ -116,30 +108,7 @@ fun SettingsBehaviorScreen(
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
-
-            SettingsSectionCard {
-                SwitchSettingRow(
-                    title = stringResource(R.string.settings_git_status_polling),
-                    subtitle = stringResource(R.string.settings_git_status_polling_desc),
-                    checked = gitStatusPollingEnabled,
-                    onCheckedChange = viewModel::setGitStatusPollingEnabled,
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            SettingsSectionCard {
-                SwitchSettingRow(
-                    title = stringResource(R.string.settings_ai_enable),
-                    subtitle = stringResource(R.string.settings_ai_enable_desc),
-                    checked = com.invictus.kodex.ai.AiSwitch.enabled,
-                    onCheckedChange = { com.invictus.kodex.ai.AiSwitch.set(appContext, it) },
-                )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
+            SettingsSectionHeader(stringResource(R.string.settings_group_search))
             SettingsSectionCard {
                 SwitchSettingRow(
                     title = stringResource(R.string.settings_search_default_strings),
@@ -147,6 +116,7 @@ fun SettingsBehaviorScreen(
                     checked = searchDefaultStringsOnly,
                     onCheckedChange = viewModel::setSearchDefaultStringsOnly,
                 )
+                SettingsDivider()
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text(
                         stringResource(R.string.settings_search_excludes),
@@ -169,6 +139,7 @@ fun SettingsBehaviorScreen(
                         singleLine = true,
                     )
                 }
+                SettingsDivider()
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Text(
                         stringResource(R.string.settings_search_max_size),
@@ -193,6 +164,7 @@ fun SettingsBehaviorScreen(
                         }
                     }
                 }
+                SettingsDivider()
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),

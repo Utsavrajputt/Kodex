@@ -208,7 +208,7 @@ class GitViewModel(
             viewModelScope.launch {
                 statusPatches.collect { (path, patch) -> if (path == projectPath) applyStatusPatch(patch) }
             }
-            // Follows Settings > Behavior > "Git status detection": OFF = no .git watcher at all.
+            // Follows Settings > Advanced > "Git status detection": OFF = no .git watcher at all.
             viewModelScope.launch {
                 settingsStore.gitStatusPollingEnabled.collect { enabled ->
                     if (enabled) repoWatcher.start(File(projectPath, ".git")) else repoWatcher.stop()

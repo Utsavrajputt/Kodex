@@ -44,7 +44,7 @@ import com.invictus.kodex.ui.icons.XIcons
 import com.invictus.kodex.ui.theme.ThemePickerState
 import com.invictus.kodex.ui.theme.ThemeSettings
 
-/** Appearance settings: app theme, editor theme, font size, symbol bar. */
+/** Appearance settings: app theme, editor theme, font size. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsAppearanceScreen(
@@ -54,12 +54,8 @@ fun SettingsAppearanceScreen(
 ) {
     val themeId by viewModel.themeId.collectAsStateWithLifecycle()
     val fontSizePx by viewModel.fontSizePx.collectAsStateWithLifecycle()
-    val symbolBar by viewModel.symbolBar.collectAsStateWithLifecycle()
-    val symbolBarVisible by viewModel.symbolBarVisible.collectAsStateWithLifecycle()
-    val autoPreviewEnabled by viewModel.autoPreviewEnabled.collectAsStateWithLifecycle()
 
     var showThemePicker by remember { mutableStateOf(false) }
-    var showSymbolCustomize by remember { mutableStateOf(false) }
 
     val density = LocalDensity.current
     val builtInDefaultPx = with(density) { DEFAULT_TEXT_SIZE_SP.sp.toPx() }
@@ -70,7 +66,6 @@ fun SettingsAppearanceScreen(
     } else {
         EditorThemes.familyOf(themeId)?.name ?: stringResource(R.string.editor_theme_system_default)
     }
-    val symbolBarPreview = symbolBar.joinToString(" ")
 
     Scaffold(
         modifier = modifier,
@@ -112,27 +107,6 @@ fun SettingsAppearanceScreen(
                     rawValuePx = effectiveFontSizePx,
                     onValueChange = { viewModel.setFontSizePx(it) },
                 )
-                SettingsDivider()
-                SwitchSettingRow(
-                    title = stringResource(R.string.settings_symbol_bar_visible),
-                    subtitle = stringResource(R.string.settings_symbol_bar_visible_desc),
-                    checked = symbolBarVisible,
-                    onCheckedChange = { viewModel.setSymbolBarVisible(it) },
-                )
-                SettingsDivider()
-                SwitchSettingRow(
-                    title = stringResource(R.string.settings_auto_preview),
-                    subtitle = stringResource(R.string.settings_auto_preview_desc),
-                    checked = autoPreviewEnabled,
-                    onCheckedChange = { viewModel.setAutoPreviewEnabled(it) },
-                )
-                SettingsDivider()
-                ClickableSettingRow(
-                    title = stringResource(R.string.settings_symbol_bar),
-                    subtitle = symbolBarPreview,
-                    chevron = XIcons.ChevronRight,
-                    onClick = { showSymbolCustomize = true },
-                )
             }
         }
     }
@@ -142,14 +116,6 @@ fun SettingsAppearanceScreen(
             selected = themeId,
             onSelect = { viewModel.setTheme(it) },
             onDismiss = { showThemePicker = false },
-        )
-    }
-    if (showSymbolCustomize) {
-        SymbolBarCustomizeDialog(
-            current = symbolBar,
-            onSave = { viewModel.setSymbolBar(it); showSymbolCustomize = false },
-            onResetDefault = { viewModel.setSymbolBar(EditorSettingsStore.DEFAULT_SYMBOLS); showSymbolCustomize = false },
-            onDismiss = { showSymbolCustomize = false },
         )
     }
 }

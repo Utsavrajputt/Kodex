@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import com.invictus.kodex.R
 import com.invictus.kodex.ui.icons.XIcons
 
-/** Root of the Settings screen: category cards, styled after xmd's SettingsRootScreen. */
+/** Root of the Settings screen. Order: Appearance, Editor, Workspace, GitHub, AI Assistant, Advanced, About. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsRootScreen(
@@ -31,6 +31,8 @@ fun SettingsRootScreen(
     onOpenAbout: () -> Unit,
     /** M17: null in the normal flavor hides the row. */
     onOpenAi: (() -> Unit)? = null,
+    /** Whether AI is switched on (the switch lives on the AI screen, so the row stays visible when off). */
+    aiEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -72,19 +74,11 @@ fun SettingsRootScreen(
                 )
                 CategoryRowGap()
                 CategoryRow(
-                    icon = XIcons.Refresh,
+                    icon = XIcons.Folder,
                     chevron = XIcons.ChevronRight,
                     title = stringResource(R.string.settings_section_behavior),
                     subtitle = stringResource(R.string.settings_category_behavior_desc),
                     onClick = onOpenBehavior,
-                )
-                CategoryRowGap()
-                CategoryRow(
-                    icon = XIcons.Bolt,
-                    chevron = XIcons.ChevronRight,
-                    title = stringResource(R.string.settings_section_diagnostics),
-                    subtitle = stringResource(R.string.settings_category_diagnostics_desc),
-                    onClick = onOpenDiagnostics,
                 )
                 CategoryRowGap()
                 CategoryRow(
@@ -100,10 +94,18 @@ fun SettingsRootScreen(
                         icon = XIcons.AutoAwesome,
                         chevron = XIcons.ChevronRight,
                         title = "AI Assistant",
-                        subtitle = "Provider, model and API key",
+                        subtitle = if (aiEnabled) "Provider, model, memory and privacy" else "Off",
                         onClick = onOpenAi,
                     )
                 }
+                CategoryRowGap()
+                CategoryRow(
+                    icon = XIcons.Bolt,
+                    chevron = XIcons.ChevronRight,
+                    title = stringResource(R.string.settings_section_diagnostics),
+                    subtitle = stringResource(R.string.settings_category_diagnostics_desc),
+                    onClick = onOpenDiagnostics,
+                )
                 CategoryRowGap()
                 CategoryRow(
                     icon = XIcons.Info,

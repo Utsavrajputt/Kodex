@@ -12,21 +12,27 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.invictus.kodex.R
+import com.invictus.kodex.feature.editor.EditorViewModel
 import com.invictus.kodex.ui.icons.XIcons
 
-/** Diagnostics hub: Crash logs and Git logs as two separate subsections. */
+/** Advanced: performance switches and the diagnostics logs (crash logs, git logs). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsDiagnosticsScreen(
+    viewModel: EditorViewModel,
     onBack: () -> Unit,
     onOpenCrashLogs: () -> Unit,
     onOpenGitLogs: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val gitStatusPollingEnabled by viewModel.gitStatusPollingEnabled.collectAsStateWithLifecycle()
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -47,6 +53,17 @@ fun SettingsDiagnosticsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
         ) {
+            SettingsSectionHeader(stringResource(R.string.settings_group_performance))
+            SettingsSectionCard {
+                SwitchSettingRow(
+                    title = stringResource(R.string.settings_git_status_polling),
+                    subtitle = stringResource(R.string.settings_git_status_polling_desc),
+                    checked = gitStatusPollingEnabled,
+                    onCheckedChange = viewModel::setGitStatusPollingEnabled,
+                )
+            }
+
+            SettingsSectionHeader(stringResource(R.string.settings_group_logs))
             SettingsSectionCard {
                 CategoryRow(
                     icon = XIcons.Bolt,

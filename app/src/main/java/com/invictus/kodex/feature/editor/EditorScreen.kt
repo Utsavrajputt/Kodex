@@ -435,7 +435,7 @@ fun EditorScreen(
                     }
                 }
                 // Floating AI button (hidden while the AI panel is open and whenever AI is switched off
-                // in Settings > Behavior). Source Control no longer floats over the editor.
+                // in Settings > Advanced). Source Control no longer floats over the editor.
                 if (AiGate != null && activePath != null && !showAi) {
                     SmallFloatingActionButton(
                         onClick = { showAi = true },

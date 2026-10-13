@@ -98,6 +98,7 @@ import com.invictus.kodex.R
 import androidx.compose.ui.platform.LocalContext
 import com.invictus.kodex.ai.ui.chat.AgentChatViewModel
 import com.invictus.kodex.ai.ui.chat.MemorySheet
+import com.invictus.kodex.feature.settings.SettingsSectionHeader
 import com.invictus.kodex.ai.agent.GlobalMemoryDocs
 import com.invictus.kodex.ai.agent.MemoryDocs
 import kotlinx.coroutines.flow.map
@@ -293,6 +294,8 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
     val autoApply by vm.autoApply.collectAsState()
     val memoryEnabled by vm.memoryEnabled.collectAsState()
     var showGlobalMemory by remember { mutableStateOf(false) }
+    val aiEnabled = com.invictus.kodex.ai.AiSwitch.enabled
+    val appContext = LocalContext.current.applicationContext
     val hasKey by vm.hasKey.collectAsState()
     val keyHint by vm.keyHint.collectAsState()
     val test by vm.test.collectAsState()
@@ -341,301 +344,325 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // ---- status hero ----
-            Surface(shape = RoundedCornerShape(24.dp), color = Color.Transparent) {
-                Column(
-                    Modifier
-                        .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer)))
-                        .padding(18.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center,
-                        ) { Icon(XIcons.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer) }
-                        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                            Text(
-                                activeModel?.label ?: activeId,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                provider.displayName,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
-                            )
-                        }
-                        AiTag(
-                            if (ready) stringResource(R.string.ai_settings_ready) else stringResource(R.string.ai_settings_setup_needed),
-                            container = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                            content = if (ready) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onError,
-                        )
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    HeroCheck(keySaved, if (keySaved) stringResource(R.string.ai_settings_api_key_saved) else stringResource(R.string.ai_settings_add_an_api_key_to))
-                    HeroCheck(consent, if (consent) stringResource(R.string.ai_settings_ai_allowed_in_projects) else stringResource(R.string.ai_settings_turn_on_allow_ai_in))
-                    activeModel?.let { HeroCheck(true, stringResource(R.string.ai_settings_context_window, ModelInfo.contextLabel(it.maxContextChars))) }
-                    HeroUsage(
-                        view = UsageLedger.view(ledger, dailyLimits, providerId, activeId, nowMs),
-                        nowMs = nowMs,
-                        contextTokens = usage.lastRequestTokens,
-                        contextWindowTokens = activeModel?.let { it.maxContextChars / 4 } ?: 0,
-                        resetsOnPacific = providerId == "gemini",
+            // ---- enable AI (master switch) ----
+            SectionCard(stringResource(R.string.settings_ai_enable), XIcons.AutoAwesome, null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.settings_ai_enable_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f).padding(end = 12.dp),
                     )
+                    Switch(checked = aiEnabled, onCheckedChange = { com.invictus.kodex.ai.AiSwitch.set(appContext, it) })
                 }
             }
-
-            // ---- provider ----
-            SectionCard(stringResource(R.string.ai_settings_provider), XIcons.Cloud, stringResource(R.string.ai_settings_who_runs_the_model_each)) {
-                ProviderRegistry.all.forEach { p ->
-                    SelectableRow(
-                        selected = p.id == providerId,
-                        onClick = { vm.selectProvider(p.id) },
+            if (!aiEnabled) {
+                InfoNote(stringResource(R.string.ai_settings_off_note))
+            } else {
+                // ---- status hero ----
+                Surface(shape = RoundedCornerShape(24.dp), color = Color.Transparent) {
+                    Column(
+                        Modifier
+                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer)))
+                            .padding(18.dp),
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(p.displayName, style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                if (hasKey[p.id] == true) stringResource(R.string.ai_settings_key_saved, keyHint[p.id].orEmpty()) else stringResource(R.string.ai_settings_no_key_yet),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(XIcons.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer) }
+                            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                                Text(
+                                    activeModel?.label ?: activeId,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    provider.displayName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
+                                )
+                            }
+                            AiTag(
+                                if (ready) stringResource(R.string.ai_settings_ready) else stringResource(R.string.ai_settings_setup_needed),
+                                container = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                content = if (ready) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onError,
                             )
                         }
-                        AiTag(
-                            stringResource(R.string.ai_settings_models, p.defaultModels.size),
-                            container = MaterialTheme.colorScheme.surfaceVariant,
+                        Spacer(Modifier.height(12.dp))
+                        HeroCheck(keySaved, if (keySaved) stringResource(R.string.ai_settings_api_key_saved) else stringResource(R.string.ai_settings_add_an_api_key_to))
+                        HeroCheck(consent, if (consent) stringResource(R.string.ai_settings_ai_allowed_in_projects) else stringResource(R.string.ai_settings_turn_on_allow_ai_in))
+                        activeModel?.let { HeroCheck(true, stringResource(R.string.ai_settings_context_window, ModelInfo.contextLabel(it.maxContextChars))) }
+                        HeroUsage(
+                            view = UsageLedger.view(ledger, dailyLimits, providerId, activeId, nowMs),
+                            nowMs = nowMs,
+                            contextTokens = usage.lastRequestTokens,
+                            contextWindowTokens = activeModel?.let { it.maxContextChars / 4 } ?: 0,
+                            resetsOnPacific = providerId == "gemini",
                         )
                     }
                 }
-            }
 
-            // ---- model ----
-            SectionCard(
-                stringResource(R.string.ai_settings_model),
-                XIcons.Tune,
-                stringResource(R.string.ai_settings_bigger_models_reason_better_but),
-            ) {
-                val visible = if (showAllModels) modelList else modelList.take(6)
-                visible.forEach { m ->
-                    SelectableRow(selected = m.id == selectedId, onClick = { vm.selectModel(m.id) }) {
-                        Column(Modifier.weight(1f)) {
-                            Text(m.label, style = MaterialTheme.typography.titleSmall)
-                            Text(m.id, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                ModelInfo.tier(m.id)?.let { TierTag(it) }
-                                if (m.maxContextChars > 0) AiTag(ModelInfo.contextLabel(m.maxContextChars))
+                SettingsSectionHeader(stringResource(R.string.ai_settings_group_model))
+
+                // ---- provider ----
+                SectionCard(stringResource(R.string.ai_settings_provider), XIcons.Cloud, stringResource(R.string.ai_settings_who_runs_the_model_each)) {
+                    ProviderRegistry.all.forEach { p ->
+                        SelectableRow(
+                            selected = p.id == providerId,
+                            onClick = { vm.selectProvider(p.id) },
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(p.displayName, style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    if (hasKey[p.id] == true) stringResource(R.string.ai_settings_key_saved, keyHint[p.id].orEmpty()) else stringResource(R.string.ai_settings_no_key_yet),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            AiTag(
+                                stringResource(R.string.ai_settings_models, p.defaultModels.size),
+                                container = MaterialTheme.colorScheme.surfaceVariant,
+                            )
+                        }
+                    }
+                }
+
+                // ---- model ----
+                SectionCard(
+                    stringResource(R.string.ai_settings_model),
+                    XIcons.Tune,
+                    stringResource(R.string.ai_settings_bigger_models_reason_better_but),
+                ) {
+                    val visible = if (showAllModels) modelList else modelList.take(6)
+                    visible.forEach { m ->
+                        SelectableRow(selected = m.id == selectedId, onClick = { vm.selectModel(m.id) }) {
+                            Column(Modifier.weight(1f)) {
+                                Text(m.label, style = MaterialTheme.typography.titleSmall)
+                                Text(m.id, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    ModelInfo.tier(m.id)?.let { TierTag(it) }
+                                    if (m.maxContextChars > 0) AiTag(ModelInfo.contextLabel(m.maxContextChars))
+                                }
                             }
                         }
                     }
-                }
-                if (modelList.size > 6) {
-                    TextButton(onClick = { showAllModels = !showAllModels }) {
-                        Text(if (showAllModels) stringResource(R.string.ai_settings_show_fewer) else stringResource(R.string.ai_settings_show_all_models, modelList.size))
-                    }
-                }
-                if (customModel.isNotBlank()) {
-                    InfoNote(
-                        stringResource(R.string.ai_settings_a_custom_model_id_is, customModel.trim()),
-                        warn = true,
-                    )
-                }
-                SyncedTextField(
-                    value = customModel,
-                    onValueChange = { vm.setCustomModel(it) },
-                    label = { Text(stringResource(R.string.ai_settings_custom_model_id_optional)) },
-                    supportingText = { Text(stringResource(R.string.ai_settings_for_a_model_that_isn)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            // ---- key & connection ----
-            SectionCard(stringResource(R.string.ai_settings_api_key_connection), XIcons.Key, stringResource(R.string.ai_settings_stored_encrypted_on_this_device, provider.displayName)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (keySaved) XIcons.CheckCircle else XIcons.ErrorCircle,
-                        contentDescription = null,
-                        tint = if (keySaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Text(
-                        if (keySaved) stringResource(R.string.ai_settings_key_saved_2, keyHint[providerId].orEmpty()) else stringResource(R.string.ai_settings_no_key_saved_for, provider.displayName),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(start = 8.dp).weight(1f),
-                    )
-                    KEY_URLS[providerId]?.let { url ->
-                        TextButton(onClick = { runCatching { uriHandler.openUri(url) } }) {
-                            Text(stringResource(R.string.ai_settings_get_a_key))
-                            Icon(XIcons.OpenInNew, contentDescription = null, modifier = Modifier.padding(start = 4.dp).size(14.dp))
+                    if (modelList.size > 6) {
+                        TextButton(onClick = { showAllModels = !showAllModels }) {
+                            Text(if (showAllModels) stringResource(R.string.ai_settings_show_fewer) else stringResource(R.string.ai_settings_show_all_models, modelList.size))
                         }
                     }
+                    if (customModel.isNotBlank()) {
+                        InfoNote(
+                            stringResource(R.string.ai_settings_a_custom_model_id_is, customModel.trim()),
+                            warn = true,
+                        )
+                    }
+                    SyncedTextField(
+                        value = customModel,
+                        onValueChange = { vm.setCustomModel(it) },
+                        label = { Text(stringResource(R.string.ai_settings_custom_model_id_optional)) },
+                        supportingText = { Text(stringResource(R.string.ai_settings_for_a_model_that_isn)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
-                OutlinedTextField(
-                    value = keyDraft,
-                    onValueChange = { keyDraft = it },
-                    label = { Text(if (keySaved) stringResource(R.string.ai_settings_replace_key) else stringResource(R.string.ai_settings_paste_api_key)) },
-                    singleLine = true,
-                    visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { reveal = !reveal }) {
-                            Icon(if (reveal) XIcons.VisibilityOff else XIcons.Visibility, contentDescription = if (reveal) stringResource(R.string.ai_settings_hide_key) else stringResource(R.string.ai_settings_show_key))
+
+                // ---- key & connection ----
+                SectionCard(stringResource(R.string.ai_settings_api_key_connection), XIcons.Key, stringResource(R.string.ai_settings_stored_encrypted_on_this_device, provider.displayName)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (keySaved) XIcons.CheckCircle else XIcons.ErrorCircle,
+                            contentDescription = null,
+                            tint = if (keySaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            if (keySaved) stringResource(R.string.ai_settings_key_saved_2, keyHint[providerId].orEmpty()) else stringResource(R.string.ai_settings_no_key_saved_for, provider.displayName),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(start = 8.dp).weight(1f),
+                        )
+                        KEY_URLS[providerId]?.let { url ->
+                            TextButton(onClick = { runCatching { uriHandler.openUri(url) } }) {
+                                Text(stringResource(R.string.ai_settings_get_a_key))
+                                Icon(XIcons.OpenInNew, contentDescription = null, modifier = Modifier.padding(start = 4.dp).size(14.dp))
+                            }
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { vm.saveKey(providerId, keyDraft); keyDraft = "" }, enabled = keyDraft.isNotBlank()) {
-                        Text(stringResource(R.string.ai_settings_save_key))
                     }
-                    if (keySaved) {
-                        OutlinedButton(onClick = { vm.clearKey(providerId) }) { Text(stringResource(R.string.ai_settings_remove)) }
-                    }
-                }
-                HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    FilledTonalButton(onClick = { vm.testConnection() }, enabled = test !is AiSettingsViewModel.TestState.Testing) {
-                        Text(stringResource(R.string.ai_settings_test_connection))
-                    }
-                    if (test is AiSettingsViewModel.TestState.Testing) {
-                        CircularProgressIndicator(Modifier.padding(start = 12.dp).size(20.dp), strokeWidth = 2.dp)
-                        Text(stringResource(R.string.ai_settings_contacting, provider.displayName), style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                when (val t = test) {
-                    is AiSettingsViewModel.TestState.Ok -> StatusPanel(
-                        ok = true,
-                        title = stringResource(R.string.ai_settings_connected_ms, t.millis),
-                        detail = stringResource(R.string.ai_settings_accepted_your_key_and_answered, provider.displayName, t.model),
+                    OutlinedTextField(
+                        value = keyDraft,
+                        onValueChange = { keyDraft = it },
+                        label = { Text(if (keySaved) stringResource(R.string.ai_settings_replace_key) else stringResource(R.string.ai_settings_paste_api_key)) },
+                        singleLine = true,
+                        visualTransformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { reveal = !reveal }) {
+                                Icon(if (reveal) XIcons.VisibilityOff else XIcons.Visibility, contentDescription = if (reveal) stringResource(R.string.ai_settings_hide_key) else stringResource(R.string.ai_settings_show_key))
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    is AiSettingsViewModel.TestState.Failed -> StatusPanel(ok = false, title = t.title, detail = t.detail)
-                    else -> Unit
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { vm.saveKey(providerId, keyDraft); keyDraft = "" }, enabled = keyDraft.isNotBlank()) {
+                            Text(stringResource(R.string.ai_settings_save_key))
+                        }
+                        if (keySaved) {
+                            OutlinedButton(onClick = { vm.clearKey(providerId) }) { Text(stringResource(R.string.ai_settings_remove)) }
+                        }
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        FilledTonalButton(onClick = { vm.testConnection() }, enabled = test !is AiSettingsViewModel.TestState.Testing) {
+                            Text(stringResource(R.string.ai_settings_test_connection))
+                        }
+                        if (test is AiSettingsViewModel.TestState.Testing) {
+                            CircularProgressIndicator(Modifier.padding(start = 12.dp).size(20.dp), strokeWidth = 2.dp)
+                            Text(stringResource(R.string.ai_settings_contacting, provider.displayName), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    when (val t = test) {
+                        is AiSettingsViewModel.TestState.Ok -> StatusPanel(
+                            ok = true,
+                            title = stringResource(R.string.ai_settings_connected_ms, t.millis),
+                            detail = stringResource(R.string.ai_settings_accepted_your_key_and_answered, provider.displayName, t.model),
+                        )
+                        is AiSettingsViewModel.TestState.Failed -> StatusPanel(ok = false, title = t.title, detail = t.detail)
+                        else -> Unit
+                    }
                 }
-            }
 
-            // ---- usage ----
-            SectionCard(stringResource(R.string.ai_settings_usage_this_session), XIcons.Bolt, stringResource(R.string.ai_settings_counted_since_the_app_started)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile(stringResource(R.string.ai_settings_requests), usage.requests.toString(), Modifier.weight(1f))
-                    StatTile(stringResource(R.string.ai_settings_limit_hits), usage.rateLimitHits.toString(), Modifier.weight(1f), warn = usage.rateLimitHits > 0)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    StatTile(stringResource(R.string.ai_settings_sent_est), "~" + ModelInfo.formatTokens(usage.inputTokens), Modifier.weight(1f))
-                    StatTile(stringResource(R.string.ai_settings_received_est), "~" + ModelInfo.formatTokens(usage.outputTokens), Modifier.weight(1f))
-                }
-                val total = usage.inputTokens + usage.outputTokens
-                if (total > 0) {
-                    LinearProgressIndicator(
-                        progress = { usage.inputTokens.toFloat() / total },
-                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                        trackColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    )
-                    Text(
-                        stringResource(R.string.ai_settings_sent_vs_received_every_agent),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                usage.lastRateLimitAt?.let { at ->
-                    val agoSec = ((System.currentTimeMillis() - at) / 1000).toInt().coerceAtLeast(0)
-                    InfoNote(
-                        if (usage.lastRateLimitDaily) stringResource(R.string.ai_settings_last_limit_daily, AiErrorPresenter.formatWait(agoSec))
-                        else usage.lastRateLimitWaitSec?.let {
-                            stringResource(R.string.ai_settings_last_limit_short_waited, AiErrorPresenter.formatWait(agoSec), AiErrorPresenter.formatWait(it))
-                        } ?: stringResource(R.string.ai_settings_last_limit_short, AiErrorPresenter.formatWait(agoSec)),
-                        warn = true,
-                    )
-                }
-                SyncedTextField(
-                    value = dailyLimits[UsageLedger.key(providerId, activeId)]?.toString().orEmpty(),
-                    onValueChange = { vm.setDailyLimit(providerId, activeId, it.filter(Char::isDigit).take(7).toIntOrNull() ?: 0) },
-                    label = { Text(stringResource(R.string.ai_settings_daily_request_limit_optional)) },
-                    supportingText = { Text(stringResource(R.string.ai_settings_your_plan_s_real_cap)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                TextButton(onClick = { vm.resetUsage() }, enabled = usage.requests > 0 || usage.rateLimitHits > 0) { Text(stringResource(R.string.ai_settings_reset_counters)) }
-            }
+                SettingsSectionHeader(stringResource(R.string.ai_settings_group_memory))
 
-            // ---- limits explainer ----
-            var limitsOpen by remember { mutableStateOf(false) }
-            SectionCard(stringResource(R.string.ai_settings_understanding_rate_limits), XIcons.Info, null, onHeaderClick = { limitsOpen = !limitsOpen }, trailing = {
-                Icon(if (limitsOpen) XIcons.KeyboardArrowUp else XIcons.KeyboardArrowDown, contentDescription = null)
-            }) {
-                if (limitsOpen) {
-                    LimitPoint(stringResource(R.string.ai_settings_short_term_limit), stringResource(R.string.ai_settings_too_many_requests_in_a))
-                    LimitPoint(stringResource(R.string.ai_settings_daily_quota), stringResource(R.string.ai_settings_a_per_day_cap_common))
-                    LimitPoint(stringResource(R.string.ai_settings_why_agents_hit_limits), stringResource(R.string.ai_settings_one_message_can_trigger_many))
-                    LimitPoint(stringResource(R.string.ai_settings_what_to_do), stringResource(R.string.ai_settings_use_the_model_chip_in))
-                } else {
-                    Text(stringResource(R.string.ai_settings_tap_to_see_what_the), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // ---- universal memory + instructions ----
+                SectionCard(stringResource(R.string.ai_settings_universal), XIcons.AutoAwesome, stringResource(R.string.ai_settings_universal_sub)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { showGlobalMemory = true }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(stringResource(R.string.ai_settings_memory), style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    stringResource(R.string.ai_settings_memory_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Icon(XIcons.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp).size(20.dp))
+                        }
+                        Switch(checked = memoryEnabled, onCheckedChange = { vm.setMemoryEnabled(it) })
+                    }
                 }
-            }
+                if (showGlobalMemory) {
+                    MemorySheet(docs = vm.globalDocs, onDismiss = { showGlobalMemory = false })
+                }
 
-            // ---- universal memory + instructions ----
-            SectionCard(stringResource(R.string.ai_settings_universal), XIcons.AutoAwesome, stringResource(R.string.ai_settings_universal_sub)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Row(
-                        Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { showGlobalMemory = true }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                SettingsSectionHeader(stringResource(R.string.ai_settings_group_editing_privacy))
+
+                // ---- editing ----
+                SectionCard(stringResource(R.string.ai_settings_editing), XIcons.Edit, stringResource(R.string.ai_settings_editing_sub)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(stringResource(R.string.ai_settings_memory), style = MaterialTheme.typography.titleSmall)
+                            Text(stringResource(R.string.ai_settings_auto_apply), style = MaterialTheme.typography.titleSmall)
                             Text(
-                                stringResource(R.string.ai_settings_memory_desc),
+                                stringResource(R.string.ai_settings_auto_apply_desc),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Icon(XIcons.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp).size(20.dp))
+                        Switch(checked = autoApply, onCheckedChange = { vm.setAutoApply(it) })
                     }
-                    Switch(checked = memoryEnabled, onCheckedChange = { vm.setMemoryEnabled(it) })
                 }
-            }
-            if (showGlobalMemory) {
-                MemorySheet(docs = vm.globalDocs, onDismiss = { showGlobalMemory = false })
-            }
 
-            // ---- editing ----
-            SectionCard(stringResource(R.string.ai_settings_editing), XIcons.Edit, stringResource(R.string.ai_settings_editing_sub)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.ai_settings_auto_apply), style = MaterialTheme.typography.titleSmall)
+                // ---- privacy ----
+                SectionCard(stringResource(R.string.ai_settings_privacy), XIcons.Visibility, stringResource(R.string.ai_settings_you_decide_what_the_assistant)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.ai_settings_allow_ai_in_projects), style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                stringResource(R.string.ai_settings_when_on_selected_code_and, provider.displayName),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = consent, onCheckedChange = { vm.setConsent(it) })
+                    }
+                    SyncedTextField(
+                        value = globs,
+                        onValueChange = { vm.setGlobs(it) },
+                        label = { Text(stringResource(R.string.ai_settings_never_send_files_matching)) },
+                        supportingText = { Text(stringResource(R.string.ai_settings_comma_separated_e_g_env)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    InfoNote(stringResource(R.string.ai_settings_obvious_secrets_api_keys_tokens))
+                }
+
+                SettingsSectionHeader(stringResource(R.string.ai_settings_group_usage))
+
+                // ---- usage ----
+                SectionCard(stringResource(R.string.ai_settings_usage_this_session), XIcons.Bolt, stringResource(R.string.ai_settings_counted_since_the_app_started)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StatTile(stringResource(R.string.ai_settings_requests), usage.requests.toString(), Modifier.weight(1f))
+                        StatTile(stringResource(R.string.ai_settings_limit_hits), usage.rateLimitHits.toString(), Modifier.weight(1f), warn = usage.rateLimitHits > 0)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        StatTile(stringResource(R.string.ai_settings_sent_est), "~" + ModelInfo.formatTokens(usage.inputTokens), Modifier.weight(1f))
+                        StatTile(stringResource(R.string.ai_settings_received_est), "~" + ModelInfo.formatTokens(usage.outputTokens), Modifier.weight(1f))
+                    }
+                    val total = usage.inputTokens + usage.outputTokens
+                    if (total > 0) {
+                        LinearProgressIndicator(
+                            progress = { usage.inputTokens.toFloat() / total },
+                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                            trackColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        )
                         Text(
-                            stringResource(R.string.ai_settings_auto_apply_desc),
-                            style = MaterialTheme.typography.bodySmall,
+                            stringResource(R.string.ai_settings_sent_vs_received_every_agent),
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Switch(checked = autoApply, onCheckedChange = { vm.setAutoApply(it) })
-                }
-            }
-
-            // ---- privacy ----
-            SectionCard(stringResource(R.string.ai_settings_privacy), XIcons.Visibility, stringResource(R.string.ai_settings_you_decide_what_the_assistant)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.ai_settings_allow_ai_in_projects), style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            stringResource(R.string.ai_settings_when_on_selected_code_and, provider.displayName),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    usage.lastRateLimitAt?.let { at ->
+                        val agoSec = ((System.currentTimeMillis() - at) / 1000).toInt().coerceAtLeast(0)
+                        InfoNote(
+                            if (usage.lastRateLimitDaily) stringResource(R.string.ai_settings_last_limit_daily, AiErrorPresenter.formatWait(agoSec))
+                            else usage.lastRateLimitWaitSec?.let {
+                                stringResource(R.string.ai_settings_last_limit_short_waited, AiErrorPresenter.formatWait(agoSec), AiErrorPresenter.formatWait(it))
+                            } ?: stringResource(R.string.ai_settings_last_limit_short, AiErrorPresenter.formatWait(agoSec)),
+                            warn = true,
                         )
                     }
-                    Switch(checked = consent, onCheckedChange = { vm.setConsent(it) })
+                    SyncedTextField(
+                        value = dailyLimits[UsageLedger.key(providerId, activeId)]?.toString().orEmpty(),
+                        onValueChange = { vm.setDailyLimit(providerId, activeId, it.filter(Char::isDigit).take(7).toIntOrNull() ?: 0) },
+                        label = { Text(stringResource(R.string.ai_settings_daily_request_limit_optional)) },
+                        supportingText = { Text(stringResource(R.string.ai_settings_your_plan_s_real_cap)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    TextButton(onClick = { vm.resetUsage() }, enabled = usage.requests > 0 || usage.rateLimitHits > 0) { Text(stringResource(R.string.ai_settings_reset_counters)) }
                 }
-                SyncedTextField(
-                    value = globs,
-                    onValueChange = { vm.setGlobs(it) },
-                    label = { Text(stringResource(R.string.ai_settings_never_send_files_matching)) },
-                    supportingText = { Text(stringResource(R.string.ai_settings_comma_separated_e_g_env)) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                InfoNote(stringResource(R.string.ai_settings_obvious_secrets_api_keys_tokens))
+
+                // ---- limits explainer ----
+                var limitsOpen by remember { mutableStateOf(false) }
+                SectionCard(stringResource(R.string.ai_settings_understanding_rate_limits), XIcons.Info, null, onHeaderClick = { limitsOpen = !limitsOpen }, trailing = {
+                    Icon(if (limitsOpen) XIcons.KeyboardArrowUp else XIcons.KeyboardArrowDown, contentDescription = null)
+                }) {
+                    if (limitsOpen) {
+                        LimitPoint(stringResource(R.string.ai_settings_short_term_limit), stringResource(R.string.ai_settings_too_many_requests_in_a))
+                        LimitPoint(stringResource(R.string.ai_settings_daily_quota), stringResource(R.string.ai_settings_a_per_day_cap_common))
+                        LimitPoint(stringResource(R.string.ai_settings_why_agents_hit_limits), stringResource(R.string.ai_settings_one_message_can_trigger_many))
+                        LimitPoint(stringResource(R.string.ai_settings_what_to_do), stringResource(R.string.ai_settings_use_the_model_chip_in))
+                    } else {
+                        Text(stringResource(R.string.ai_settings_tap_to_see_what_the), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
             Spacer(Modifier.height(16.dp))
         }

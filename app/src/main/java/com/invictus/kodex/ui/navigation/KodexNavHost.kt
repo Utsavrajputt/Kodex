@@ -173,7 +173,8 @@ fun KodexNavHost(
                 onOpenBehavior = { navController.navigate(Routes.SETTINGS_BEHAVIOR) },
                 onOpenDiagnostics = { navController.navigate(Routes.SETTINGS_DIAGNOSTICS) },
                 onOpenGitHub = { navController.navigate(Routes.SETTINGS_GITHUB) },
-                onOpenAi = AiGate?.let { g -> { navController.navigate(g.settingsRoute) } },
+                onOpenAi = com.invictus.kodex.ai.AiFlavor.gate?.let { g -> { navController.navigate(g.settingsRoute) } },
+                aiEnabled = com.invictus.kodex.ai.AiSwitch.enabled,
                 onOpenAbout = { navController.navigate(Routes.SETTINGS_ABOUT) },
             )
         }
@@ -189,14 +190,11 @@ fun KodexNavHost(
         composable(Routes.SETTINGS_GITHUB) {
             SettingsGitHubScreen(onBack = { navController.popBackStack() })
         }
-        // AI routes are always registered; they bounce straight back when AI is switched off.
+        // AI routes are always registered. The AI settings screen stays reachable when AI is off (it holds the
+        // Enable AI switch); the agent screen bounces straight back.
         com.invictus.kodex.ai.AiFlavor.gate?.let { gate ->
             composable(gate.settingsRoute) {
-                if (com.invictus.kodex.ai.AiSwitch.enabled) {
-                    gate.SettingsAiScreen(onBack = { navController.popBackStack() })
-                } else {
-                    androidx.compose.runtime.LaunchedEffect(Unit) { navController.popBackStack() }
-                }
+                gate.SettingsAiScreen(onBack = { navController.popBackStack() })
             }
             composable(gate.agentRoute) { entry ->
                 val path = entry.arguments?.getString("projectPath")
@@ -214,6 +212,7 @@ fun KodexNavHost(
         }
         composable(Routes.SETTINGS_DIAGNOSTICS) {
             SettingsDiagnosticsScreen(
+                viewModel = editorViewModel,
                 onBack = { navController.popBackStack() },
                 onOpenCrashLogs = { navController.navigate(Routes.SETTINGS_CRASH_LOGS) },
                 onOpenGitLogs = { navController.navigate(Routes.SETTINGS_GIT_LOGS) },

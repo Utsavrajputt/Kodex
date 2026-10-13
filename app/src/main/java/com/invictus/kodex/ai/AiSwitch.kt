@@ -6,7 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 /**
- * Global on/off switch for every AI feature (Settings > Behavior > Enable AI).
+ * Global on/off switch for every AI feature (Settings > AI Assistant > Enable AI).
  * Compose state, so every screen that reads [AiGate] recomposes the moment it flips.
  * Backed by SharedPreferences (synchronous) so the right value is known before the first frame.
  */
