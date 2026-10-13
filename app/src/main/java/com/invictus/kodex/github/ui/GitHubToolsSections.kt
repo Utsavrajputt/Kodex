@@ -5,6 +5,7 @@ import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -238,7 +239,7 @@ fun ApkCard(
 ) {
     val p = ghPalette()
     val context = LocalContext.current
-    // The latest successful build: one block per variant (Light, Full, ...), each with its own Download /
+    // The latest successful build: one row per variant (Light, Full, ...), each with its own Download /
     // progress / Install / Delete. An older downloaded file of this repo is only a fallback when no run
     // artifact is available any more (expired / none / error).
     val apk = state.apk
@@ -249,24 +250,29 @@ fun ApkCard(
     val busy = state.transfer?.paused == false || state.installing || state.pendingSave != null
 
     GhCard(p.apkCard, p.apkBorder) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
-                found != null -> found.variants.forEachIndexed { index, a ->
-                    if (index > 0) Box(Modifier.fillMaxWidth().height(1.dp).background(p.onCard.copy(alpha = 0.18f)))
-                    ApkVariant(a, found.candidate.universal, state, tools, projectPath, ownerLogin, busy)
+                found != null -> {
+                    ApkCardHeader(found.variants.size, found.variants.sumOf { it.sizeBytes })
+                    found.variants.forEach { a ->
+                        ApkVariant(a, found.candidate.universal, state, tools, projectPath, ownerLogin, busy)
+                    }
                 }
                 fallbackLocal != null -> {
-                    ApkHeader(
+                    ApkCardHeader(1, fallbackLocal.sizeBytes)
+                    ApkFileRow(
                         projectPath, ownerLogin, apkTitle(fallbackLocal.label),
                         listOf(
                             Formatter.formatShortFileSize(context, fallbackLocal.sizeBytes),
                             timeAgoOrDate(Instant.ofEpochMilli(fallbackLocal.modifiedAt)),
                         ).filter { it.isNotBlank() }.joinToString(" \u2022 "),
-                    )
-                    ApkActions(fallbackLocal, state.installInfo[fallbackLocal.artifactId], state.installing, state.installPhase, busy, tools)
+                        trailing = null,
+                    ) {
+                        ApkActions(fallbackLocal, state.installInfo[fallbackLocal.artifactId], state.installing, state.installPhase, busy, tools)
+                    }
                 }
                 else -> {
-                    ApkHeader(projectPath, ownerLogin, stringResource(R.string.gh_apk_title), "")
+                    ApkCardHeader(0, 0L)
                     if (apk == ApkCardState.Loading) {
                         LinearProgressIndicator(Modifier.fillMaxWidth(), color = p.accent, trackColor = p.onCard.copy(alpha = 0.12f))
                     } else {
@@ -291,27 +297,99 @@ fun ApkCard(
     }
 }
 
+/** Card heading: always the full "Latest APK" title, with "N files" and total size chips underneath. */
 @Composable
-private fun ApkHeader(projectPath: String, ownerLogin: String?, title: String, facts: String) {
+private fun ApkCardHeader(count: Int, totalBytes: Long) {
     val p = ghPalette()
+    val context = LocalContext.current
+    val tileShape = RoundedCornerShape(14.dp)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        ProjectIcon(projectPath, size = 48.dp, corner = 14.dp, ownerLogin = ownerLogin)
-        Column(Modifier.weight(1f)) {
+        Box(
+            Modifier
+                .size(48.dp)
+                .clip(tileShape)
+                .background(p.accent.copy(alpha = 0.18f))
+                .border(1.dp, p.accent.copy(alpha = 0.40f), tileShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(XIcons.Android, contentDescription = null, tint = p.accent, modifier = Modifier.size(28.dp))
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                stringResource(R.string.gh_apk_latest),
+                style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                color = p.onCard,
             )
-            if (facts.isNotBlank()) {
-                Text(
-                    facts, style = MaterialTheme.typography.bodySmall,
-                    color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
+            if (count > 0) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ApkInfoChip(if (count == 1) stringResource(R.string.gh_apk_file_one) else stringResource(R.string.gh_apk_files_many, count))
+                    ApkInfoChip(Formatter.formatShortFileSize(context, totalBytes))
+                }
             }
         }
     }
 }
 
-/** One variant (e.g. "Xmd-full-arm64-e84d595") of the latest build with its own action row. */
+@Composable
+private fun ApkInfoChip(text: String) {
+    val p = ghPalette()
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium,
+        color = p.onCard, maxLines = 1,
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(p.accent.copy(alpha = 0.16f))
+            .border(1.dp, p.accent.copy(alpha = 0.28f), CircleShape)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    )
+}
+
+/**
+ * One file of the latest build: app icon, a title that wraps instead of being cut off, facts underneath,
+ * an optional trailing action (Download) and an optional block below (progress / Install row).
+ */
+@Composable
+private fun ApkFileRow(
+    projectPath: String,
+    ownerLogin: String?,
+    title: String,
+    facts: String,
+    trailing: (@Composable () -> Unit)?,
+    below: (@Composable ColumnScope.() -> Unit)? = null,
+) {
+    val p = ghPalette()
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(p.runCard)
+            .border(1.dp, p.cardBorder, shape)
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ProjectIcon(projectPath, size = 44.dp, corner = 12.dp, ownerLogin = ownerLogin)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                    color = p.onCard, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                )
+                if (facts.isNotBlank()) {
+                    Text(
+                        facts, style = MaterialTheme.typography.bodySmall,
+                        color = p.onCardMuted, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            trailing?.invoke()
+        }
+        below?.invoke(this)
+    }
+}
+
+/** One variant (e.g. "Xmd full arm64") of the latest build with its own action. */
 @Composable
 private fun ApkVariant(
     a: GhArtifact,
@@ -329,10 +407,23 @@ private fun ApkVariant(
     val ready = state.ready?.takeIf { it.fromApkCard && it.artifactId == a.id }
     // Freshly downloaded but not yet listed: same buttons, no details panel.
     val justDownloaded = ready?.let { DownloadedApk(it.artifactId, it.artifactName, it.file, it.file.length(), System.currentTimeMillis()) }
-    val facts = listOf(Formatter.formatShortFileSize(context, a.sizeBytes), a.createdAt?.let { timeAgoOrDate(it) }.orEmpty())
+    val facts = listOf(a.shortSha, Formatter.formatShortFileSize(context, a.sizeBytes), a.createdAt?.let { timeAgoOrDate(it) }.orEmpty())
         .filter { it.isNotBlank() }.joinToString(" \u2022 ")
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ApkHeader(projectPath, ownerLogin, apkBuildName(a.name, a.shortSha), facts)
+    val installed = local ?: justDownloaded
+    ApkFileRow(
+        projectPath, ownerLogin, apkTitle(a.name), facts,
+        trailing = if (transfer == null && installed == null) {
+            {
+                GhTileButton(
+                    icon = XIcons.Download,
+                    description = stringResource(R.string.gh_apk_download),
+                    container = p.accent, tint = p.onInstall,
+                    enabled = !busy,
+                    onClick = { tools.downloadApk(ApkCandidate(a, universal)) },
+                )
+            }
+        } else null,
+    ) {
         when {
             transfer != null -> TransferStatus(
                 downloaded = transfer.downloaded, total = transfer.total, etaSeconds = transfer.etaSeconds, speedBytesPerSec = transfer.speedBps, paused = transfer.paused,
@@ -341,20 +432,7 @@ private fun ApkVariant(
                 accent = p.accent, track = p.onCard.copy(alpha = 0.12f), textColor = p.onCardMuted,
                 canPause = (transfer.progress ?: 0f) < 1f,
             )
-            local != null -> ApkActions(local, state.installInfo[local.artifactId], state.installing, state.installPhase, busy, tools)
-            justDownloaded != null -> ApkActions(justDownloaded, state.installInfo[justDownloaded.artifactId], state.installing, state.installPhase, busy, tools)
-            else -> GhPrimaryButton(
-                onClick = { tools.downloadApk(ApkCandidate(a, universal)) },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(XIcons.Download, contentDescription = null, modifier = Modifier.size(22.dp), tint = p.onInstall)
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    stringResource(R.string.gh_apk_download),
-                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = p.onInstall,
-                )
-            }
+            installed != null -> ApkActions(installed, state.installInfo[installed.artifactId], state.installing, state.installPhase, busy, tools)
         }
     }
 }
