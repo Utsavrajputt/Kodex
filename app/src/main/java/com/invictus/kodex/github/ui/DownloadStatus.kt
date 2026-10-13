@@ -11,6 +11,10 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -181,7 +185,7 @@ fun TransferStatus(
                     description = stringResource(if (paused) R.string.gh_transfer_resume else R.string.gh_transfer_pause),
                     tint = accent,
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(12.dp))
             }
             RoundTransferButton(
                 onClick = onCancel,
@@ -195,9 +199,14 @@ fun TransferStatus(
 
 @Composable
 private fun RoundTransferButton(onClick: () -> Unit, icon: ImageVector, description: String, tint: Color) {
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier.size(34.dp).background(tint.copy(alpha = 0.14f), CircleShape),
+    // A plain 36dp circle (not IconButton): IconButton pads itself up to 48dp and the two buttons overlapped.
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(tint.copy(alpha = 0.14f))
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(18.dp))
     }

@@ -9,7 +9,17 @@ enum class StepState { Done, Current, Pending, Failed, Skipped }
 data class StepUi(val name: String, val state: StepState)
 
 /** Steps of every job of a run, boiled down to what the progress bar and the step chips show. */
-data class RunProgress(val steps: List<StepUi>) {
+/** One job of a run (jobs run in parallel): its own percent and the step it is on right now. */
+data class JobProgressUi(
+    val name: String,
+    val state: StepState,
+    val percent: Int,
+    val currentStep: String?,
+    val finished: Int,
+    val total: Int,
+)
+
+data class RunProgress(val steps: List<StepUi>, val jobs: List<JobProgressUi> = emptyList()) {
     val total: Int get() = steps.size
     val hasSteps: Boolean get() = steps.isNotEmpty()
     private val finished: Int
@@ -21,9 +31,29 @@ data class RunProgress(val steps: List<StepUi>) {
         val Empty = RunProgress(emptyList())
 
         fun of(jobs: List<GhJob>): RunProgress = RunProgress(
-            jobs.flatMap { it.steps }
+            steps = jobs.flatMap { it.steps }
                 .filterNot { isHousekeepingStep(it) }
                 .map { StepUi(prettyStepName(it.name), stepState(it.status, it.conclusion)) },
+            jobs = jobs.map { job ->
+                val steps = job.steps.filterNot { isHousekeepingStep(it) }
+                val states = steps.map { stepState(it.status, it.conclusion) }
+                val done = states.count { it == StepState.Done || it == StepState.Failed || it == StepState.Skipped }
+                val state = jobState(job)
+                val percent = when {
+                    job.status == "completed" -> 100
+                    states.isEmpty() -> 0
+                    else -> done * 100 / states.size
+                }
+                JobProgressUi(
+                    name = job.name,
+                    state = state,
+                    percent = percent,
+                    currentStep = steps.firstOrNull { stepState(it.status, it.conclusion) == StepState.Current }
+                        ?.let { prettyStepName(it.name) },
+                    finished = done,
+                    total = states.size,
+                )
+            },
         )
     }
 }

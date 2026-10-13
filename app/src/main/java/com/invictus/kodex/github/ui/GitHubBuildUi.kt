@@ -1,6 +1,7 @@
 package com.invictus.kodex.github.ui
 
 import android.text.format.DateUtils
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -27,6 +28,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,7 +50,7 @@ internal fun stepTint(state: StepState, p: GhPalette): Color = when (state) {
     StepState.Pending, StepState.Skipped -> p.onCardMuted
 }
 
-/** Round state marker: filled check / cross, ringed dot for the running step, empty ring for what is still to come. */
+/** Round state marker: filled check / cross, spinning arc for the running step, empty ring for what is still to come. */
 @Composable
 internal fun StepStateIcon(state: StepState, p: GhPalette, size: androidx.compose.ui.unit.Dp = 20.dp) {
     val tint = stepTint(state, p)
@@ -64,10 +66,13 @@ internal fun StepStateIcon(state: StepState, p: GhPalette, size: androidx.compos
                 modifier = Modifier.size(size * 0.7f),
             )
         }
-        StepState.Current -> Box(
-            Modifier.size(size).border(2.dp, tint, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) { Box(Modifier.size(size * 0.4f).clip(CircleShape).background(tint)) }
+        // Spinning arc: the running step is visibly alive instead of a frozen dot.
+        StepState.Current -> CircularProgressIndicator(
+            modifier = Modifier.size(size),
+            color = tint,
+            trackColor = tint.copy(alpha = 0.25f),
+            strokeWidth = if (size >= 20.dp) 2.5.dp else 2.dp,
+        )
         StepState.Pending -> Box(Modifier.size(size).border(1.5.dp, tint.copy(alpha = 0.55f), CircleShape))
         StepState.Skipped -> Box(
             Modifier.size(size).border(1.5.dp, tint.copy(alpha = 0.55f), CircleShape),
@@ -78,7 +83,7 @@ internal fun StepStateIcon(state: StepState, p: GhPalette, size: androidx.compos
 
 /** Progress bar with the percentage on its right, then the step chips (Checkout | Setup | Build ...). */
 @Composable
-internal fun ProgressBlock(progress: RunProgress, p: GhPalette) {
+internal fun ProgressBlock(progress: RunProgress, p: GhPalette, maxJobRows: Int = Int.MAX_VALUE) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (progress.hasSteps) {
@@ -101,7 +106,72 @@ internal fun ProgressBlock(progress: RunProgress, p: GhPalette) {
                 )
             }
         }
-        if (progress.hasSteps) StepChips(progress, p)
+        when {
+            // Parallel jobs: one row each (own bar + current step) instead of one merged chip strip.
+            progress.jobs.size > 1 -> JobProgressRows(progress.jobs, p, maxJobRows)
+            progress.hasSteps -> StepChips(progress, p)
+        }
+    }
+}
+
+/** Parallel jobs at a glance: running first, then failed, queued and finished. Capped at [maxRows] with a "+N more" line. */
+@Composable
+private fun JobProgressRows(jobs: List<JobProgressUi>, p: GhPalette, maxRows: Int) {
+    val ordered = jobs.sortedBy {
+        when (it.state) {
+            StepState.Current -> 0
+            StepState.Failed -> 1
+            StepState.Pending -> 2
+            else -> 3
+        }
+    }
+    val shown = ordered.take(maxRows)
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        shown.forEach { JobProgressRow(it, p) }
+        val hidden = ordered.size - shown.size
+        if (hidden > 0) {
+            Text(
+                stringResource(R.string.gh_jobs_more, hidden),
+                style = MaterialTheme.typography.labelMedium, color = p.onCardMuted,
+            )
+        }
+    }
+}
+
+@Composable
+private fun JobProgressRow(job: JobProgressUi, p: GhPalette) {
+    val tint = stepTint(job.state, p)
+    val shown by animateFloatAsState(job.percent / 100f, label = "job_progress")
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        StepStateIcon(job.state, p, size = 20.dp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    job.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (job.state == StepState.Current) FontWeight.Bold else FontWeight.Normal,
+                    color = if (job.state == StepState.Pending) p.onCardMuted else p.onCard,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.gh_percent, job.percent), style = MaterialTheme.typography.labelMedium, color = p.onCardMuted)
+            }
+            LinearProgressIndicator(
+                progress = { shown },
+                modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
+                color = tint,
+                trackColor = p.onCard.copy(alpha = 0.12f),
+            )
+            val sub = when (job.state) {
+                StepState.Current -> job.currentStep
+                StepState.Pending -> stringResource(R.string.gh_build_queued)
+                else -> null
+            }
+            if (sub != null) {
+                Text(sub, style = MaterialTheme.typography.labelSmall, color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 
@@ -176,7 +246,7 @@ internal fun BuildingCard(live: LiveBuild, onOpen: () -> Unit, onCancel: () -> U
                     modifier = Modifier.height(36.dp),
                 ) { Text(stringResource(R.string.action_cancel), style = MaterialTheme.typography.labelLarge) }
             }
-            ProgressBlock(live.progress, p)
+            ProgressBlock(live.progress, p, maxJobRows = 4)
         }
     }
 }

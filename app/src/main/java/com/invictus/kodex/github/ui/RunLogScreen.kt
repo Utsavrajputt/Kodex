@@ -3,6 +3,7 @@ package com.invictus.kodex.github.ui
 import com.invictus.kodex.ai.AiGate
 import android.text.format.DateUtils
 import androidx.compose.foundation.background
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -274,42 +275,70 @@ private fun StepsTab(state: RunLogState, p: GhPalette, onOpenJobLog: (GhJob) -> 
 @Composable
 private fun JobCard(job: GhJob, p: GhPalette, selected: Boolean, onClick: (() -> Unit)?) {
     val steps = job.steps.filterNot { isHousekeepingStep(it) }
+    val jobState = jobState(job)
+    // Running and failed jobs show their steps; finished and queued ones fold away until the user opens them.
+    var userExpanded by remember(job.id) { mutableStateOf<Boolean?>(null) }
+    val expanded = userExpanded ?: (jobState == StepState.Current || jobState == StepState.Failed)
     GhCard(
         p.card,
         if (selected) p.accent.copy(alpha = 0.5f) else p.cardBorder,
         onClick = onClick,
     ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp).animateContentSize()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                StepStateIcon(jobState(job), p, size = 22.dp)
+                StepStateIcon(jobState, p, size = 22.dp)
                 Spacer(Modifier.width(10.dp))
-                Text(
-                    job.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                    color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        job.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                        color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    if (!expanded && jobState == StepState.Current) {
+                        steps.firstOrNull { stepState(it.status, it.conclusion) == StepState.Current }?.let {
+                            Text(
+                                prettyStepName(it.name), style = MaterialTheme.typography.labelSmall,
+                                color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
                 job.durationMs?.let { Text(formatDuration(it), style = MaterialTheme.typography.labelMedium, color = p.onCardMuted) }
-                if (onClick != null) {
+                if (steps.isNotEmpty()) {
                     Spacer(Modifier.width(4.dp))
+                    Icon(
+                        if (expanded) XIcons.KeyboardArrowUp else XIcons.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = p.onCardMuted,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .clickable { userExpanded = !expanded }
+                            .padding(2.dp),
+                    )
+                }
+                if (onClick != null) {
                     Icon(XIcons.ChevronRight, contentDescription = null, tint = p.onCardMuted, modifier = Modifier.size(20.dp))
                 }
             }
-            if (steps.isNotEmpty()) Spacer(Modifier.size(6.dp))
-            steps.forEach { step ->
-                val st = stepState(step.status, step.conclusion)
-                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp, horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    StepStateIcon(st, p, size = 16.dp)
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        prettyStepName(step.name), style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (st == StepState.Current) FontWeight.Bold else FontWeight.Normal,
-                        color = when (st) {
-                            StepState.Failed -> p.danger
-                            StepState.Pending, StepState.Skipped -> p.onCardMuted
-                            else -> p.onCard
-                        },
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                    )
-                    step.durationMs?.let { Text(formatDuration(it), style = MaterialTheme.typography.labelSmall, color = p.onCardMuted) }
+            if (expanded && steps.isNotEmpty()) {
+                Spacer(Modifier.size(6.dp))
+                steps.forEach { step ->
+                    val st = stepState(step.status, step.conclusion)
+                    Row(Modifier.fillMaxWidth().padding(vertical = 5.dp, horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        StepStateIcon(st, p, size = 16.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            prettyStepName(step.name), style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (st == StepState.Current) FontWeight.Bold else FontWeight.Normal,
+                            color = when (st) {
+                                StepState.Failed -> p.danger
+                                StepState.Pending, StepState.Skipped -> p.onCardMuted
+                                else -> p.onCard
+                            },
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                        )
+                        step.durationMs?.let { Text(formatDuration(it), style = MaterialTheme.typography.labelSmall, color = p.onCardMuted) }
+                    }
                 }
             }
         }
