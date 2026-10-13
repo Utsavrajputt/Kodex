@@ -738,8 +738,8 @@
     <string name="ai_chat_applied_many">Applied %1$s files</string>
     <string name="ai_chat_applied_one">Applied 1 file</string>
     <string name="ai_chat_apply_to_file">Apply to file</string>
-    <string name="ai_chat_ask_about_your_project_or">Ask about your project, or tell me what to change.</string>
-    <string name="ai_chat_ask_the_agent_to_mention">"Ask the agent…  @ to mention files"</string>
+    <string name="ai_chat_ask_about_your_project_or">Ask me anything, or tell me what to change in your project.</string>
+    <string name="ai_chat_ask_the_agent_to_mention">"Ask anything…  @ to mention files"</string>
     <string name="ai_chat_attach_files">Attach files</string>
     <string name="ai_chat_attached">Attached</string>
     <string name="ai_chat_cancel">Cancel</string>
@@ -1167,6 +1167,7 @@
     <string name="gh_notif_install_ok_title">App installed</string>
     <string name="gh_notif_install_ok_text">The new version was installed.</string>
     <string name="gh_notif_install_failed_title">Install failed</string>
+    <string name="gh_install_blocked_play_protect">Blocked by Google Play Protect. Open the install prompt again and tap \"Install anyway\", or allow this app in Play Protect.</string>
     <string name="gh_notif_install_ready_title">Ready to install</string>
     <string name="gh_notif_install_ready_text">Tap to continue installing the downloaded app.</string>
 

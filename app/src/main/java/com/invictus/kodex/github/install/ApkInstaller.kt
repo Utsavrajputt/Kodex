@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -59,14 +60,22 @@ class ApkInstaller(private val context: Context) {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun installWithSession(apk: File) {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setSize(apk.length())
-        // Android 12+ may otherwise apply an update silently, with no installer screen at all.
-        // Always ask, so the install happens in front of the user.
+        // Same session setup the dedicated installer apps use: a user-initiated install of a known package.
+        params.setInstallReason(PackageManager.INSTALL_REASON_USER)
+        context.packageManager.getPackageArchiveInfo(apk.absolutePath, 0)?.packageName?.let { params.setAppPackageName(it) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            params.setPackageSource(PackageInstaller.PACKAGE_SOURCE_OTHER)
+        }
+        // Android 12+: when this app is the installer of record, an update of an installed app can complete without
+        // another confirmation tap. New installs (and anything the system doesn't consider eligible) still show the
+        // system confirmation, which our receiver launches below. Always started by the user's tap on Install.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
         }
         val id = installer.createSession(params)
         var session: PackageInstaller.Session? = null
@@ -138,6 +147,15 @@ class InstallResultReceiver : BroadcastReceiver() {
             PackageInstaller.STATUS_FAILURE_ABORTED -> {
                 GhNotifier(context).clearInstallReady()
                 InstallEvents.emit(InstallResult.Cancelled)
+            }
+            PackageInstaller.STATUS_FAILURE_BLOCKED -> {
+                // Usually Google Play Protect (or the device policy) refused the APK itself, not our installer.
+                GhNotifier(context).clearInstallReady()
+                val message = context.getString(R.string.gh_install_blocked_play_protect)
+                InstallEvents.emit(InstallResult.Failed(message))
+                GhNotifier(context).result(
+                    GhNotifier.KIND_INSTALL, context.getString(R.string.gh_notif_install_failed_title), message, ok = false,
+                )
             }
             else -> {
                 GhNotifier(context).clearInstallReady()

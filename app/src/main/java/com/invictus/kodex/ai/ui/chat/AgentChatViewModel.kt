@@ -42,6 +42,7 @@ import com.invictus.kodex.ai.provider.AiErrorPresenter
 import com.invictus.kodex.ai.provider.AiException
 import com.invictus.kodex.ai.provider.AiModel
 import com.invictus.kodex.ai.provider.ChatImage
+import com.invictus.kodex.ai.provider.ImageGen
 import com.invictus.kodex.ai.provider.ModelInfo
 import com.invictus.kodex.ai.provider.ProviderRegistry
 import java.io.File
@@ -310,9 +311,12 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                         .sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
                         .take(50).map { if (it.isDirectory) it.name + "/" else it.name }
                 }
+                // Pictures come from an image model: the chat provider's own if it has one, else any saved Gemini / OpenAI key.
+                val imageProvider = (listOf(provider.id) + listOf("gemini", "openai"))
+                    .firstOrNull { ImageGen.supports(it) && !(if (it == provider.id) key else keyStore.get(it)).isNullOrBlank() }
                 val toolbox = ImageToolbox(
-                    providerId = provider.id,
-                    key = key,
+                    imageProviderId = imageProvider,
+                    imageKey = imageProvider?.let { if (it == provider.id) key else keyStore.get(it) },
                     outDir = store.imageDir,
                     attachedImage = {
                         history.lastOrNull { it is AgentMessage.User && it.images.isNotEmpty() }

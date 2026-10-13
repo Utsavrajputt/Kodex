@@ -105,9 +105,9 @@ class AgentTools(
         if (box.canRaster) {
             out += ToolSpec(
                 "generate_image",
-                "Paint a picture with the image model (logos, app icons, illustrations, artwork) or edit / restyle a picture the user attached. " +
-                    "The result is shown to the user in the chat with Save and \"Use as app icon\" buttons; nothing is written to the project until they press it. " +
-                    "For crisp flat/geometric logos or when the user asks for SVG, prefer render_svg.",
+                "Create a normal, rich image with the image model, like ChatGPT / Nano Banana: photos, illustrations, 3D or glossy renders, logos, app icons. " +
+                    "This is the DEFAULT for any picture request; also edits / restyles a picture the user attached. " +
+                    "The result is shown to the user in the chat with Save and \"Use as app icon\" buttons; nothing is written to the project until they press it.",
                 schema(
                     "prompt" to str("Detailed description: subject, style, colours, mood, composition. For edits, say exactly what to change and what to keep."),
                     "purpose" to str("'app_icon' for a launcher icon (adds icon design rules), or 'image' (default)."),
@@ -119,10 +119,10 @@ class AgentTools(
         }
         out += ToolSpec(
             "render_svg",
-            "Draw vector art as SVG and show it to the user in the chat as a PNG preview (the SVG source is kept so they can save it). " +
-                "Best for app icons, logos and flat illustrations; use it whenever the user asks for SVG. The SVG must be complete, " +
-                "self-contained (no external images or fonts), and have a viewBox, ideally viewBox=\"0 0 512 512\". " +
-                "If it fails to parse you get the error back: fix the SVG and call again.",
+            "Draw vector art as SVG. Use ONLY when the user explicitly asks for SVG or vector artwork" +
+                (if (box.canRaster) "; for every other picture use generate_image. " else " or no image model is available. ") +
+                "The result is shown as a PNG preview and the SVG source can be saved. The SVG must be complete, self-contained " +
+                "(no external images or fonts) and have a viewBox, ideally viewBox=\"0 0 512 512\". If it fails to parse you get the error back: fix it and call again.",
             schema(
                 "svg" to str("The full <svg>…</svg> markup."),
                 "purpose" to str("'app_icon' for a launcher icon (full-bleed square artwork, key shapes inside the central 60%), or 'image' (default)."),

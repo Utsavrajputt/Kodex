@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.navigationBarsPadding
 import com.invictus.kodex.ai.agent.GeneratedImage
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -582,6 +583,7 @@ private fun EmptyState(status: AgentChatViewModel.AiStatus, onPick: (String) -> 
             Triple(XIcons.AccountTree, stringResource(R.string.ai_chat_explain_the_structure), stringResource(R.string.ai_chat_explain_how_this_project_is)),
             Triple(XIcons.Search, stringResource(R.string.ai_chat_hunt_for_bugs), stringResource(R.string.ai_chat_find_likely_bugs_and_list)),
             Triple(XIcons.DeleteSweep, stringResource(R.string.ai_chat_find_dead_code), stringResource(R.string.ai_chat_find_unused_code_i_can)),
+            Triple(XIcons.Palette, "Make an app icon", "Create the best app icon for this app"),
             Triple(XIcons.Code, stringResource(R.string.ai_chat_write_tests), stringResource(R.string.ai_chat_write_unit_tests_for)),
         ).forEach { (icon, label, prompt) ->
             Surface(
@@ -867,7 +869,7 @@ private fun dayGroup(ts: Long): DayGroup {
     }
 }
 
-/** Claude-style history: a full-height sheet, chats grouped by day, quiet rows with a subtle delete. */
+/** Chat history: a sheet that hugs its content (no dead space), chats grouped by day as soft cards. */
 @Composable
 private fun ChatHistorySheet(
     chats: List<com.invictus.kodex.ai.agent.ChatMeta>,
@@ -879,20 +881,44 @@ private fun ChatHistorySheet(
     val cs = MaterialTheme.colorScheme
     val grouped = remember(chats) { chats.groupBy { dayGroup(it.updatedAt) }.entries.toList() }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        Column(Modifier.fillMaxWidth().fillMaxHeight(0.92f)) {
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.ai_chat_chats), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).background(cs.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(XIcons.Comment, contentDescription = null, tint = cs.onPrimaryContainer, modifier = Modifier.size(22.dp)) }
+                Text(
+                    stringResource(R.string.ai_chat_chats),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f).padding(start = 12.dp),
+                )
                 Button(onClick = onNew) {
                     Icon(XIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text(stringResource(R.string.ai_chat_new_chat), modifier = Modifier.padding(start = 6.dp))
                 }
             }
             if (chats.isEmpty()) {
-                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.ai_chat_no_saved_chats_yet), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 44.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        Modifier.size(56.dp).clip(CircleShape).background(cs.surfaceContainerHigh),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(XIcons.Comment, contentDescription = null, tint = cs.onSurfaceVariant, modifier = Modifier.size(26.dp)) }
+                    Text(
+                        stringResource(R.string.ai_chat_no_saved_chats_yet),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = cs.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
                 }
             } else {
-                LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp)) {
+                LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 20.dp)) {
                     grouped.forEach { (group, list) ->
                         item(key = "header_$group") {
                             Text(
@@ -906,34 +932,44 @@ private fun ChatHistorySheet(
                                 ),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = cs.primary,
-                                modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 4.dp),
+                                modifier = Modifier.padding(start = 6.dp, top = 12.dp, bottom = 2.dp),
                             )
                         }
                         items(list, key = { it.id }) { c ->
                             val recent = group == DayGroup.TODAY || group == DayGroup.YESTERDAY
                             val whenText = if (recent) DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(c.updatedAt))
                             else DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(c.updatedAt))
-                            Row(
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { onOpen(c.id) }
-                                    .padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                            Surface(
+                                onClick = { onOpen(c.id) },
+                                shape = RoundedCornerShape(18.dp),
+                                color = cs.surfaceContainerHigh,
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                             ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        c.title.ifBlank { stringResource(R.string.ai_chat_chat) },
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(whenText, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
-                                }
-                                IconButton(onClick = { onDelete(c.id) }) {
-                                    Icon(
-                                        XIcons.Delete,
-                                        contentDescription = stringResource(R.string.ai_chat_delete_chat),
-                                        tint = cs.onSurfaceVariant.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(20.dp),
-                                    )
+                                Row(
+                                    Modifier.padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(
+                                        Modifier.size(36.dp).clip(CircleShape).background(cs.surfaceContainerHighest),
+                                        contentAlignment = Alignment.Center,
+                                    ) { Icon(XIcons.Comment, contentDescription = null, tint = cs.onSurfaceVariant, modifier = Modifier.size(18.dp)) }
+                                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                                        Text(
+                                            c.title.ifBlank { stringResource(R.string.ai_chat_chat) },
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(whenText, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+                                    }
+                                    IconButton(onClick = { onDelete(c.id) }) {
+                                        Icon(
+                                            XIcons.Delete,
+                                            contentDescription = stringResource(R.string.ai_chat_delete_chat),
+                                            tint = cs.onSurfaceVariant.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    }
                                 }
                             }
                         }

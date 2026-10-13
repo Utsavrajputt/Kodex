@@ -28,13 +28,14 @@ data class GeneratedImage(
 }
 
 /**
- * Image tools for the agent. Providers with an image model (Gemini, OpenAI) paint with `generate_image`; every
- * provider (Claude included) can draw crisp vector art with `render_svg`. Results are saved under [outDir] and
+ * Image tools for the agent. `generate_image` paints normal pictures with an image model (Gemini / OpenAI, whichever has a
+ * key, even when the chat model is Claude); `render_svg` draws vector art and is for when the user asks for SVG / vector. Results are saved under [outDir] and
  * handed to [onImage] so the chat can show them with Save / Use-as-app-icon buttons.
  */
 class ImageToolbox(
-    private val providerId: String,
-    private val key: String,
+    /** Provider that paints images (Gemini / OpenAI), or null when none is available: then only render_svg works. */
+    private val imageProviderId: String?,
+    private val imageKey: String?,
     private val outDir: File,
     /** The newest photo the user attached to the conversation (to edit / restyle it). */
     private val attachedImage: () -> File?,
@@ -42,10 +43,12 @@ class ImageToolbox(
     private val lastGenerated: () -> File?,
     private val onImage: (GeneratedImage) -> Unit,
 ) {
-    val canRaster: Boolean = ImageGen.supports(providerId)
+    val canRaster: Boolean = imageProviderId != null && !imageKey.isNullOrBlank() && ImageGen.supports(imageProviderId)
 
     suspend fun generate(a: JSONObject): AgentTools.Outcome {
-        if (!canRaster) return err("This provider can't paint images. Use render_svg to draw it as vector art.")
+        if (!canRaster || imageProviderId == null || imageKey == null) {
+            return err("No image model is available. Tell the user to add a Gemini or OpenAI API key in AI settings to create normal images, and offer an SVG drawing instead.")
+        }
         val prompt = a.optString("prompt").trim()
         if (prompt.isEmpty()) return err("Missing 'prompt'")
         val purpose = purposeOf(a)
@@ -57,7 +60,7 @@ class ImageToolbox(
         }
         val full = if (purpose == GeneratedImage.PURPOSE_ICON) prompt + "\n\n" + ICON_BRIEF else prompt
         val result = try {
-            ImageGen.generate(providerId, key, full, ref?.readBytes(), if (ref?.extension.equals("png", true)) "image/png" else "image/jpeg")
+            ImageGen.generate(imageProviderId, imageKey, full, ref?.readBytes(), if (ref?.extension.equals("png", true)) "image/png" else "image/jpeg")
         } catch (e: AiException) {
             return err("Image generation failed: ${e.error.message}")
         }
@@ -127,9 +130,9 @@ class ImageToolbox(
             "Done. The image is now shown to the user in the chat with Save and \"Use as app icon\" buttons. " +
                 "Do not describe it at length; offer one or two ways to refine it."
         private const val ICON_BRIEF =
-            "Design rules for an Android app icon: square 1:1 artwork that fills the whole canvas edge to edge " +
-                "(no rounded corners, no border, no drop shadow, no mockup, no transparent areas). One bold, simple, memorable " +
-                "symbol centred inside the central 60% of the canvas so launcher masks never cut it. Strong contrast, a " +
-                "limited palette, clean modern shapes, readable at 48 px. No text unless the user asked for it."
+            "Make it a polished, high-quality modern app icon, the kind a top designer would ship: rich but clean (soft gradients, depth, " +
+                "subtle lighting are welcome). Square 1:1 artwork that fills the whole canvas edge to edge (no rounded corners, no border, " +
+                "no mockup, no device frame, no transparent areas). One bold, memorable subject centred inside the central 60% of the " +
+                "canvas so launcher masks never cut it. Strong contrast, limited palette, readable at 48 px. No text unless the user asked for it."
     }
 }
