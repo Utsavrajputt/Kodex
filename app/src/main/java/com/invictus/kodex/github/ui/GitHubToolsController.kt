@@ -218,7 +218,8 @@ class GitHubToolsController(
     fun onResume() {
         val s = _state.value
         refreshDownloaded()
-        if (s.installing) _state.update { it.copy(installing = false, installPhase = InstallPhase.Idle) }
+        // Do NOT reset "installing" here: coming back from the system installer does not mean the install is over
+        // (it keeps running after "Install" is tapped). The installer's own result event (or the timeout) ends it.
         if (s.installDialog == InstallDialog.UnknownSources && installer.canRequestInstalls()) {
             _state.update { it.copy(installDialog = null) }
             onInstallTapped()
@@ -772,9 +773,12 @@ class GitHubToolsController(
 
     fun unknownSourcesIntent(): Intent = installer.unknownSourcesIntent()
 
+    private var installSeq = 0
+
     private fun startInstall() {
         val r = _state.value.ready ?: return
         _state.update { it.copy(installing = true, installPhase = InstallPhase.Preparing) }
+        val mine = ++installSeq
         installedBuilds.begin(r.inspect.info.packageName, r.buildSha)
         scope.launch {
             try {
@@ -783,6 +787,11 @@ class GitHubToolsController(
                 notifier.clearDownloadComplete()
                 installer.install(r.file)
                 _state.update { if (it.installing && it.installPhase == InstallPhase.Preparing) it.copy(installPhase = InstallPhase.Installing) else it }
+                // Safety net (e.g. the plain-intent fallback reports nothing back): the button never stays stuck.
+                scope.launch {
+                    delay(INSTALL_TIMEOUT_MS)
+                    if (mine == installSeq) _state.update { if (it.installing) it.copy(installing = false, installPhase = InstallPhase.Idle) else it }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1065,6 +1074,7 @@ class GitHubToolsController(
         private const val BIG_CLEANUP = 5
         private const val SECTION_ARTIFACTS = "artifacts"
         private const val SECTION_DEPLOYMENTS = "deployments"
+        private const val INSTALL_TIMEOUT_MS = 180_000L
         private const val POLL_TRIES = 5
         private const val POLL_INTERVAL_MS = 3_000L
         private const val DEPLOYMENT_STATES = 5

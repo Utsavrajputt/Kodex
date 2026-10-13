@@ -285,7 +285,7 @@ class AllApksViewModel(
     /** Safety net: if the system installer never reports back (e.g. its prompt was ignored), the button comes back. */
     private fun armInstallingTimeout(id: Long) {
         viewModelScope.launch {
-            kotlinx.coroutines.delay(120_000)
+            kotlinx.coroutines.delay(180_000)
             _state.update { if (it.installingId == id) it.copy(installingId = null, installPhase = InstallPhase.Idle) else it }
         }
     }
