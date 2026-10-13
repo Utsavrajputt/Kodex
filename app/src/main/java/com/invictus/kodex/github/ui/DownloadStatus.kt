@@ -261,3 +261,10 @@ fun WaveProgressBar(
         }
     }
 }
+
+/** Text of the Install button for each [InstallPhase]. */
+internal fun installPhaseLabel(phase: InstallPhase): Int = when (phase) {
+    InstallPhase.Preparing -> R.string.gh_install_preparing
+    InstallPhase.Installed -> R.string.gh_install_done
+    else -> R.string.gh_installing
+}

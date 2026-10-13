@@ -23,6 +23,7 @@ import com.invictus.kodex.github.install.ApkInstallInfo
 import com.invictus.kodex.github.install.ApkInstaller
 import com.invictus.kodex.github.install.BuildSha
 import com.invictus.kodex.github.install.InstallEvents
+import com.invictus.kodex.github.install.InstallResult
 import com.invictus.kodex.github.install.InstalledApps
 import com.invictus.kodex.github.install.InstalledBuilds
 import com.invictus.kodex.github.install.ArtifactZipException
@@ -108,6 +109,7 @@ data class AllApksState(
     val transfer: RowTransfer? = null,
     /** Artifact whose install was handed to the system installer and has not reported back yet. */
     val installingId: Long? = null,
+    val installPhase: InstallPhase = InstallPhase.Idle,
     /** Artifact ids whose APK is already on the device (row shows Install + Delete instead of Download). */
     val downloaded: Set<Long> = emptySet(),
     /** Install / Update / Open for each downloaded artifact id. */
@@ -150,7 +152,22 @@ class AllApksViewModel(
         ArmBuildWatch.schedule(appContext)
         refreshDownloaded()
         // An install finished (Install -> Open) while this screen is open.
-        viewModelScope.launch { InstallEvents.results.collect { _state.update { st -> st.copy(installingId = null) }; refreshDownloaded() } }
+        viewModelScope.launch {
+            InstallEvents.results.collect { result ->
+                if (result == InstallResult.Success && _state.value.installingId != null) {
+                    // "Installed" stays on the button for a moment, then it turns into Open.
+                    _state.update { it.copy(installPhase = InstallPhase.Installed) }
+                    refreshDownloaded()
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(1_500)
+                        _state.update { it.copy(installingId = null, installPhase = InstallPhase.Idle) }
+                    }
+                } else {
+                    _state.update { it.copy(installingId = null, installPhase = InstallPhase.Idle) }
+                    refreshDownloaded()
+                }
+            }
+        }
         load()
     }
 
@@ -269,7 +286,7 @@ class AllApksViewModel(
     private fun armInstallingTimeout(id: Long) {
         viewModelScope.launch {
             kotlinx.coroutines.delay(120_000)
-            _state.update { if (it.installingId == id) it.copy(installingId = null) else it }
+            _state.update { if (it.installingId == id) it.copy(installingId = null, installPhase = InstallPhase.Idle) else it }
         }
     }
 
@@ -332,12 +349,15 @@ class AllApksViewModel(
                         notifier.clearLive()
                         installedBuilds.begin(inspected.info.packageName, row.artifact.sha?.takeIf { it.isNotBlank() } ?: BuildSha.fromArtifactName(row.artifact.name))
                         notifier.clearDownloadComplete()
-                        _state.update { it.copy(installingId = row.artifact.id) }
+                        _state.update { it.copy(transfer = null, installingId = row.artifact.id, installPhase = InstallPhase.Preparing) }
                         try {
                             installer.install(apk)
                         } catch (e: Exception) {
-                            _state.update { it.copy(installingId = null) }
+                            _state.update { it.copy(installingId = null, installPhase = InstallPhase.Idle) }
                             throw e
+                        }
+                        _state.update {
+                            if (it.installingId == row.artifact.id && it.installPhase == InstallPhase.Preparing) it.copy(installPhase = InstallPhase.Installing) else it
                         }
                         armInstallingTimeout(row.artifact.id)
                     }

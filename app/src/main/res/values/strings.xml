@@ -1076,6 +1076,8 @@
     <string name="gh_transfer_eta">ETA %1$s</string>
     <string name="gh_transfer_speed">%1$s/s</string>
     <string name="gh_installing">Installing…</string>
+    <string name="gh_install_preparing">Preparing…</string>
+    <string name="gh_install_done">Installed</string>
     <string name="gh_transfer_preparing_save">Preparing file…</string>
     <string name="gh_download_too_large">The download is larger than the allowed size and was stopped.</string>
     <string name="gh_download_incomplete">The download was cut short. Try again.</string>

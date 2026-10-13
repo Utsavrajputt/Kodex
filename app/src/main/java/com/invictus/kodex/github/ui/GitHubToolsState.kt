@@ -100,6 +100,9 @@ data class DownloadedApk(val artifactId: Long, val label: String, val file: File
 
 enum class InstallDialog { UnknownSources, SelfInstall }
 
+/** What the Install button says while an install runs: Preparing -> Installing -> Installed. */
+enum class InstallPhase { Idle, Preparing, Installing, Installed }
+
 data class CleanupState(
     val open: Boolean = false,
     val filters: CleanupFilters = CleanupFilters(),
@@ -131,6 +134,7 @@ data class GitHubToolsState(
     val transfer: Transfer? = null,
     val ready: ReadyApk? = null,
     val installing: Boolean = false,
+    val installPhase: InstallPhase = InstallPhase.Idle,
     val installDialog: InstallDialog? = null,
     val pendingSave: PendingSave? = null,
 

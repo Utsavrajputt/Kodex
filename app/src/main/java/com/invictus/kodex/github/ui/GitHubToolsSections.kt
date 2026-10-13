@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.clickable
@@ -262,7 +263,7 @@ fun ApkCard(
                             timeAgoOrDate(Instant.ofEpochMilli(fallbackLocal.modifiedAt)),
                         ).filter { it.isNotBlank() }.joinToString(" \u2022 "),
                     )
-                    ApkActions(fallbackLocal, state.installInfo[fallbackLocal.artifactId], state.installing, busy, tools)
+                    ApkActions(fallbackLocal, state.installInfo[fallbackLocal.artifactId], state.installing, state.installPhase, busy, tools)
                 }
                 else -> {
                     ApkHeader(projectPath, ownerLogin, stringResource(R.string.gh_apk_title), "")
@@ -340,8 +341,8 @@ private fun ApkVariant(
                 accent = p.accent, track = p.onCard.copy(alpha = 0.12f), textColor = p.onCardMuted,
                 canPause = (transfer.progress ?: 0f) < 1f,
             )
-            local != null -> ApkActions(local, state.installInfo[local.artifactId], state.installing, busy, tools)
-            justDownloaded != null -> ApkActions(justDownloaded, state.installInfo[justDownloaded.artifactId], state.installing, busy, tools)
+            local != null -> ApkActions(local, state.installInfo[local.artifactId], state.installing, state.installPhase, busy, tools)
+            justDownloaded != null -> ApkActions(justDownloaded, state.installInfo[justDownloaded.artifactId], state.installing, state.installPhase, busy, tools)
             else -> GhPrimaryButton(
                 onClick = { tools.downloadApk(ApkCandidate(a, universal)) },
                 enabled = !busy,
@@ -360,22 +361,28 @@ private fun ApkVariant(
 
 /** APK already on the device: big Install / Update / Open, plus open-folder (save) and a clearly separate Delete. */
 @Composable
-private fun ApkActions(d: DownloadedApk, info: ApkInstallInfo?, installing: Boolean, busy: Boolean, tools: GitHubToolsController) {
+private fun ApkActions(d: DownloadedApk, info: ApkInstallInfo?, installing: Boolean, phase: InstallPhase, busy: Boolean, tools: GitHubToolsController) {
     val p = ghPalette()
     val action = info?.action ?: ApkAction.Install
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
         GhPrimaryButton(
             onClick = { if (action == ApkAction.Open) tools.openInstalled(d) else tools.installDownloaded(d) },
-            enabled = !busy,
+            enabled = !busy && phase != InstallPhase.Installed,
             modifier = Modifier.weight(1f),
         ) {
-            if (installing) {
-                CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = p.onInstall)
+            if (installing || phase == InstallPhase.Installed) {
+                if (phase == InstallPhase.Installed) {
+                    Icon(XIcons.Check, contentDescription = null, modifier = Modifier.size(22.dp), tint = p.onInstall)
+                } else {
+                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = p.onInstall)
+                }
                 Spacer(Modifier.width(10.dp))
-                Text(
-                    stringResource(R.string.gh_installing),
-                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = p.onInstall,
-                )
+                Crossfade(targetState = phase, label = "install_phase") { ph ->
+                    Text(
+                        stringResource(installPhaseLabel(ph)),
+                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = p.onInstall,
+                    )
+                }
             } else {
                 Icon(apkActionIcon(action), contentDescription = null, modifier = Modifier.size(22.dp), tint = p.onInstall)
                 Spacer(Modifier.width(10.dp))
@@ -462,16 +469,15 @@ fun ReadyApkBody(
     }
 }
 
-// ---- Artifacts section: the rest of the latest build (the ARM64 ones are in the APK card) -------
+// ---- Artifacts section: every live artifact of the latest build (ARM64 ones too) -------
 
-/** Live artifacts of the latest build that the APK card does not already show (armeabi, universal, ...). */
+/** Every live artifact of the latest build: ARM64 (also shown in the APK card), armeabi, universal, ... */
 internal fun extraArtifacts(state: GitHubToolsState, now: Instant = Instant.now()): List<GhArtifact> {
     val found = state.apk as? ApkCardState.Found
     val build = found?.let { ApkResolver.buildOf(state.artifacts, it.candidate.artifact) }
         ?: ApkResolver.newestBuild(state.artifacts, now)
-    val cardIds: Set<Long> = found?.variants?.map { it.id }?.toSet() ?: emptySet()
     return build
-        .filter { !it.isExpiredAt(now) && it.id !in cardIds && !ApkResolver.isArm64(it.name) }
+        .filter { !it.isExpiredAt(now) }
         .sortedBy { it.name.lowercase() }
 }
 
@@ -537,7 +543,11 @@ private fun ArtifactRow(a: GhArtifact, state: GitHubToolsState, tools: GitHubToo
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (local != null) {
+                    val installingThis = state.ready?.artifactId == a.id &&
+                        (state.installing || state.installPhase == InstallPhase.Installed)
+                    if (installingThis) {
+                        InstallPhasePill(state.installPhase)
+                    } else if (local != null) {
                         val action = state.installInfo[local.artifactId]?.action ?: ApkAction.Install
                         Row(
                             Modifier
@@ -583,6 +593,29 @@ private fun ArtifactRow(a: GhArtifact, state: GitHubToolsState, tools: GitHubToo
                 accent = p.accent, track = p.onCard.copy(alpha = 0.12f), textColor = p.onCardMuted,
                 modifier = Modifier.padding(top = 8.dp),
                 canPause = (transfer.progress ?: 0f) < 1f,
+            )
+        }
+    }
+}
+
+/** The Install pill of an artifact row while its install runs: spinner + Preparing / Installing, then a check. */
+@Composable
+private fun InstallPhasePill(phase: InstallPhase) {
+    val p = ghPalette()
+    Row(
+        Modifier.height(40.dp).clip(RoundedCornerShape(12.dp)).background(p.installBrush).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (phase == InstallPhase.Installed) {
+            Icon(XIcons.Check, contentDescription = null, modifier = Modifier.size(18.dp), tint = p.onInstall)
+        } else {
+            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = p.onInstall)
+        }
+        Crossfade(targetState = phase, label = "install_phase_pill") { ph ->
+            Text(
+                stringResource(installPhaseLabel(ph)),
+                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = p.onInstall,
             )
         }
     }

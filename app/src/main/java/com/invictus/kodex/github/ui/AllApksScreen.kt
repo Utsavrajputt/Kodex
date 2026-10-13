@@ -1,6 +1,7 @@
 package com.invictus.kodex.github.ui
 
 import android.text.format.Formatter
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -119,6 +120,7 @@ fun AllApksScreen(
                         build = build,
                         transfer = state.transfer,
                         installingId = state.installingId,
+                        installPhase = state.installPhase,
                         anyBusy = state.anyBusy,
                         downloaded = state.downloaded,
                         installInfo = state.installInfo,
@@ -141,6 +143,7 @@ private fun BuildCard(
     build: RepoBuild,
     transfer: RowTransfer?,
     installingId: Long?,
+    installPhase: InstallPhase,
     anyBusy: Boolean,
     downloaded: Set<Long>,
     installInfo: Map<Long, ApkInstallInfo>,
@@ -165,6 +168,7 @@ private fun BuildCard(
                     row = row,
                     transfer = transfer?.takeIf { it.artifactId == row.artifact.id },
                     installing = installingId == row.artifact.id,
+                    installPhase = installPhase,
                     downloaded = row.artifact.id in downloaded,
                     action = installInfo[row.artifact.id]?.action ?: ApkAction.Install,
                     anyBusy = anyBusy,
@@ -185,6 +189,7 @@ private fun ApkVariantBlock(
     row: ApkRow,
     transfer: RowTransfer?,
     installing: Boolean,
+    installPhase: InstallPhase,
     downloaded: Boolean,
     action: ApkAction,
     anyBusy: Boolean,
@@ -234,7 +239,7 @@ private fun ApkVariantBlock(
                 accent = cs.primary, track = cs.onPrimaryContainer.copy(alpha = 0.15f), textColor = cs.onPrimaryContainer.copy(alpha = 0.75f),
                 canPause = transfer.total <= 0 || transfer.downloaded < transfer.total,
             )
-        } else if (downloaded) {
+        } else if (downloaded || installing) {
             // On the device: Install / Update / Open, plus Delete.
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(
@@ -242,9 +247,15 @@ private fun ApkVariantBlock(
                     enabled = !anyBusy && !installing, modifier = Modifier.weight(1f).height(44.dp),
                 ) {
                     if (installing) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = cs.onPrimary)
+                        if (installPhase == InstallPhase.Installed) {
+                            Icon(XIcons.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        } else {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = cs.onPrimary)
+                        }
                         Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.gh_installing), style = MaterialTheme.typography.labelLarge)
+                        Crossfade(targetState = installPhase, label = "install_phase") { ph ->
+                            Text(stringResource(installPhaseLabel(ph)), style = MaterialTheme.typography.labelLarge)
+                        }
                     } else {
                         Text(stringResource(apkActionLabel(action)), style = MaterialTheme.typography.labelLarge)
                     }

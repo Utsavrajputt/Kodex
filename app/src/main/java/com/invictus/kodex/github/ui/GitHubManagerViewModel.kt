@@ -247,6 +247,8 @@ class GitHubManagerViewModel(
                         _state.update { st ->
                             st.copy(live = LiveBuild(latest, progress), runs = st.runs.map { r -> if (r.id == latest.id) latest else r })
                         }
+                        // The APK is uploaded before the run is marked finished: show it as soon as it is there.
+                        tools.showUploadedBuild(active.id)
                         delay(LIVE_ACTIVE_MS)
                     }
                 } else {
@@ -379,7 +381,7 @@ class GitHubManagerViewModel(
     companion object {
         private const val SECTION_RUNS = "runs"
         private const val REFRESH_AFTER_MS = 1_500L
-        private const val LIVE_ACTIVE_MS = 6_000L
+        private const val LIVE_ACTIVE_MS = 4_000L
         private const val LIVE_IDLE_MS = 20_000L
         private const val LIVE_WAIT_MS = 2_000L
         private const val AFTER_DONE_MS = 2_500L

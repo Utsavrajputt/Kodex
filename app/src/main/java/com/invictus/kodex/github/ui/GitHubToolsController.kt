@@ -218,7 +218,7 @@ class GitHubToolsController(
     fun onResume() {
         val s = _state.value
         refreshDownloaded()
-        if (s.installing) _state.update { it.copy(installing = false) }
+        if (s.installing) _state.update { it.copy(installing = false, installPhase = InstallPhase.Idle) }
         if (s.installDialog == InstallDialog.UnknownSources && installer.canRequestInstalls()) {
             _state.update { it.copy(installDialog = null) }
             onInstallTapped()
@@ -438,6 +438,39 @@ class GitHubToolsController(
         }
     }
 
+    /**
+     * While a run is still going: show its ARM64 build(s) in the APK card the moment they are uploaded, without
+     * waiting for the run to finish (the finished run re-checks everything through [loadArtifactsAndApk]).
+     */
+    suspend fun showUploadedBuild(runId: Long) {
+        val repo = repoProvider() ?: return
+        try {
+            val page = repo.artifacts(1)
+            val now = clock()
+            val defaultBranch = repoRefProvider()?.defaultBranch
+            val arm = page.items.filter {
+                it.runId == runId && ApkResolver.isArm64(it.name) && !it.isExpiredAt(now) &&
+                    (defaultBranch == null || it.branch == defaultBranch)
+            }
+            if (arm.isEmpty()) return
+            val shown = (_state.value.apk as? ApkCardState.Found)?.variants?.map { it.id }?.toSet()
+            if (shown != null && arm.all { it.id in shown }) return
+            val candidate = ApkCandidate(arm.maxBy { it.id }, false)
+            _state.update {
+                it.copy(
+                    artifacts = (page.items + it.artifacts).distinctBy { a -> a.id },
+                    artifactsLoading = false,
+                    apk = ApkCardState.Found(candidate, ApkResolver.siblingsOf(candidate, page.items, now)),
+                )
+            }
+            repoRefProvider()?.let { ref -> ArmBuildWatch.markSeen(appContext, ref, arm.maxOf { it.id }) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: GitHubError) {
+            // Not fatal: the next tick (or the finished run) tries again.
+        }
+    }
+
     fun loadMoreArtifacts() {
         val repo = repoProvider() ?: return
         val s = _state.value
@@ -586,7 +619,7 @@ class GitHubToolsController(
                     TransferPurpose.Install -> prepareInstall(file, artifact, fromApkCard)
                     TransferPurpose.Save -> prepareSave(file, artifact)
                 }
-                if (purpose == TransferPurpose.Install) {
+                if (purpose == TransferPurpose.Install && fromApkCard) {
                     // Tapping the notification opens the system installer for the downloaded APK.
                     _state.value.ready?.file?.let { notifier.downloadComplete(it, artifact.name) }
                 }
@@ -642,7 +675,16 @@ class GitHubToolsController(
             return
         }
         val sha = artifact.sha?.takeIf { it.isNotBlank() } ?: BuildSha.fromArtifactName(artifact.name)
-        _state.update { it.copy(ready = ReadyApk(artifact.id, artifact.name, apk, inspected, fromApkCard, buildSha = sha)) }
+        _state.update { it.copy(ready = ReadyApk(artifact.id, artifact.name, apk, inspected, fromApkCard, silent = !fromApkCard, buildSha = sha)) }
+        if (!fromApkCard) {
+            // Started from the artifacts list: no details dialog, straight to the installer (the system still confirms).
+            if (InstallDecision.isBlocked(inspected.kind)) {
+                _state.update { it.copy(ready = null) }
+                emit(GhEvent.Snack(GhText.Res(R.string.gh_ready_downgrade)))
+            } else {
+                onInstallTapped()
+            }
+        }
     }
 
     private suspend fun prepareSave(zip: File, artifact: GhArtifact) {
@@ -732,7 +774,7 @@ class GitHubToolsController(
 
     private fun startInstall() {
         val r = _state.value.ready ?: return
-        _state.update { it.copy(installing = true) }
+        _state.update { it.copy(installing = true, installPhase = InstallPhase.Preparing) }
         installedBuilds.begin(r.inspect.info.packageName, r.buildSha)
         scope.launch {
             try {
@@ -740,10 +782,11 @@ class GitHubToolsController(
                 notifier.clearLive()
                 notifier.clearDownloadComplete()
                 installer.install(r.file)
+                _state.update { if (it.installing && it.installPhase == InstallPhase.Preparing) it.copy(installPhase = InstallPhase.Installing) else it }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(installing = false) }
+                _state.update { it.copy(installing = false, installPhase = InstallPhase.Idle) }
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_install_failed, listOf(e.message.orEmpty()))))
             }
         }
@@ -752,10 +795,16 @@ class GitHubToolsController(
     private fun onInstallResult(result: InstallResult) {
         val s = _state.value
         if (!s.installing && s.ready == null) return
-        _state.update { it.copy(installing = false) }
+        _state.update {
+            it.copy(installing = false, installPhase = if (result == InstallResult.Success) InstallPhase.Installed else InstallPhase.Idle)
+        }
         when (result) {
             InstallResult.Success -> {
-                _state.update { it.copy(ready = null) }
+                // "Installed" stays on the button for a moment, then it turns into Open.
+                scope.launch {
+                    delay(1_500)
+                    _state.update { if (it.installPhase == InstallPhase.Installed) it.copy(ready = null, installPhase = InstallPhase.Idle) else it }
+                }
                 refreshDownloaded() // the buttons turn into Open
                 emit(GhEvent.Snack(GhText.Res(R.string.gh_install_ok)))
             }
