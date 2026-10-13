@@ -13,6 +13,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -21,7 +24,7 @@ import com.invictus.kodex.R
 import com.invictus.kodex.feature.editor.EditorViewModel
 import com.invictus.kodex.ui.icons.XIcons
 
-/** Advanced: performance switches and the diagnostics logs (crash logs, git logs). */
+/** Advanced: performance switches, settings export/import and the diagnostics logs (crash logs, git logs). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsDiagnosticsScreen(
@@ -32,6 +35,7 @@ fun SettingsDiagnosticsScreen(
     modifier: Modifier = Modifier,
 ) {
     val gitStatusPollingEnabled by viewModel.gitStatusPollingEnabled.collectAsStateWithLifecycle()
+    var showBackup by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier,
@@ -46,6 +50,7 @@ fun SettingsDiagnosticsScreen(
             )
         },
     ) { innerPadding ->
+        if (showBackup) SettingsBackupDialog(onDismiss = { showBackup = false })
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -60,6 +65,19 @@ fun SettingsDiagnosticsScreen(
                     subtitle = stringResource(R.string.settings_git_status_polling_desc),
                     checked = gitStatusPollingEnabled,
                     onCheckedChange = viewModel::setGitStatusPollingEnabled,
+                )
+            }
+
+            SettingsSectionHeader(stringResource(R.string.settings_group_backup))
+            SettingsSectionCard {
+                CategoryRow(
+                    icon = XIcons.Restore,
+                    chevron = XIcons.ChevronRight,
+                    title = stringResource(R.string.settings_backup_title),
+                    subtitle = stringResource(R.string.settings_backup_desc),
+                    isFirst = true,
+                    isLast = true,
+                    onClick = { showBackup = true },
                 )
             }
 

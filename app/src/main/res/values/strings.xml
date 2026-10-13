@@ -1268,4 +1268,37 @@
     <string name="ai_settings_universal_sub">Your name, language, style: things the AI should know in every project. Tap Memory to open and edit them.</string>
     <string name="ai_settings_memory">Memory</string>
     <string name="ai_settings_memory_desc">Let the AI save useful notes as you chat, about you or about a project. Tap to see and edit universal memory and instructions. Notes stay in the app, not in your project folder.</string>
+
+    <!-- Settings export / import (Advanced) -->
+    <string name="settings_group_backup">Import &amp; export</string>
+    <string name="settings_backup_title">Export &amp; import settings</string>
+    <string name="settings_backup_desc">Back up and restore your Kodex settings</string>
+    <string name="backup_dialog_title">Kodex settings</string>
+    <string name="backup_secrets_note">API keys and GitHub tokens are never included. Sign in again after importing.</string>
+    <string name="backup_cat_appearance">Appearance</string>
+    <string name="backup_cat_appearance_desc">App theme, editor colours and font size</string>
+    <string name="backup_cat_editor">Editor</string>
+    <string name="backup_cat_editor_desc">Symbol bar, autocomplete, search and tab options</string>
+    <string name="backup_cat_behavior">Behavior</string>
+    <string name="backup_cat_behavior_desc">File tree, project sheet, clone folder and Git toggles</string>
+    <string name="backup_cat_ai">AI assistant</string>
+    <string name="backup_cat_ai_desc">Provider, models, instructions and exclusions</string>
+    <string name="backup_cat_github">GitHub</string>
+    <string name="backup_cat_github_desc">Run filters and section layout</string>
+    <string name="backup_cat_chats">AI chats</string>
+    <string name="backup_cat_chats_desc">Chats of all projects, without images</string>
+    <string name="backup_import">Import</string>
+    <string name="backup_export">Export</string>
+    <string name="backup_mode_title">Import settings</string>
+    <string name="backup_mode_body">This backup has: %1$s.\n\nReplace resets those categories to exactly what the backup holds, and deletes your current AI chats if they are included.\n\nMerge keeps what you have: settings from the backup are applied on top, and AI chats you already have are kept.</string>
+    <string name="backup_replace">Replace</string>
+    <string name="backup_merge">Merge</string>
+    <string name="backup_export_done">Exported %1$d categories (%2$d chats).</string>
+    <string name="backup_import_done">Imported: %1$s.</string>
+    <string name="backup_import_chats">Chats added: %1$d, skipped: %2$d.</string>
+    <string name="backup_error_none_selected">Select at least one category.</string>
+    <string name="backup_error_nothing">None of the selected categories are in this backup.</string>
+    <string name="backup_error_invalid">This is not a valid Kodex backup file.</string>
+    <string name="backup_error_export">Export failed: %1$s</string>
+    <string name="backup_error_import">Import failed: %1$s</string>
 </resources>

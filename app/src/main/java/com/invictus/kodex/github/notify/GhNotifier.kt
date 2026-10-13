@@ -26,6 +26,7 @@ class GhNotifier(context: Context) {
     private val ctx = context.applicationContext
     private val nm = NotificationManagerCompat.from(ctx)
     private val accent = ContextCompat.getColor(ctx, R.color.notif_accent)
+    private val errorTint = ContextCompat.getColor(ctx, R.color.notif_error)
 
     init {
         if (Build.VERSION.SDK_INT >= 26) {
@@ -121,7 +122,7 @@ class GhNotifier(context: Context) {
         if (ok && (kind == KIND_DOWNLOAD || kind == KIND_INSTALL)) return
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(if (ok) R.drawable.ic_stat_check else R.drawable.ic_stat_error)
-            .setColor(accent)
+            .setColor(if (ok) accent else errorTint)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -149,7 +150,7 @@ class GhNotifier(context: Context) {
     fun buildDone(runId: Long, title: String, text: String, ok: Boolean, projectPath: String? = null) {
         val n = NotificationCompat.Builder(ctx, CHANNEL_BUILDS)
             .setSmallIcon(if (ok) R.drawable.ic_stat_check else R.drawable.ic_stat_error)
-            .setColor(accent)
+            .setColor(if (ok) accent else errorTint)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))

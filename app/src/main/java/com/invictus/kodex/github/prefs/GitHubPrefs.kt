@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.invictus.kodex.core.backup.PrefsJson
 import com.invictus.kodex.github.data.RunStatusFilter
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -19,6 +20,15 @@ private val Context.gitHubDataStore: DataStore<Preferences> by preferencesDataSt
 class GitHubPrefs(private val context: Context) {
 
     data class RunFilters(val status: RunStatusFilter = RunStatusFilter.All, val workflowId: Long? = null)
+
+    /** Settings backup: every stored entry (run filters, section expansion), as typed JSON. */
+    suspend fun exportEntries(accept: (String) -> Boolean) =
+        PrefsJson.encode(context.gitHubDataStore.data.first().asMap().mapKeys { it.key.name }, accept)
+
+    /** Settings backup: writes [values]; [replace] first clears every key that passes [accept]. */
+    suspend fun importEntries(values: Map<String, Any>, accept: (String) -> Boolean, replace: Boolean) {
+        context.gitHubDataStore.edit { PrefsJson.applyTo(it, values, accept, replace) }
+    }
 
     suspend fun runFilters(project: String): RunFilters {
         val p = context.gitHubDataStore.data.first()

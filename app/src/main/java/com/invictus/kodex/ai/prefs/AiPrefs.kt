@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.invictus.kodex.ai.provider.AiModel
+import com.invictus.kodex.core.backup.PrefsJson
 import com.invictus.kodex.ai.provider.GeminiProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -26,6 +27,15 @@ class AiPrefs(private val context: Context) {
         val GLOBAL_INSTRUCTIONS = stringPreferencesKey("ai.global_instructions")
         val MEMORY_ENABLED = booleanPreferencesKey("ai.memory_enabled")
         fun model(p: String) = stringPreferencesKey("ai.model.$p")
+    }
+
+    /** Settings backup: every stored entry whose key passes [accept], as typed JSON. */
+    suspend fun exportEntries(accept: (String) -> Boolean) =
+        PrefsJson.encode(context.aiPrefsStore.data.first().asMap().mapKeys { it.key.name }, accept)
+
+    /** Settings backup: writes [values]; [replace] first clears every key that passes [accept]. */
+    suspend fun importEntries(values: Map<String, Any>, accept: (String) -> Boolean, replace: Boolean) {
+        context.aiPrefsStore.edit { PrefsJson.applyTo(it, values, accept, replace) }
     }
 
     val providerId: Flow<String> = context.aiPrefsStore.data.map { it[K.PROVIDER] ?: "claude" }

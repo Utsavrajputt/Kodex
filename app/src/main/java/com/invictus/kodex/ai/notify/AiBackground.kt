@@ -113,7 +113,7 @@ class AiNotifier(context: Context) {
         val body = text.trim().replace(Regex("\\s+"), " ").take(160).ifEmpty { project }
         val n = NotificationCompat.Builder(ctx, CHANNEL_DONE)
             .setSmallIcon(if (ok) R.drawable.ic_stat_ai else R.drawable.ic_stat_error)
-            .setColor(ContextCompat.getColor(ctx, R.color.notif_accent))
+            .setColor(ContextCompat.getColor(ctx, if (ok) R.color.notif_accent else R.color.notif_error))
             .setContentTitle(if (project.isBlank()) title else "$title · $project")
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))

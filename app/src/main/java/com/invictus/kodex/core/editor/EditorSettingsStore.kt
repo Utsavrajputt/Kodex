@@ -9,7 +9,9 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.invictus.kodex.core.backup.PrefsJson
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.editorSettingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "editor_settings")
@@ -45,6 +47,15 @@ class EditorSettingsStore(private val context: Context) {
         val FILE_TREE_SHOW_HIDDEN = booleanPreferencesKey("file_tree_show_hidden")
         val FILE_TREE_HSCROLL = booleanPreferencesKey("file_tree_hscroll_long_names")
         val BROWSE_SHORTCUTS = stringPreferencesKey("browse_shortcuts")
+    }
+
+    /** Settings backup: every stored entry whose key passes [accept], as typed JSON. */
+    suspend fun exportEntries(accept: (String) -> Boolean) =
+        PrefsJson.encode(context.editorSettingsDataStore.data.first().asMap().mapKeys { it.key.name }, accept)
+
+    /** Settings backup: writes [values]; [replace] first clears every key that passes [accept]. */
+    suspend fun importEntries(values: Map<String, Any>, accept: (String) -> Boolean, replace: Boolean) {
+        context.editorSettingsDataStore.edit { PrefsJson.applyTo(it, values, accept, replace) }
     }
 
     val themeId: Flow<String> = context.editorSettingsDataStore.data

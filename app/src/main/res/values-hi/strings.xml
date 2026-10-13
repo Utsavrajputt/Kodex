@@ -241,4 +241,37 @@
         <item quantity="other">%d कमिट</item>
     </plurals>
     <string name="about_made_by">Invictus द्वारा ♥️ के साथ बनाया गया</string>
+
+    <!-- Settings export / import (Advanced) -->
+    <string name="settings_group_backup">इम्पोर्ट और एक्सपोर्ट</string>
+    <string name="settings_backup_title">सेटिंग्स एक्सपोर्ट और इम्पोर्ट</string>
+    <string name="settings_backup_desc">अपनी Kodex सेटिंग्स का बैकअप लें और रीस्टोर करें</string>
+    <string name="backup_dialog_title">Kodex सेटिंग्स</string>
+    <string name="backup_secrets_note">API कीज़ और GitHub टोकन कभी शामिल नहीं होते। इम्पोर्ट के बाद दोबारा साइन इन करें।</string>
+    <string name="backup_cat_appearance">दिखावट</string>
+    <string name="backup_cat_appearance_desc">ऐप थीम, एडिटर रंग और फ़ॉन्ट साइज़</string>
+    <string name="backup_cat_editor">एडिटर</string>
+    <string name="backup_cat_editor_desc">सिंबल बार, ऑटोकम्प्लीट, सर्च और टैब विकल्प</string>
+    <string name="backup_cat_behavior">व्यवहार</string>
+    <string name="backup_cat_behavior_desc">फ़ाइल ट्री, प्रोजेक्ट शीट, क्लोन फ़ोल्डर और Git टॉगल</string>
+    <string name="backup_cat_ai">AI असिस्टेंट</string>
+    <string name="backup_cat_ai_desc">प्रोवाइडर, मॉडल, निर्देश और एक्सक्लूज़न</string>
+    <string name="backup_cat_github">GitHub</string>
+    <string name="backup_cat_github_desc">रन फ़िल्टर और सेक्शन लेआउट</string>
+    <string name="backup_cat_chats">AI चैट</string>
+    <string name="backup_cat_chats_desc">सभी प्रोजेक्ट्स की चैट, बिना इमेज के</string>
+    <string name="backup_import">इम्पोर्ट</string>
+    <string name="backup_export">एक्सपोर्ट</string>
+    <string name="backup_mode_title">सेटिंग्स इम्पोर्ट करें</string>
+    <string name="backup_mode_body">इस बैकअप में है: %1$s।\n\nReplace उन कैटेगरी को ठीक बैकअप जैसा कर देता है, और अगर AI चैट शामिल हैं तो मौजूदा चैट हटा देता है।\n\nMerge आपका मौजूदा डेटा रखता है: बैकअप की सेटिंग्स ऊपर से लागू होती हैं और मौजूदा AI चैट बनी रहती हैं।</string>
+    <string name="backup_replace">Replace</string>
+    <string name="backup_merge">Merge</string>
+    <string name="backup_export_done">%1$d कैटेगरी एक्सपोर्ट हुईं (%2$d चैट)।</string>
+    <string name="backup_import_done">इम्पोर्ट हुआ: %1$s।</string>
+    <string name="backup_import_chats">चैट जोड़ी गईं: %1$d, छोड़ी गईं: %2$d।</string>
+    <string name="backup_error_none_selected">कम से कम एक कैटेगरी चुनें।</string>
+    <string name="backup_error_nothing">चुनी गई कोई भी कैटेगरी इस बैकअप में नहीं है।</string>
+    <string name="backup_error_invalid">यह वैध Kodex बैकअप फ़ाइल नहीं है।</string>
+    <string name="backup_error_export">एक्सपोर्ट विफल: %1$s</string>
+    <string name="backup_error_import">इम्पोर्ट विफल: %1$s</string>
 </resources>

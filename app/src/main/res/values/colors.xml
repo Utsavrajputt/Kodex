@@ -7,4 +7,7 @@
 
     <!-- Accent tint for status-bar notification icons (Kodex teal). -->
     <color name="notif_accent">#FF26A69A</color>
+
+    <!-- Tint for failure notifications (build failed, AI could not finish). -->
+    <color name="notif_error">#FFE53935</color>
 </resources>
