@@ -5,6 +5,10 @@ import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -250,6 +254,17 @@ fun ApkCard(
     val busy = state.transfer?.paused == false || state.installing || state.pendingSave != null
 
     GhCard(p.apkCard, p.apkBorder) {
+      Box(Modifier.fillMaxWidth()) {
+        // Soft light from the top-right corner plus a faint Android mark: pure decoration, kept behind the text.
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(Brush.radialGradient(listOf(p.accent.copy(alpha = if (p.dark) 0.28f else 0.14f), Color.Transparent), center = Offset(Float.POSITIVE_INFINITY, 0f), radius = 900f)),
+        )
+        Icon(
+            XIcons.Android, contentDescription = null, tint = p.onCard,
+            modifier = Modifier.align(Alignment.TopEnd).offset(x = 28.dp, y = (-8).dp).size(132.dp).alpha(0.06f),
+        )
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             when {
                 found != null -> {
@@ -294,6 +309,7 @@ fun ApkCard(
                 }
             }
         }
+      }
     }
 }
 
@@ -343,6 +359,24 @@ private fun ApkInfoChip(text: String) {
             .border(1.dp, p.accent.copy(alpha = 0.28f), CircleShape)
             .padding(horizontal = 10.dp, vertical = 4.dp),
     )
+}
+
+@Composable
+private fun ApkStatusPill(text: String, color: Color, check: Boolean) {
+    Row(
+        Modifier
+            .clip(CircleShape)
+            .background(color.copy(alpha = 0.16f))
+            .border(1.dp, color.copy(alpha = 0.35f), CircleShape)
+            .padding(horizontal = 9.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (check) {
+            Icon(XIcons.Check, contentDescription = null, tint = color, modifier = Modifier.size(13.dp))
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(text, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = color, maxLines = 1)
+    }
 }
 
 /**
@@ -421,6 +455,15 @@ private fun ApkVariant(
                     enabled = !busy,
                     onClick = { tools.downloadApk(ApkCandidate(a, universal)) },
                 )
+            }
+        } else if (transfer == null && installed != null) {
+            {
+                val action = state.installInfo[installed.artifactId]?.action
+                when (action) {
+                    ApkAction.Open -> ApkStatusPill(stringResource(R.string.gh_apk_status_installed), p.success, true)
+                    ApkAction.Update -> ApkStatusPill(stringResource(R.string.gh_apk_status_update), p.accent, false)
+                    else -> ApkStatusPill(stringResource(R.string.gh_apk_status_downloaded), p.onCardMuted, false)
+                }
             }
         } else null,
     ) {

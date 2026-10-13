@@ -1061,6 +1061,9 @@
     <string name="gh_inputs_remove">Remove input</string>
 
     <!-- Latest APK -->
+    <string name="gh_apk_status_installed">Installed</string>
+    <string name="gh_apk_status_update">Update</string>
+    <string name="gh_apk_status_downloaded">Downloaded</string>
     <string name="gh_apk_latest">Latest APK</string>
     <string name="gh_apk_file_one">1 file</string>
     <string name="gh_apk_files_many">%1$d files</string>
