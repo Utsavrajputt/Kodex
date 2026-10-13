@@ -35,6 +35,7 @@ object ProjectMemory {
     const val MAX_EDIT_CHARS = 20_000
 
     private const val HEADER = "# Kodex project memory\n\n"
+    private const val GLOBAL_HEADER = "# Kodex universal memory\n\n"
 
     /** The two documents the sheet can edit. */
     enum class Doc { MEMORY, INSTRUCTIONS }
@@ -49,12 +50,15 @@ object ProjectMemory {
         return File(app.filesDir, "ai_memory/" + hash.take(16))
     }
 
+    /** The private folder for the universal (not tied to any project) memory, shared by every project. */
+    fun globalDir(app: Application): File = File(app.filesDir, "ai_memory/global")
+
     private fun fileOf(dir: File, doc: Doc) = File(dir, if (doc == Doc.MEMORY) MEMORY_NAME else INSTRUCTIONS_NAME)
 
     /** Memory text for the system prompt (scrubbed, newest part kept when too long); null when empty. */
     suspend fun load(dir: File): Found? = withContext(Dispatchers.IO) {
         val text = Redactor.scrub(readRaw(fileOf(dir, Doc.MEMORY))).trim()
-        if (text.isEmpty() || text == HEADER.trim()) return@withContext null
+        if (text.isEmpty() || text == HEADER.trim() || text == GLOBAL_HEADER.trim()) return@withContext null
         Found(if (text.length > MAX_SENT_CHARS) "… (older notes cut off)\n" + text.takeLast(MAX_SENT_CHARS) else text)
     }
 
@@ -86,14 +90,21 @@ object ProjectMemory {
 
     // ---- agent tool ----
 
-    /** What the `save_memory` tool talks to. [condense] rewrites an over-long file shorter (null = failed / unavailable). */
+    /**
+     * What the `save_memory` tool talks to. [dir] is the project's memory folder, [globalDir] the universal one
+     * (null = the tool may only touch the project). [condense] rewrites an over-long file shorter (null = failed / unavailable).
+     */
     class Store(
         private val dir: File,
+        private val globalDir: File? = null,
         private val condense: (suspend (String) -> String?)? = null,
     ) {
-        suspend fun update(add: List<String>, remove: List<String>): AgentTools.Outcome = withContext(Dispatchers.IO) {
+        suspend fun update(add: List<String>, remove: List<String>, global: Boolean = false): AgentTools.Outcome = withContext(Dispatchers.IO) {
             lock.withLock {
-                val f = fileOf(dir, Doc.MEMORY)
+                val target = if (global) globalDir ?: dir else dir
+                val header = if (global && globalDir != null) GLOBAL_HEADER else HEADER
+                val label = if (global && globalDir != null) "Universal memory" else "Memory"
+                val f = fileOf(target, Doc.MEMORY)
                 val current = readRaw(f)
                 val lines = current.lines().toMutableList()
                 val notes = lines.filter { it.trimStart().startsWith("- ") }.map { it.trim().removePrefix("- ").lowercase() }.toMutableSet()
@@ -121,26 +132,26 @@ object ProjectMemory {
                 }
 
                 var text = lines.joinToString("\n").trim()
-                if (!text.startsWith("#")) text = HEADER + text
+                if (!text.startsWith("#")) text = header + text
                 var note = ""
                 if (text.length > CONDENSE_AT && condense != null) {
-                    val shorter = runCatching { condense.invoke(text) }.getOrNull()?.let { clean(it) }
+                    val shorter = runCatching { condense.invoke(text) }.getOrNull()?.let { clean(it, header) }
                     if (shorter != null && shorter.length in 40 until text.length) {
                         note = " Memory was getting long, so it was condensed (${text.length} → ${shorter.length} chars)."
                         text = shorter
                     }
                 }
                 if (!writeAtomic(f, text + "\n")) return@withLock AgentTools.Outcome("Could not write the memory file.", isError = true)
-                AgentTools.Outcome("Memory updated: $added added, $removed removed.$note")
+                AgentTools.Outcome("$label updated: $added added, $removed removed.$note")
             }
         }
 
         /** Strips code fences the model may wrap around the file and makes sure it keeps the heading. */
-        private fun clean(raw: String): String? {
+        private fun clean(raw: String, header: String): String? {
             var t = raw.trim()
             if (t.startsWith("```")) t = t.removePrefix("```markdown").removePrefix("```md").removePrefix("```").removeSuffix("```").trim()
             if (t.isEmpty() || t.lines().none { it.trimStart().startsWith("- ") }) return null
-            return if (t.startsWith("#")) t else HEADER + t
+            return if (t.startsWith("#")) t else header + t
         }
     }
 

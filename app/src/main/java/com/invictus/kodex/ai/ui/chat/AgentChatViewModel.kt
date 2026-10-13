@@ -12,8 +12,10 @@ import com.invictus.kodex.ai.notify.AppVisibility
 import com.invictus.kodex.ai.AiRuntime
 import com.invictus.kodex.ai.Redactor
 import com.invictus.kodex.ai.agent.AgentPrompt
+import com.invictus.kodex.ai.agent.MemoryDocs
 import com.invictus.kodex.ai.agent.ProjectInstructions
 import com.invictus.kodex.ai.agent.ProjectMemory
+import com.invictus.kodex.ai.agent.ProjectMemoryDocs
 import com.invictus.kodex.ai.agent.AgentRunner
 import com.invictus.kodex.ai.agent.AgentSink
 import com.invictus.kodex.ai.agent.AgentTools
@@ -116,6 +118,8 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     private val root = File(projectPath)
     /** Memory + instructions live in the app's private storage, not in the project folder. */
     private val memDir = ProjectMemory.dirFor(app, projectPath)
+    /** Universal memory (about the user, shared by every project), also in the app's private storage. */
+    private val globalMemDir = ProjectMemory.globalDir(app)
     private var io: WorkspaceIo = DiskIo
 
     /** Set by the editor panel: evaluated on the main thread at send time (active file + selection). */
@@ -374,7 +378,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                 )
                 val auto = prefs.autoApply.first()
                 val memoryOn = prefs.memoryEnabled.first()
-                val memoryStore = if (memoryOn) ProjectMemory.Store(memDir) { text -> condenseMemory(provider, key, model, text) } else null
+                val memoryStore = if (memoryOn) ProjectMemory.Store(memDir, globalMemDir) { text -> condenseMemory(provider, key, model, text) } else null
                 val writer: suspend (FileChange) -> Boolean = { c -> writeThrough(c) }
                 synchronized(turnUndo) { turnUndo.clear() }
                 val r = AgentRunner(
@@ -395,11 +399,12 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                     .takeIf { it.isNotEmpty() }
                     ?.let { com.invictus.kodex.ai.Redactor.scrub(it).take(AiPrefs.GLOBAL_INSTRUCTIONS_MAX) }
                 val memory = if (memoryOn) ProjectMemory.load(memDir) else null
+                val globalMemory = if (memoryOn) ProjectMemory.load(globalMemDir) else null
                 r.run(
                     AgentPrompt.system(
                         root.name, topLevel, instructions,
                         canPaintImages = toolbox.canRaster, autoApply = auto,
-                        globalInstructions = globalInstructions, memoryEnabled = memoryOn, memory = memory,
+                        globalInstructions = globalInstructions, memoryEnabled = memoryOn, memory = memory, globalMemory = globalMemory,
                     ),
                     history, sink,
                 )
@@ -685,15 +690,8 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
 
     // ---- memory & instructions (per project) ----
 
-    /** Current text of the memory or the instructions ("" when nothing is saved yet). */
-    suspend fun readDoc(doc: ProjectMemory.Doc): String = ProjectMemory.readDoc(memDir, doc)
-
-    suspend fun writeDoc(doc: ProjectMemory.Doc, text: String): Boolean = ProjectMemory.writeDoc(memDir, doc, text)
-
-    /** Same as [writeDoc] but survives the sheet closing (used when it is dismissed with unsaved edits). */
-    fun writeDocInBackground(doc: ProjectMemory.Doc, text: String) {
-        viewModelScope.launch { writeDoc(doc, text) }
-    }
+    /** This project's memory + instructions, for the editor sheet opened from the chat. */
+    val projectDocs: MemoryDocs = ProjectMemoryDocs(memDir, viewModelScope)
 
     /** Asks the current model to shorten an over-long memory file; null on any failure (the file is then left as is). */
     private suspend fun condenseMemory(provider: AiProvider, key: String, model: String, text: String): String? = try {

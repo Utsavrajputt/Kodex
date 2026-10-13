@@ -118,6 +118,7 @@ private val MENTION_TAIL = Regex("(^|\\s)@(\\S*)$")
 @Composable
 fun AgentChatScreen(vm: AgentChatViewModel, projectName: String, onBack: () -> Unit, onOpenSettings: (() -> Unit)? = null) {
     var showHistory by remember { mutableStateOf(false) }
+    var showMemory by remember { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -132,6 +133,9 @@ fun AgentChatScreen(vm: AgentChatViewModel, projectName: String, onBack: () -> U
                     IconButton(onClick = { vm.refreshChats(); showHistory = true }) {
                         Icon(XIcons.Restore, contentDescription = stringResource(R.string.ai_chat_chat_history))
                     }
+                    IconButton(onClick = { showMemory = true }) {
+                        Icon(XIcons.AutoAwesome, contentDescription = stringResource(R.string.ai_chat_memory_menu))
+                    }
                     IconButton(onClick = { vm.newChat() }) { Icon(XIcons.Add, contentDescription = stringResource(R.string.ai_chat_new_chat)) }
                 },
             )
@@ -141,6 +145,7 @@ fun AgentChatScreen(vm: AgentChatViewModel, projectName: String, onBack: () -> U
             vm, Modifier.padding(padding).fillMaxSize().imePadding(),
             onOpenSettings = onOpenSettings,
             historyOpen = showHistory, onHistoryOpenChange = { showHistory = it },
+            memoryOpen = showMemory, onMemoryOpenChange = { showMemory = it },
             headerActions = false,
         )
     }
@@ -156,6 +161,9 @@ fun AgentChatContent(
     /** Hoisted history-sheet state (the full screen opens it from its top bar); null = the chat owns it. */
     historyOpen: Boolean? = null,
     onHistoryOpenChange: ((Boolean) -> Unit)? = null,
+    /** Same for the memory & instructions sheet. */
+    memoryOpen: Boolean? = null,
+    onMemoryOpenChange: ((Boolean) -> Unit)? = null,
     /** History / New chat buttons in the chat's own header row (off when the host puts them in its top bar). */
     headerActions: Boolean = true,
     title: @Composable () -> Unit = {},
@@ -188,7 +196,11 @@ fun AgentChatContent(
     val newChatEpoch by vm.newChatEpoch.collectAsState()
     var showPicker by remember { mutableStateOf(false) }
     var showModels by remember { mutableStateOf(false) }
-    var showMemory by remember { mutableStateOf(false) }
+    var ownMemory by remember { mutableStateOf(false) }
+    val showMemory = memoryOpen ?: ownMemory
+    val setMemory: (Boolean) -> Unit = { open ->
+        if (onMemoryOpenChange != null) onMemoryOpenChange(open) else ownMemory = open
+    }
 
     // A new chat (from anywhere, e.g. the host's top bar) starts with an empty draft.
     LaunchedEffect(newChatEpoch) {
@@ -240,6 +252,7 @@ fun AgentChatContent(
             }
             if (headerActions) {
                 IconButton(onClick = { vm.refreshChats(); setHistory(true) }) { Icon(XIcons.Restore, contentDescription = stringResource(R.string.ai_chat_chat_history)) }
+                IconButton(onClick = { setMemory(true) }) { Icon(XIcons.AutoAwesome, contentDescription = stringResource(R.string.ai_chat_memory_menu)) }
                 IconButton(onClick = { vm.newChat() }) { Icon(XIcons.Add, contentDescription = stringResource(R.string.ai_chat_new_chat)) }
             }
             trailing()
@@ -466,11 +479,6 @@ fun AgentChatContent(
                                 leadingIcon = { Icon(XIcons.Article, contentDescription = null) },
                                 onClick = { plusMenu = false; vm.refreshIndex(); showPicker = true },
                             )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.ai_chat_memory_menu)) },
-                                leadingIcon = { Icon(XIcons.AutoAwesome, contentDescription = null) },
-                                onClick = { plusMenu = false; showMemory = true },
-                            )
                         }
                     }
                     if (status.loaded) {
@@ -515,7 +523,7 @@ fun AgentChatContent(
         )
     }
     if (showMemory) {
-        MemorySheet(vm = vm, onDismiss = { showMemory = false })
+        MemorySheet(docs = vm.projectDocs, onDismiss = { setMemory(false) })
     }
     if (showModels) {
         ModelSwitchSheet(

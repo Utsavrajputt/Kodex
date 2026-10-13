@@ -108,13 +108,15 @@ class AgentTools(
         return listOf(
             ToolSpec(
                 "save_memory",
-                "Save or remove short notes in this project's persistent memory, which is shown to you at the start of every future chat. " +
-                    "Use it for durable facts only: the user's preferences, project conventions, architecture decisions, how to build/test, recurring pitfalls. " +
-                    "Not for one-off task details or anything you can re-read from the code. Never save secrets. Written immediately; no review needed.",
+                "Save or remove short notes in persistent memory, which is shown to you at the start of every future chat. " +
+                    "Two scopes: 'project' (default) for this project only: conventions, architecture decisions, how to build/test, recurring pitfalls; " +
+                    "'global' for facts about the user that are not tied to any project and apply everywhere: their name, language, how they like answers, coding style, tools they use. " +
+                    "Durable facts only; not one-off task details or anything you can re-read from the code. Never save secrets. Written immediately; no review needed.",
                 JSONObject().put("type", "object")
                     .put(
                         "properties",
                         JSONObject()
+                            .put("scope", JSONObject().put("type", "string").put("enum", JSONArray().put("project").put("global")).put("description", "'project' (default) or 'global' (about the user, applies to every project)."))
                             .put("add", strArray("Notes to add. One short, self-contained sentence each."))
                             .put("remove", strArray("Text fragments (3+ chars) of existing notes to delete because they are outdated or wrong.")),
                     )
@@ -309,7 +311,7 @@ class AgentTools(
         val add = list("add")
         val remove = list("remove")
         if (add.isEmpty() && remove.isEmpty()) return err("Pass 'add' and/or 'remove'")
-        return store.update(add, remove)
+        return store.update(add, remove, global = a.optString("scope").equals("global", ignoreCase = true))
     }
 
     // ---- staged writes ----

@@ -37,18 +37,20 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.invictus.kodex.R
+import com.invictus.kodex.ai.agent.MemoryDocs
 import com.invictus.kodex.ai.agent.ProjectMemory
 import com.invictus.kodex.ui.icons.XIcons
 import kotlinx.coroutines.launch
 
 /**
- * Per-project "Memory & instructions" editor, opened from the chat's + menu. Two plain Markdown documents kept in
- * the app's own storage: the memory the AI keeps on its own and the rules the user wants it to follow.
+ * "Memory & instructions" editor for one scope ([docs]): a single project (opened from the chat's top bar) or the
+ * universal one (opened from AI settings). Two plain Markdown documents kept in the app's own storage: the memory
+ * the AI keeps on its own and the rules the user wants it to follow.
  * Unsaved edits are written when the sheet is dismissed or the tab is switched.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MemorySheet(vm: AgentChatViewModel, onDismiss: () -> Unit) {
+fun MemorySheet(docs: MemoryDocs, onDismiss: () -> Unit) {
     val cs = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
     var doc by remember { mutableStateOf(ProjectMemory.Doc.MEMORY) }
@@ -61,7 +63,7 @@ fun MemorySheet(vm: AgentChatViewModel, onDismiss: () -> Unit) {
     LaunchedEffect(doc) {
         loaded = false
         justSaved = false
-        val current = vm.readDoc(doc)
+        val current = docs.read(doc)
         text = current
         onDisk = current
         loaded = true
@@ -69,7 +71,7 @@ fun MemorySheet(vm: AgentChatViewModel, onDismiss: () -> Unit) {
 
     ModalBottomSheet(
         onDismissRequest = {
-            if (dirty) vm.writeDocInBackground(doc, text)
+            if (dirty) docs.writeInBackground(doc, text)
             onDismiss()
         },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -84,7 +86,7 @@ fun MemorySheet(vm: AgentChatViewModel, onDismiss: () -> Unit) {
                     contentAlignment = Alignment.Center,
                 ) { Icon(XIcons.AutoAwesome, contentDescription = null, tint = cs.onPrimaryContainer, modifier = Modifier.size(22.dp)) }
                 Text(
-                    stringResource(R.string.ai_memory_title),
+                    stringResource(if (docs.isGlobal) R.string.ai_memory_title_global else R.string.ai_memory_title),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 12.dp),
@@ -101,7 +103,7 @@ fun MemorySheet(vm: AgentChatViewModel, onDismiss: () -> Unit) {
                         selected = doc == d,
                         onClick = {
                             if (doc != d) {
-                                if (dirty) vm.writeDocInBackground(doc, text)
+                                if (dirty) docs.writeInBackground(doc, text)
                                 doc = d
                             }
                         },
@@ -111,14 +113,21 @@ fun MemorySheet(vm: AgentChatViewModel, onDismiss: () -> Unit) {
             }
 
             Text(
-                stringResource(if (doc == ProjectMemory.Doc.MEMORY) R.string.ai_memory_desc_memory else R.string.ai_memory_desc_instructions),
+                stringResource(
+                    when {
+                        docs.isGlobal && doc == ProjectMemory.Doc.MEMORY -> R.string.ai_memory_desc_memory_global
+                        docs.isGlobal -> R.string.ai_memory_desc_instructions_global
+                        doc == ProjectMemory.Doc.MEMORY -> R.string.ai_memory_desc_memory
+                        else -> R.string.ai_memory_desc_instructions
+                    },
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = cs.onSurfaceVariant,
             )
 
             OutlinedTextField(
                 value = text,
-                onValueChange = { text = it.take(ProjectMemory.MAX_EDIT_CHARS); justSaved = false },
+                onValueChange = { text = it.take(docs.limit(doc)); justSaved = false },
                 enabled = loaded,
                 minLines = 8,
                 maxLines = 12,
@@ -140,7 +149,7 @@ fun MemorySheet(vm: AgentChatViewModel, onDismiss: () -> Unit) {
                     enabled = dirty,
                     onClick = {
                         scope.launch {
-                            if (vm.writeDoc(doc, text)) {
+                            if (docs.write(doc, text)) {
                                 onDisk = text
                                 justSaved = true
                             }

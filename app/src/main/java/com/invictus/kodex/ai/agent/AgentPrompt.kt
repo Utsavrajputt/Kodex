@@ -12,6 +12,8 @@ object AgentPrompt {
         /** True when the save_memory tool is available this turn. */
         memoryEnabled: Boolean = false,
         memory: ProjectMemory.Found? = null,
+        /** Universal memory (facts about the user, shown in every project); null = empty. */
+        globalMemory: ProjectMemory.Found? = null,
     ): String = buildString {
         appendLine("You are Kodex AI, a capable general-purpose assistant and expert pair-programming agent inside Kodex, an Android code editor. The user's current project is \"$projectName\".")
         appendLine("Today's date is ${java.time.LocalDate.now()} (YYYY-MM-DD). Use it whenever you need a date (changelogs, releases, comments); never guess one.")
@@ -63,11 +65,16 @@ object AgentPrompt {
         if (memoryEnabled) {
             appendLine()
             appendLine("Memory:")
-            appendLine("- This project has a persistent memory, shown below, and a save_memory tool. It is how you remember things between chats.")
-            appendLine("- Save a note when you learn something durable that will help in future chats: the user's preferences and habits, project conventions, architecture decisions, build/test commands, recurring pitfalls, the project's goals. One short, self-contained line per note.")
+            appendLine("- You have two persistent memories, shown below, and a save_memory tool. It is how you remember things between chats.")
+            appendLine("- scope=\"global\" (universal memory, shown in every project): facts about the user that are not tied to a project: their name, language, how they like answers, general coding style, tools they use.")
+            appendLine("- scope=\"project\" (the default, only this project): project conventions, architecture decisions, build/test commands, recurring pitfalls, the project's goals. If unsure whether a fact is about the user or the project, pick project.")
+            appendLine("- Save a note when you learn something durable that will help in future chats. One short, self-contained line per note.")
             appendLine("- Do NOT save one-off task details, things you can re-read from the code, or anything temporary. Never save secrets (keys, tokens, passwords).")
             appendLine("- If the user says \"remember ...\", save it. If they ask you to forget something, or a note is outdated or wrong, remove it. Don't announce routine saves and don't mention the memory file unless asked; just save and keep helping.")
             appendLine("- Notes can be stale: the current code and the user's latest message win over memory.")
+            appendLine("<universal_memory>")
+            appendLine(globalMemory?.text ?: "(empty so far)")
+            appendLine("</universal_memory>")
             appendLine("<project_memory>")
             appendLine(memory?.text ?: "(empty so far)")
             appendLine("</project_memory>")

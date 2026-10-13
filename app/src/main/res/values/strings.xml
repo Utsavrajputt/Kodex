@@ -1236,10 +1236,13 @@
     <!-- AI memory, custom instructions, chat rename -->
     <string name="ai_chat_memory_menu">Memory &amp; instructions</string>
     <string name="ai_memory_title">Memory &amp; instructions</string>
+    <string name="ai_memory_title_global">Universal memory &amp; instructions</string>
+    <string name="ai_memory_desc_memory_global">Notes about you (name, language, style) the AI saves on its own. Used in every project. Edit or remove anything.</string>
+    <string name="ai_memory_desc_instructions_global">Rules the AI follows in every chat of every project. Project instructions win if they conflict.</string>
     <string name="ai_memory_tab_memory">Memory</string>
     <string name="ai_memory_tab_instructions">Instructions</string>
     <string name="ai_memory_desc_memory">Notes the AI saves on its own while you chat about this project. Edit or remove anything.</string>
-    <string name="ai_memory_desc_instructions">Rules the AI follows in this project. Your global instructions are in AI settings.</string>
+    <string name="ai_memory_desc_instructions">Rules the AI follows in this project. Universal instructions are in AI settings.</string>
     <string name="ai_memory_empty">Nothing here yet.</string>
     <string name="ai_memory_chars">%1$d characters</string>
     <string name="ai_memory_clear">Clear</string>
@@ -1249,13 +1252,8 @@
     <string name="ai_chat_rename_hint">Long-press a chat to rename it</string>
     <string name="ai_chat_rename_label">Chat name</string>
     <string name="ai_chat_rename_confirm">Rename</string>
-    <string name="ai_settings_instructions">Custom instructions</string>
-    <string name="ai_settings_instructions_sub">How the AI should respond in every project</string>
-    <string name="ai_settings_instructions_label">Your instructions</string>
-    <string name="ai_settings_instructions_help">Used in every chat. Up to %1$d characters are sent. Project instructions win if they conflict.</string>
-    <string name="ai_settings_project_files">Project memory &amp; instructions</string>
-    <string name="ai_settings_project_files_sub">See and edit what the AI remembers and the rules it follows, per project</string>
-    <string name="ai_settings_project_files_empty">Open a project and it will show up here.</string>
-    <string name="ai_settings_memory">Project memory</string>
-    <string name="ai_settings_memory_desc">Let the AI save useful notes about a project as you chat. Notes stay in the app, not in your project folder.</string>
+    <string name="ai_settings_universal">Universal memory &amp; instructions</string>
+    <string name="ai_settings_universal_sub">Your name, language, style: things the AI should know in every project. Tap Memory to open and edit them.</string>
+    <string name="ai_settings_memory">Memory</string>
+    <string name="ai_settings_memory_desc">Let the AI save useful notes as you chat, about you or about a project. Tap to see and edit universal memory and instructions. Notes stay in the app, not in your project folder.</string>
 </resources>
