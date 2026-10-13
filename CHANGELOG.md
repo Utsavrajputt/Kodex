@@ -8,27 +8,36 @@ stable releases.
 When cutting a release, rename `## [Unreleased]` to `## [x.y.z] - YYYY-MM-DD`; the release workflows
 pick the matching section as the GitHub Release notes.
 
-## [Unreleased]
+## [1.2.0] - 2025-05-22
+
+**AI Assistant release.** Native AI agent with multi-file awareness, streaming chat, and inline diff-based editing, fully integrated into the editor and Git flow.
+
+### ✨ Highlights
+- 🤖 **AI Agent on the workspace screen** — full-project context, multi-file editing, tool calling (Claude/OpenAI/Gemini).
+- 📝 **Inline Edit** — selection → "Edit with AI" → diff review → apply.
+- 🔄 **One-click Review** — batch edit application with per-file diff review.
+- 💬 **Premium Chat** — Markdown, code blocks, `@file` mentions, history per project.
+- 🛠️ **AI Status & Usage** — tracking, limits, and rate-limit handling.
 
 ### ✨ Added
-- 🌐 **AI screens use string resources** — the AI settings, chat, review and commit/explain sheets now read their text from `strings.xml` instead of hard-coded literals (prompts sent to the model and internal step labels are unchanged).
-- 📊 **AI usage in the status card** — Settings → AI now shows requests and estimated tokens used today and this month, a daily request meter with a reset countdown (Gemini resets at midnight Pacific), and the last request against the model's context window. Counters survive app restarts; the daily limit can be overridden per model.
-- 🤖 **AI Agent on the workspace screen** — a new ✨ button opens a full-screen agent that searches, lists and reads your whole project (never-send globs and secret redaction still apply) and can edit, create and delete several files in one reply. Native tool calling on Claude, OpenAI and Gemini, up to 15 tool rounds per message, live steps ("Reading Foo.kt", "Editing Bar.kt").
-- 🔍 **One review for every change** — all files the AI touched appear in a single sheet with per-file and per-hunk checkboxes. Nothing is written until you tap Apply selected; changes to open tabs go through the editor buffer, stale files are refused, and a one-tap **Undo** restores everything.
-- 💬 **Premium chat** — full Markdown (headings, lists, tables, quotes, bold/italic/links), syntax-highlighted code blocks with **Copy** and **Apply to file**, `@file` mentions and an attach picker, regenerate / copy / edit-and-resend, and **saved chats per project**.
-- 🤖 **Live Gemini model list** — the AI Assistant model dropdown now loads every chat-capable Gemini model available to your API key (newest first, curated picks on top), so new releases show up without an app update. Falls back to the built-in list when offline or without a key.
-
-- 🎨 **Redesigned AI section** — AI Assistant settings are now cards: a status hero (ready / setup needed), provider cards showing key status, model cards with context size and Fast / Balanced / Most-capable tags, key health with a masked tail and a timed **Test connection**, privacy controls, and session **usage** (requests, estimated tokens, limit hits).
-- ⏱️ **Clear rate-limit handling** — a live countdown card in the chat explains what happened, retries automatically (attempt N of 4) and offers **Retry now**, **Switch model** and **Stop**. Daily quotas are told apart from short-term limits, with advice instead of a pointless wait. A new *Understanding rate limits* explainer lives in settings.
-- 🧭 **Better chat panel** — model chip in the header (tap to switch provider/model without leaving the chat), context-window meter, first-run setup card, explained error cards with next-step buttons, icon-coded tool steps, and a cleaner input bar.
+- 🌐 **AI screens use string resources** — consistent localization.
+- 📊 **AI usage in the status card** — tracking requests and tokens.
+- 🤖 **Live Gemini model list** — dynamic updates.
+- 🎨 **Redesigned AI section** — structured cards and privacy controls.
+- ⏱️ **Clear rate-limit handling** — auto-retries and advice.
+- 🧭 **Better chat panel** — context-window meter, error handling, tool steps.
 
 ### 🔄 Changed
-- 🤖 The editor's AI panel now runs on the same agent engine: the open file and selection travel with each message, and the agent can still look at the rest of the project.
-- 🤖 Gemini defaults are now **Gemini 3.8 Flash** and **Gemini 3.1 Pro**. A saved Gemini 2.5 Flash / 2.5 Pro selection is moved to 3.8 Flash automatically.
+- 🤖 Editor AI panel now shares the agent engine.
+- 🤖 Gemini defaults updated to 3.8 Flash / 3.1 Pro.
 
 ### 🐛 Fixed
-- 🤖 Gemini **Test connection** returned `404 … no longer available to new users` because the default model (2.5 Flash) was retired.
-- ⌨️ **AI Assistant text fields** (Custom model id, Never send files matching) dropped and scrambled characters while typing.
+- 🤖 Gemini "Test connection" 404s.
+- ⌨️ Text fields dropping characters.
+
+### 🛠️ Technical
+- Single APK build (AI toggleable).
+- AES/GCM Keystore token vault.
 
 ## [1.1.0] - 2026-10-09
 
@@ -156,10 +165,4 @@ banner gets a livelier glass-panel animation.
 - 🗺️ The milestone checklist from the README (replaced by this changelog).
 - 🔖 The old single combined build/release workflow and its `v*` tag trigger in `android-build.yml`.
 
-## M17–M20: AI Assistant (single APK, runtime toggle)
-- One APK variant (no product flavors): AI is built in and controlled by **Settings → Behavior → Enable AI**. Turning it off hides the AI settings row, workspace/editor buttons, commit-message/explain helpers and disables every AI route.
-- Providers: Anthropic Claude, OpenAI, Google Gemini — BYOK, Keystore-AES/GCM vault (Settings → AI), manual SSE over OkHttp.
-- Editor AI panel (bottom split): streaming chat with file context + token estimate, secret redaction, exclusion globs.
-- Inline edit: selection → "Edit with AI" → search/replace proposal → per-hunk diff review → single-undo-step apply with stale-file protection.
-- Commit message generation (Git stage), explain-diff (commit detail + diff review), explain-error (Run log, Diagnostics) with optional reviewed fix patch.
-- Diagnostics logs redact AI/git tokens. CI builds 3 APKs per build (`kodex-arm64-v8a`, `kodex-armeabi-v7a`, `kodex-universal`).
+

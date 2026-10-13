@@ -21,7 +21,14 @@ data class StoredMessage(
     val generated: List<StoredGenerated> = emptyList(),
 )
 
-data class StoredChat(val id: String, val title: String, val updatedAt: Long, val messages: List<StoredMessage>)
+/** [titleLocked] = the user renamed the chat, so the title is no longer derived from the first message. */
+data class StoredChat(
+    val id: String,
+    val title: String,
+    val updatedAt: Long,
+    val messages: List<StoredMessage>,
+    val titleLocked: Boolean = false,
+)
 
 data class ChatMeta(val id: String, val title: String, val updatedAt: Long)
 
@@ -46,6 +53,12 @@ class ChatStore(app: Application, projectPath: String) {
         list().drop(MAX_CHATS).forEach { delete(it.id) }
     }
 
+    /** Renames a saved chat in place (keeps its date and position in the list); false when it can't be found or saved. */
+    fun rename(id: String, title: String): Boolean {
+        val chat = load(id) ?: return false
+        return runCatching { save(chat.copy(title = title, titleLocked = true)) }.isSuccess
+    }
+
     fun delete(id: String) {
         val msgs = load(id)?.messages.orEmpty()
         msgs.flatMap { it.images }.forEach { File(imageDir, it).delete() }
@@ -58,6 +71,7 @@ class ChatStore(app: Application, projectPath: String) {
 
         fun toJson(c: StoredChat): String = JSONObject()
             .put("id", c.id).put("title", c.title).put("updatedAt", c.updatedAt)
+            .apply { if (c.titleLocked) put("titleLocked", true) }
             .put("messages", JSONArray(c.messages.map { m ->
                 JSONObject().put("role", m.role).put("text", m.text)
                     .put("attachments", JSONArray(m.attachments))
@@ -77,7 +91,8 @@ class ChatStore(app: Application, projectPath: String) {
             val msgs = o.optJSONArray("messages") ?: JSONArray()
             return StoredChat(
                 o.getString("id"), o.optString("title"), o.optLong("updatedAt"),
-                (0 until msgs.length()).map { i ->
+                titleLocked = o.optBoolean("titleLocked", false),
+                messages = (0 until msgs.length()).map { i ->
                     val m = msgs.getJSONObject(i)
                     val atts = m.optJSONArray("attachments") ?: JSONArray()
                     val steps = m.optJSONArray("steps") ?: JSONArray()

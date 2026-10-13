@@ -95,6 +95,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.invictus.kodex.R
+import androidx.compose.ui.platform.LocalContext
+import com.invictus.kodex.ai.ui.chat.AgentChatViewModel
+import com.invictus.kodex.ai.ui.chat.MemorySheet
+import kotlinx.coroutines.flow.map
+import java.io.File
 
 class AiSettingsViewModel(
     private val app: Application,
@@ -113,6 +118,16 @@ class AiSettingsViewModel(
     val customModel: StateFlow<String> = prefs.customModel.stateIn(viewModelScope, SharingStarted.Eagerly, "")
     val consent: StateFlow<Boolean> = prefs.consentGranted.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val globs: StateFlow<String> = prefs.excludeGlobs.stateIn(viewModelScope, SharingStarted.Eagerly, "")
+    val autoApply: StateFlow<Boolean> = prefs.autoApply.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val globalInstructions: StateFlow<String> = prefs.globalInstructions.stateIn(viewModelScope, SharingStarted.Eagerly, "")
+    val memoryEnabled: StateFlow<Boolean> = prefs.memoryEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    /** Recently opened project folders, for the per-project memory / instructions editor. */
+    val recentProjects: StateFlow<List<File>> =
+        (app as? com.invictus.kodex.KodexApp)?.container?.projectRepository?.recents
+            ?.map { list -> list.map { it.file }.filter { it.isDirectory }.take(8) }
+            ?.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+            ?: MutableStateFlow<List<File>>(emptyList())
 
     private val _modelId = MutableStateFlow("")
     val modelId: StateFlow<String> = _modelId.asStateFlow()
@@ -206,6 +221,18 @@ class AiSettingsViewModel(
         viewModelScope.launch { prefs.setConsentGranted(v) }
     }
 
+    fun setAutoApply(v: Boolean) {
+        viewModelScope.launch { prefs.setAutoApply(v) }
+    }
+
+    fun setGlobalInstructions(v: String) {
+        viewModelScope.launch { prefs.setGlobalInstructions(v) }
+    }
+
+    fun setMemoryEnabled(v: Boolean) {
+        viewModelScope.launch { prefs.setMemoryEnabled(v) }
+    }
+
     fun setGlobs(v: String) {
         viewModelScope.launch { prefs.setExcludeGlobs(v) }
     }
@@ -270,6 +297,11 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
     val customModel by vm.customModel.collectAsState()
     val consent by vm.consent.collectAsState()
     val globs by vm.globs.collectAsState()
+    val autoApply by vm.autoApply.collectAsState()
+    val globalInstructions by vm.globalInstructions.collectAsState()
+    val memoryEnabled by vm.memoryEnabled.collectAsState()
+    val recentProjects by vm.recentProjects.collectAsState()
+    var memoryProject by remember { mutableStateOf<String?>(null) }
     val hasKey by vm.hasKey.collectAsState()
     val keyHint by vm.keyHint.collectAsState()
     val test by vm.test.collectAsState()
@@ -549,6 +581,79 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                 }
             }
 
+            // ---- custom instructions + memory ----
+            SectionCard(stringResource(R.string.ai_settings_instructions), XIcons.Article, stringResource(R.string.ai_settings_instructions_sub)) {
+                SyncedTextField(
+                    value = globalInstructions,
+                    onValueChange = { vm.setGlobalInstructions(it) },
+                    label = { Text(stringResource(R.string.ai_settings_instructions_label)) },
+                    supportingText = { Text(stringResource(R.string.ai_settings_instructions_help, AiPrefs.GLOBAL_INSTRUCTIONS_MAX)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.ai_settings_memory), style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            stringResource(R.string.ai_settings_memory_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = memoryEnabled, onCheckedChange = { vm.setMemoryEnabled(it) })
+                }
+            }
+
+            // ---- per-project memory & instructions ----
+            SectionCard(stringResource(R.string.ai_settings_project_files), XIcons.Folder, stringResource(R.string.ai_settings_project_files_sub)) {
+                if (recentProjects.isEmpty()) {
+                    Text(
+                        stringResource(R.string.ai_settings_project_files_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                recentProjects.forEach { dir ->
+                    Surface(
+                        onClick = { memoryProject = dir.path },
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(XIcons.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                            Text(
+                                dir.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+                            )
+                            Icon(XIcons.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+            }
+            memoryProject?.let { path ->
+                val appCtx = LocalContext.current.applicationContext as Application
+                MemorySheet(vm = AgentChatViewModel.obtain(appCtx, path), onDismiss = { memoryProject = null })
+            }
+
+            // ---- editing ----
+            SectionCard(stringResource(R.string.ai_settings_editing), XIcons.Edit, stringResource(R.string.ai_settings_editing_sub)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.ai_settings_auto_apply), style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            stringResource(R.string.ai_settings_auto_apply_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = autoApply, onCheckedChange = { vm.setAutoApply(it) })
+                }
+            }
+
             // ---- privacy ----
             SectionCard(stringResource(R.string.ai_settings_privacy), XIcons.Visibility, stringResource(R.string.ai_settings_you_decide_what_the_assistant)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -752,6 +857,7 @@ private fun SyncedTextField(
     label: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     singleLine: Boolean = false,
+    minLines: Int = 1,
     supportingText: (@Composable () -> Unit)? = null,
 ) {
     var text by remember { mutableStateOf(value) }
@@ -762,6 +868,7 @@ private fun SyncedTextField(
         onValueChange = { text = it; onValueChange(it) },
         label = label,
         singleLine = singleLine,
+        minLines = if (singleLine) 1 else minLines,
         supportingText = supportingText,
         modifier = modifier.onFocusChanged { focused = it.isFocused },
     )

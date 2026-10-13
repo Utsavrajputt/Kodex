@@ -13,6 +13,7 @@ import com.invictus.kodex.ai.AiRuntime
 import com.invictus.kodex.ai.Redactor
 import com.invictus.kodex.ai.agent.AgentPrompt
 import com.invictus.kodex.ai.agent.ProjectInstructions
+import com.invictus.kodex.ai.agent.ProjectMemory
 import com.invictus.kodex.ai.agent.AgentRunner
 import com.invictus.kodex.ai.agent.AgentSink
 import com.invictus.kodex.ai.agent.AgentTools
@@ -40,7 +41,10 @@ import com.invictus.kodex.ai.provider.AgentMessage
 import com.invictus.kodex.ai.provider.AiErrorInfo
 import com.invictus.kodex.ai.provider.AiErrorPresenter
 import com.invictus.kodex.ai.provider.AiException
+import com.invictus.kodex.ai.provider.AiMessage
 import com.invictus.kodex.ai.provider.AiModel
+import com.invictus.kodex.ai.provider.AiProvider
+import com.invictus.kodex.ai.provider.AiRequest
 import com.invictus.kodex.ai.provider.ChatImage
 import com.invictus.kodex.ai.provider.ImageGen
 import com.invictus.kodex.ai.provider.ModelInfo
@@ -110,6 +114,8 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     private val keyStore = AiKeyStore(app)
     private val store = ChatStore(app, projectPath)
     private val root = File(projectPath)
+    /** Memory + instructions live in the app's private storage, not in the project folder. */
+    private val memDir = ProjectMemory.dirFor(app, projectPath)
     private var io: WorkspaceIo = DiskIo
 
     /** Set by the editor panel: evaluated on the main thread at send time (active file + selection). */
@@ -124,11 +130,51 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             field = value
             SessionChats.current[projectPath] = value
         }
+    /** Set when the user renamed the open chat; keeps the name instead of re-deriving it from the first message. */
+    private var titleOverride: String? = null
     private var job: Job? = null
     private var needSeparator = false
     private var runner: AgentRunner? = null
 
     private val pending = PendingChanges { _changes.value = it }
+
+    /** Auto-apply mode: files this turn wrote straight to disk, first "before" kept, for the Undo bar. */
+    private val turnUndo = LinkedHashMap<String, UndoEntry>()
+
+    private fun recordApplied(path: String, before: String?, after: String?) = synchronized(turnUndo) {
+        val first = turnUndo[path]
+        turnUndo[path] = UndoEntry(path, if (first != null) first.before else before, after)
+    }
+
+    /** Writes one staged change to disk (through the editor's open buffer if any). False = left staged for review. */
+    private suspend fun writeThrough(c: FileChange): Boolean {
+        val f = File(root, c.path)
+        return try {
+            val disk = if (f.exists()) io.read(f) else null
+            when (c.kind) {
+                ChangeKind.CREATE -> {
+                    if (f.exists()) return false
+                    io.write(f, c.newText.orEmpty())
+                    recordApplied(c.path, null, c.newText)
+                }
+                ChangeKind.EDIT -> {
+                    if (disk != c.baseText) return false
+                    io.write(f, c.newText.orEmpty())
+                    recordApplied(c.path, c.baseText, c.newText)
+                }
+                ChangeKind.DELETE -> {
+                    if (disk != c.baseText) return false
+                    io.delete(f)
+                    recordApplied(c.path, c.baseText, null)
+                }
+            }
+            true
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     private val _messages = MutableStateFlow<List<UiMessage>>(emptyList())
     val messages: StateFlow<List<UiMessage>> = _messages.asStateFlow()
@@ -326,13 +372,37 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                     lastGenerated = { _messages.value.flatMap { it.generated }.lastOrNull()?.let { File(it.path) } },
                     onImage = { g -> updateLast { it.copy(generated = it.generated + g) } },
                 )
+                val auto = prefs.autoApply.first()
+                val memoryOn = prefs.memoryEnabled.first()
+                val memoryStore = if (memoryOn) ProjectMemory.Store(memDir) { text -> condenseMemory(provider, key, model, text) } else null
+                val writer: suspend (FileChange) -> Boolean = { c -> writeThrough(c) }
+                synchronized(turnUndo) { turnUndo.clear() }
                 val r = AgentRunner(
-                    provider, key, model, AgentTools(files, pending, toolbox), budget,
+                    provider, key, model,
+                    AgentTools(files, pending, toolbox, writer.takeIf { auto }, memoryStore),
+                    budget,
                     sendImages = ModelInfo.supportsImages(provider.id, model),
                 )
                 runner = r
-                val instructions = ProjectInstructions.load(files)
-                r.run(AgentPrompt.system(root.name, topLevel, instructions, canPaintImages = toolbox.canRaster), history, sink)
+                val projectInstr = ProjectInstructions.load(files)
+                val appInstr = ProjectMemory.loadInstructions(memDir)
+                val instructions = when {
+                    appInstr == null -> projectInstr
+                    projectInstr == null -> ProjectInstructions.Found("Kodex project instructions", appInstr)
+                    else -> ProjectInstructions.Found(projectInstr.fileName, appInstr + "\n\n" + projectInstr.text)
+                }
+                val globalInstructions = prefs.globalInstructions.first().trim()
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { com.invictus.kodex.ai.Redactor.scrub(it).take(AiPrefs.GLOBAL_INSTRUCTIONS_MAX) }
+                val memory = if (memoryOn) ProjectMemory.load(memDir) else null
+                r.run(
+                    AgentPrompt.system(
+                        root.name, topLevel, instructions,
+                        canPaintImages = toolbox.canRaster, autoApply = auto,
+                        globalInstructions = globalInstructions, memoryEnabled = memoryOn, memory = memory,
+                    ),
+                    history, sink,
+                )
                 if (_messages.value.lastOrNull()?.let { it.text.isBlank() && it.steps.isEmpty() } == true) {
                     rollback(startPos, text, "", images)
                     _error.value = "The model returned an empty response"
@@ -352,6 +422,12 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             } finally {
                 runner = null
                 _rateLimit.value = null
+                // Auto-apply: whatever was written (even if the turn was stopped or failed) can be undone from the bar.
+                val written = synchronized(turnUndo) { turnUndo.values.toList().also { turnUndo.clear() } }
+                if (written.isNotEmpty()) {
+                    _lastApplied.value = UndoInfo(written)
+                    refreshIndex()
+                }
                 finishStreaming()
                 _busy.value = false
                 persistNow()
@@ -499,6 +575,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
 
     private fun restore(chat: StoredChat) {
         chatId = chat.id
+        titleOverride = chat.title.takeIf { chat.titleLocked }
         history.clear()
         val ui = ArrayList<UiMessage>()
         chat.messages.forEach { m ->
@@ -532,7 +609,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             }
             return
         }
-        val title = msgs.first { it.role == "user" }.text.lineSequence().first().trim().take(48).ifEmpty { "Chat" }
+        val title = titleOverride ?: msgs.first { it.role == "user" }.text.lineSequence().first().trim().take(48).ifEmpty { "Chat" }
         val chat = StoredChat(
             id, title, System.currentTimeMillis(),
             msgs.map { m ->
@@ -543,6 +620,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                     m.generated.map { StoredGenerated(File(it.path).name, it.svgPath?.let { p -> File(p).name }, it.title, it.purpose) },
                 )
             },
+            titleLocked = titleOverride != null,
         )
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { store.save(chat) }
@@ -558,6 +636,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         job?.cancel()
         persistNow()
         chatId = UUID.randomUUID().toString()
+        titleOverride = null
         history.clear()
         _messages.value = emptyList()
         _error.value = null
@@ -584,12 +663,51 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             if (id == chatId) {
                 job?.cancel()
                 chatId = UUID.randomUUID().toString()
+                titleOverride = null
                 history.clear()
                 _messages.value = emptyList()
                 _newChatEpoch.value++
             }
             refreshChats()
         }
+    }
+
+    /** Renames a saved chat (long-press in the history sheet). The new name sticks: later messages don't overwrite it. */
+    fun renameChat(id: String, newTitle: String) {
+        val title = newTitle.trim().take(60)
+        if (title.isEmpty()) return
+        if (id == chatId) titleOverride = title
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { store.rename(id, title) }
+            refreshChats()
+        }
+    }
+
+    // ---- memory & instructions (per project) ----
+
+    /** Current text of the memory or the instructions ("" when nothing is saved yet). */
+    suspend fun readDoc(doc: ProjectMemory.Doc): String = ProjectMemory.readDoc(memDir, doc)
+
+    suspend fun writeDoc(doc: ProjectMemory.Doc, text: String): Boolean = ProjectMemory.writeDoc(memDir, doc, text)
+
+    /** Same as [writeDoc] but survives the sheet closing (used when it is dismissed with unsaved edits). */
+    fun writeDocInBackground(doc: ProjectMemory.Doc, text: String) {
+        viewModelScope.launch { writeDoc(doc, text) }
+    }
+
+    /** Asks the current model to shorten an over-long memory file; null on any failure (the file is then left as is). */
+    private suspend fun condenseMemory(provider: AiProvider, key: String, model: String, text: String): String? = try {
+        provider.complete(
+            key, model,
+            AiRequest(
+                messages = listOf(AiMessage("system", ProjectMemory.CONDENSE_SYSTEM), AiMessage("user", text)),
+                maxOutputTokens = 4096, temperature = 0.1, model = model,
+            ),
+        ).text
+    } catch (ce: CancellationException) {
+        throw ce
+    } catch (e: Exception) {
+        null
     }
 
     // ---- file index ----
@@ -617,31 +735,6 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
 
     fun dismissUndo() {
         _lastApplied.value = null
-    }
-
-    /** "Apply to file" on a code block: stages the block as a full-file change and opens the review sheet. */
-    fun stageCodeBlock(relPath: String, content: String) {
-        viewModelScope.launch {
-            val files = ProjectFiles(root, globs.value, io)
-            val f = files.resolve(relPath.trim()) ?: run { _error.value = "That path is outside the project"; return@launch }
-            val rel = files.relOf(f)
-            if (rel.isEmpty() || rel == "." || files.isBlocked(rel) || f.isDirectory) {
-                _error.value = "Can't write to \"$rel\""
-                return@launch
-            }
-            if (f.exists()) {
-                when (val r = files.read(rel)) {
-                    is ProjectFiles.Read.Fail -> { _error.value = r.message; return@launch }
-                    is ProjectFiles.Read.Ok -> {
-                        if (r.text == content) { _error.value = "$rel already has this content"; return@launch }
-                        pending.stageEdit(rel, r.text, content, "Applied from chat")
-                    }
-                }
-            } else {
-                pending.stageCreate(rel, content, "Applied from chat")
-            }
-            openReview()
-        }
     }
 
     fun applyApproved(approved: List<ApprovedChange>) {

@@ -56,6 +56,11 @@ class PendingChanges(private val onChange: (List<FileChange>) -> Unit = {}) {
         notifyChanged()
     }
 
+    /** Drops one staged change (after it was written straight to disk). */
+    @Synchronized fun remove(path: String) {
+        if (map.remove(path) != null) notifyChanged()
+    }
+
     @Synchronized fun clear() {
         map.clear()
         notifyChanged()

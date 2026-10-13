@@ -19,11 +19,15 @@ class AgentTools(
     private val pending: PendingChanges,
     /** Image tools (generate_image / render_svg); null disables them. */
     private val images: ImageToolbox? = null,
+    /** Auto-apply mode: writes a staged change straight to disk; true when written, false to leave it staged for review. */
+    private val autoCommit: (suspend (FileChange) -> Boolean)? = null,
+    /** Per-project memory (kept in app storage); null disables the save_memory tool. */
+    private val memory: ProjectMemory.Store? = null,
 ) {
 
     data class Outcome(val text: String, val isError: Boolean = false)
 
-    val specs: List<ToolSpec> get() = baseSpecs + imageSpecs()
+    val specs: List<ToolSpec> get() = baseSpecs + memorySpecs() + imageSpecs()
 
     private val baseSpecs: List<ToolSpec> = listOf(
         ToolSpec(
@@ -61,7 +65,7 @@ class AgentTools(
             "edit_file",
             "Stage edits to an existing file as exact search/replace blocks, applied in order. Each 'search' must match the " +
                 "file text exactly ONCE (include enough surrounding lines to be unique) and must not contain line-number prefixes. " +
-                "Nothing is written until the user reviews and applies the change.",
+                "Depending on the user's setting the edit is written right away or staged for their review; the tool result says which.",
             JSONObject().put("type", "object")
                 .put(
                     "properties",
@@ -85,7 +89,7 @@ class AgentTools(
         ),
         ToolSpec(
             "create_file",
-            "Stage a new file with the given full content. Fails if the file already exists (use edit_file). Not written until the user applies it.",
+            "Create a new file with the given full content. Fails if the file already exists (use edit_file). Written right away or staged for review, depending on the user's setting; the tool result says which.",
             schema(
                 "path" to str("New file path relative to the project root."),
                 "content" to str("Full file content."),
@@ -94,10 +98,30 @@ class AgentTools(
         ),
         ToolSpec(
             "delete_file",
-            "Stage deletion of a text file. Not deleted until the user applies it.",
+            "Delete a text file. Done right away or staged for review, depending on the user's setting; the tool result says which.",
             schema("path" to str("File path relative to the project root."), required = listOf("path")),
         ),
     )
+
+    private fun memorySpecs(): List<ToolSpec> {
+        if (memory == null) return emptyList()
+        return listOf(
+            ToolSpec(
+                "save_memory",
+                "Save or remove short notes in this project's persistent memory, which is shown to you at the start of every future chat. " +
+                    "Use it for durable facts only: the user's preferences, project conventions, architecture decisions, how to build/test, recurring pitfalls. " +
+                    "Not for one-off task details or anything you can re-read from the code. Never save secrets. Written immediately; no review needed.",
+                JSONObject().put("type", "object")
+                    .put(
+                        "properties",
+                        JSONObject()
+                            .put("add", strArray("Notes to add. One short, self-contained sentence each."))
+                            .put("remove", strArray("Text fragments (3+ chars) of existing notes to delete because they are outdated or wrong.")),
+                    )
+                    .put("required", JSONArray()),
+            ),
+        )
+    }
 
     private fun imageSpecs(): List<ToolSpec> {
         val box = images ?: return emptyList()
@@ -144,6 +168,7 @@ class AgentTools(
             "edit_file" -> "Editing $path"
             "create_file" -> "Creating $path"
             "delete_file" -> "Deleting $path"
+            "save_memory" -> if ((a.optJSONArray("add")?.length() ?: 0) > 0) "Saving to memory" else "Updating memory"
             "generate_image" -> "Generating image" + a.optString("title").takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
             "render_svg" -> "Drawing SVG" + a.optString("title").takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
             else -> call.name
@@ -166,6 +191,7 @@ class AgentTools(
         "edit_file" -> editFile(call.args)
         "create_file" -> createFile(call.args)
         "delete_file" -> deleteFile(call.args)
+        "save_memory" -> saveMemory(call.args)
         "generate_image" -> images?.generate(call.args) ?: err("Image tools are not available")
         "render_svg" -> images?.renderSvg(call.args) ?: err("Image tools are not available")
         else -> err("Unknown tool: ${call.name}")
@@ -275,6 +301,17 @@ class AgentTools(
         return Outcome(if (hits.isEmpty()) "No matches. ($summary)" else hits.joinToString("\n") + "\n— $summary")
     }
 
+    // ---- memory ----
+
+    private suspend fun saveMemory(a: JSONObject): Outcome {
+        val store = memory ?: return err("Memory is turned off")
+        fun list(key: String): List<String> = a.optJSONArray(key)?.let { arr -> (0 until arr.length()).map { arr.optString(it) } }.orEmpty()
+        val add = list("add")
+        val remove = list("remove")
+        if (add.isEmpty() && remove.isEmpty()) return err("Pass 'add' and/or 'remove'")
+        return store.update(add, remove)
+    }
+
     // ---- staged writes ----
 
     private suspend fun editFile(a: JSONObject): Outcome {
@@ -305,6 +342,7 @@ class AgentTools(
         val result = if (crlf) work.replace("\n", "\r\n") else work
         if (result == current) return err("The edits produce no change")
         pending.stageEdit(rel, current, result, a.optString("explanation"))
+        if (commit(rel)) return Outcome("Edited $rel (${edits.size} edit(s) written to the file).")
         return Outcome("Staged ${edits.size} edit(s) to $rel. Not applied yet; the user will review it.")
     }
 
@@ -332,6 +370,7 @@ class AgentTools(
         if (exists) return err("$rel already exists; use edit_file")
         if (file.isDirectory) return err("$rel is a directory")
         pending.stageCreate(rel, content, "")
+        if (commit(rel)) return Outcome("Created $rel.")
         return Outcome("Staged new file $rel. Not created yet; the user will review it.")
     }
 
@@ -345,7 +384,17 @@ class AgentTools(
             is ProjectFiles.Read.Fail -> if (pending.effective(rel) is Effective.Text) "" else return err(r.message)
         }
         pending.stageDelete(rel, disk, "")
+        if (commit(rel)) return Outcome("Deleted $rel.")
         return Outcome("Staged deletion of $rel. Not deleted yet; the user will review it.")
+    }
+
+    /** In auto-apply mode, writes the change just staged for [rel] to disk and unstages it; false = it stays staged. */
+    private suspend fun commit(rel: String): Boolean {
+        val write = autoCommit ?: return false
+        val change = pending.snapshot().firstOrNull { it.path == rel } ?: return false
+        if (!write(change)) return false
+        pending.remove(rel)
+        return true
     }
 
     private class ToolError(message: String) : Exception(message)
@@ -368,5 +417,6 @@ class AgentTools(
         fun str(desc: String) = JSONObject().put("type", "string").put("description", desc)
         fun int(desc: String) = JSONObject().put("type", "integer").put("description", desc)
         fun bool(desc: String) = JSONObject().put("type", "boolean").put("description", desc)
+        fun strArray(desc: String) = JSONObject().put("type", "array").put("description", desc).put("items", JSONObject().put("type", "string"))
     }
 }

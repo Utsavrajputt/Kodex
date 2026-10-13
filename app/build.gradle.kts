@@ -15,8 +15,8 @@ android {
         targetSdk = 36
         // CI passes these on tag builds (v1.2.3 -> name 1.2.3, code derived from the tag
         // by .github/scripts/version-from-tag.sh so pre-releases always sort below the stable).
-        versionCode = (project.findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1010099 // 1.1.0 stable (see version-from-tag.sh)
-        versionName = (project.findProperty("appVersionName") as String?) ?: "1.1.0"
+        versionCode = (project.findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1020000 // 1.2.0 stable (see version-from-tag.sh)
+        versionName = (project.findProperty("appVersionName") as String?) ?: "1.2.0"
         // Commit this build was made from (CI passes -PgitSha=<full sha>). Empty for local builds.
         // GitHub Manager compares it with the commit of a downloaded APK to show Open vs Update.
         buildConfigField("String", "GIT_SHA", "\"${(project.findProperty("gitSha") as String?).orEmpty().trim()}\"")

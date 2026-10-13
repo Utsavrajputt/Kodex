@@ -30,7 +30,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
@@ -86,6 +88,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -184,7 +188,7 @@ fun AgentChatContent(
     val newChatEpoch by vm.newChatEpoch.collectAsState()
     var showPicker by remember { mutableStateOf(false) }
     var showModels by remember { mutableStateOf(false) }
-    var applyDialog by remember { mutableStateOf<String?>(null) }
+    var showMemory by remember { mutableStateOf(false) }
 
     // A new chat (from anywhere, e.g. the host's top bar) starts with an empty draft.
     LaunchedEffect(newChatEpoch) {
@@ -267,7 +271,6 @@ fun AgentChatContent(
                                     images.addAll(d.images)
                                 }
                             },
-                            onApplyCode = { _, code -> applyDialog = code },
                             onSaveImage = { g, svg -> vm.saveImage(g, svg) },
                             onApplyIcon = { g -> vm.applyAsAppIcon(g) },
                         )
@@ -463,6 +466,11 @@ fun AgentChatContent(
                                 leadingIcon = { Icon(XIcons.Article, contentDescription = null) },
                                 onClick = { plusMenu = false; vm.refreshIndex(); showPicker = true },
                             )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.ai_chat_memory_menu)) },
+                                leadingIcon = { Icon(XIcons.AutoAwesome, contentDescription = null) },
+                                onClick = { plusMenu = false; showMemory = true },
+                            )
                         }
                     }
                     if (status.loaded) {
@@ -501,9 +509,13 @@ fun AgentChatContent(
             chats = chats,
             onOpen = { vm.openChat(it); setHistory(false) },
             onDelete = { vm.deleteChat(it) },
+            onRename = { id, title -> vm.renameChat(id, title) },
             onNew = { vm.newChat(); setHistory(false) },
             onDismiss = { setHistory(false) },
         )
+    }
+    if (showMemory) {
+        MemorySheet(vm = vm, onDismiss = { showMemory = false })
     }
     if (showModels) {
         ModelSwitchSheet(
@@ -515,25 +527,6 @@ fun AgentChatContent(
     }
     if (showPicker) {
         FilePickerDialog(index, attached.toSet(), onToggle = { p -> if (!attached.remove(p)) attached.add(p) }, onDismiss = { showPicker = false })
-    }
-    applyDialog?.let { code ->
-        var path by remember(code) {
-            mutableStateOf(applyPathHint ?: messages.lastOrNull { it.attachments.isNotEmpty() }?.attachments?.last().orEmpty())
-        }
-        AlertDialog(
-            onDismissRequest = { applyDialog = null },
-            title = { Text(stringResource(R.string.ai_chat_apply_to_file)) },
-            text = {
-                Column {
-                    Text(stringResource(R.string.ai_chat_project_relative_path_an_existing), style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(value = path, onValueChange = { path = it }, singleLine = true, label = { Text(stringResource(R.string.ai_chat_path)) }, modifier = Modifier.padding(top = 8.dp).fillMaxWidth())
-                }
-            },
-            confirmButton = {
-                TextButton(enabled = path.isNotBlank(), onClick = { vm.stageCodeBlock(path, code); applyDialog = null }) { Text(stringResource(R.string.ai_chat_review_change)) }
-            },
-            dismissButton = { TextButton(onClick = { applyDialog = null }) { Text(stringResource(R.string.ai_chat_cancel)) } },
-        )
     }
 }
 
@@ -668,7 +661,6 @@ private fun MessageItem(
     busy: Boolean,
     onRegenerate: () -> Unit,
     onEdit: () -> Unit,
-    onApplyCode: (String, String) -> Unit,
     onSaveImage: (GeneratedImage, Boolean) -> Unit,
     onApplyIcon: (GeneratedImage) -> Unit,
 ) {
@@ -726,7 +718,7 @@ private fun MessageItem(
             val showSteps = m.steps.isNotEmpty() || (m.streaming && m.text.isBlank())
             if (showSteps) StepsBlock(m)
             if (m.text.isNotBlank()) {
-                SelectionContainer { MarkdownContent(m.text, Modifier.padding(top = if (showSteps) 8.dp else 0.dp), onApplyCode) }
+                SelectionContainer { MarkdownContent(m.text, Modifier.padding(top = if (showSteps) 8.dp else 0.dp)) }
             }
             m.generated.forEach { g ->
                 GeneratedImageCard(g, onSave = { svg -> onSaveImage(g, svg) }, onApplyIcon = { onApplyIcon(g) })
@@ -903,15 +895,19 @@ private fun dayGroup(ts: Long): DayGroup {
 }
 
 /** Chat history: a sheet that hugs its content (no dead space), chats grouped by day as soft cards. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChatHistorySheet(
     chats: List<com.invictus.kodex.ai.agent.ChatMeta>,
     onOpen: (String) -> Unit,
     onDelete: (String) -> Unit,
+    onRename: (String, String) -> Unit,
     onNew: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
+    val haptics = LocalHapticFeedback.current
+    var renaming by remember { mutableStateOf<com.invictus.kodex.ai.agent.ChatMeta?>(null) }
     val grouped = remember(chats) { chats.groupBy { dayGroup(it.updatedAt) }.entries.toList() }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
@@ -952,6 +948,14 @@ private fun ChatHistorySheet(
                 }
             } else {
                 LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 20.dp)) {
+                    item(key = "rename_hint") {
+                        Text(
+                            stringResource(R.string.ai_chat_rename_hint),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = cs.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 6.dp, bottom = 2.dp),
+                        )
+                    }
                     grouped.forEach { (group, list) ->
                         item(key = "header_$group") {
                             Text(
@@ -973,10 +977,15 @@ private fun ChatHistorySheet(
                             val whenText = if (recent) DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(c.updatedAt))
                             else DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(c.updatedAt))
                             Surface(
-                                onClick = { onOpen(c.id) },
                                 shape = RoundedCornerShape(18.dp),
                                 color = cs.surfaceContainerHigh,
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(18.dp)).combinedClickable(
+                                    onClick = { onOpen(c.id) },
+                                    onLongClick = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        renaming = c
+                                    },
+                                ),
                             ) {
                                 Row(
                                     Modifier.padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 2.dp),
@@ -1010,6 +1019,29 @@ private fun ChatHistorySheet(
                 }
             }
         }
+    }
+    renaming?.let { target ->
+        var name by remember(target.id) { mutableStateOf(target.title) }
+        AlertDialog(
+            onDismissRequest = { renaming = null },
+            title = { Text(stringResource(R.string.ai_chat_rename_chat)) },
+            text = {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(60) },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.ai_chat_rename_label)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = name.isNotBlank(),
+                    onClick = { onRename(target.id, name); renaming = null },
+                ) { Text(stringResource(R.string.ai_chat_rename_confirm)) }
+            },
+            dismissButton = { TextButton(onClick = { renaming = null }) { Text(stringResource(android.R.string.cancel)) } },
+        )
     }
 }
 

@@ -852,6 +852,10 @@
     <string name="ai_settings_ai_allowed_in_projects">AI allowed in projects</string>
     <string name="ai_settings_ai_assistant">AI Assistant</string>
     <string name="ai_settings_allow_ai_in_projects">Allow AI in projects</string>
+    <string name="ai_settings_editing">Editing</string>
+    <string name="ai_settings_editing_sub">How the chat agent changes your files.</string>
+    <string name="ai_settings_auto_apply">Apply edits directly</string>
+    <string name="ai_settings_auto_apply_desc">Off: changes wait for your review. On: the AI writes the files right away, tells you what it did, and an Undo bar appears.</string>
     <string name="ai_settings_api_key_connection">API key &amp; connection</string>
     <string name="ai_settings_api_key_saved">API key saved</string>
     <string name="ai_settings_back">Back</string>
@@ -1228,4 +1232,30 @@
     <string name="gh_run_open_details">Open run details</string>
     <string name="gh_notif_run_waiting">%1$s • waiting for the first step…</string>
     <string name="gh_notif_stop_watching">Stop</string>
+
+    <!-- AI memory, custom instructions, chat rename -->
+    <string name="ai_chat_memory_menu">Memory &amp; instructions</string>
+    <string name="ai_memory_title">Memory &amp; instructions</string>
+    <string name="ai_memory_tab_memory">Memory</string>
+    <string name="ai_memory_tab_instructions">Instructions</string>
+    <string name="ai_memory_desc_memory">Notes the AI saves on its own while you chat about this project. Edit or remove anything.</string>
+    <string name="ai_memory_desc_instructions">Rules the AI follows in this project. Your global instructions are in AI settings.</string>
+    <string name="ai_memory_empty">Nothing here yet.</string>
+    <string name="ai_memory_chars">%1$d characters</string>
+    <string name="ai_memory_clear">Clear</string>
+    <string name="ai_memory_save">Save</string>
+    <string name="ai_memory_saved">Saved</string>
+    <string name="ai_chat_rename_chat">Rename chat</string>
+    <string name="ai_chat_rename_hint">Long-press a chat to rename it</string>
+    <string name="ai_chat_rename_label">Chat name</string>
+    <string name="ai_chat_rename_confirm">Rename</string>
+    <string name="ai_settings_instructions">Custom instructions</string>
+    <string name="ai_settings_instructions_sub">How the AI should respond in every project</string>
+    <string name="ai_settings_instructions_label">Your instructions</string>
+    <string name="ai_settings_instructions_help">Used in every chat. Up to %1$d characters are sent. Project instructions win if they conflict.</string>
+    <string name="ai_settings_project_files">Project memory &amp; instructions</string>
+    <string name="ai_settings_project_files_sub">See and edit what the AI remembers and the rules it follows, per project</string>
+    <string name="ai_settings_project_files_empty">Open a project and it will show up here.</string>
+    <string name="ai_settings_memory">Project memory</string>
+    <string name="ai_settings_memory_desc">Let the AI save useful notes about a project as you chat. Notes stay in the app, not in your project folder.</string>
 </resources>

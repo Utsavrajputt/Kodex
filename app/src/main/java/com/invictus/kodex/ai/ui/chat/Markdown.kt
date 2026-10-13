@@ -206,7 +206,6 @@ private fun AnnotatedString.Builder.appendInline(s: String, st: InlineStyles) {
 fun MarkdownContent(
     text: String,
     modifier: Modifier = Modifier,
-    onApplyCode: ((lang: String, code: String) -> Unit)? = null,
 ) {
     val blocks = remember(text) { parseMarkdown(text) }
     val scheme = MaterialTheme.colorScheme
@@ -243,7 +242,7 @@ fun MarkdownContent(
                         modifier = Modifier.padding(start = 10.dp),
                     )
                 }
-                is MdBlock.Code -> CodeBlock(b.lang, b.code, b.closed, onApplyCode)
+                is MdBlock.Code -> CodeBlock(b.lang, b.code)
                 is MdBlock.Table -> TableBlock(b, styles)
                 MdBlock.Rule -> HorizontalDivider()
             }
@@ -272,7 +271,7 @@ private fun TableBlock(t: MdBlock.Table, styles: InlineStyles) {
 }
 
 @Composable
-private fun CodeBlock(lang: String, code: String, closed: Boolean, onApply: ((String, String) -> Unit)?) {
+private fun CodeBlock(lang: String, code: String) {
     val clipboard = LocalClipboardManager.current
     val scheme = MaterialTheme.colorScheme
     val dark = scheme.surface.luminance() < 0.5f
@@ -291,11 +290,6 @@ private fun CodeBlock(lang: String, code: String, closed: Boolean, onApply: ((St
                 )
                 TextButton(onClick = { clipboard.setText(AnnotatedString(code)) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
                     Text("Copy")
-                }
-                if (onApply != null && closed) {
-                    TextButton(onClick = { onApply(lang, code) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                        Text("Apply to file")
-                    }
                 }
             }
             Text(
