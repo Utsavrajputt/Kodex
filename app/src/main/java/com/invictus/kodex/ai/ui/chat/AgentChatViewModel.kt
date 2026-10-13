@@ -27,6 +27,10 @@ import com.invictus.kodex.ai.agent.FileChange
 import com.invictus.kodex.ai.agent.PendingChanges
 import com.invictus.kodex.ai.agent.ProjectFiles
 import com.invictus.kodex.ai.agent.StoredChat
+import com.invictus.kodex.ai.agent.AppIconApplier
+import com.invictus.kodex.ai.agent.GeneratedImage
+import com.invictus.kodex.ai.agent.ImageToolbox
+import com.invictus.kodex.ai.agent.StoredGenerated
 import com.invictus.kodex.ai.agent.StoredMessage
 import com.invictus.kodex.ai.agent.StoredStep
 import com.invictus.kodex.ai.agent.WorkspaceIo
@@ -73,6 +77,8 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         /** Where this user turn starts in the agent transcript; used by regenerate/edit to rewind. */
         val histPos: Int = 0,
         val images: List<ChatImage> = emptyList(),
+        /** Pictures the agent made in this reply (shown with Save / Use-as-app-icon buttons). */
+        val generated: List<GeneratedImage> = emptyList(),
     )
     /** What "Edit" on a user message hands back to the input box. */
     data class EditDraft(val text: String, val files: List<String>, val images: List<ChatImage>)
@@ -304,13 +310,24 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                         .sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
                         .take(50).map { if (it.isDirectory) it.name + "/" else it.name }
                 }
+                val toolbox = ImageToolbox(
+                    providerId = provider.id,
+                    key = key,
+                    outDir = store.imageDir,
+                    attachedImage = {
+                        history.lastOrNull { it is AgentMessage.User && it.images.isNotEmpty() }
+                            ?.let { (it as AgentMessage.User).images.lastOrNull()?.path?.let { p -> File(p) } }
+                    },
+                    lastGenerated = { _messages.value.flatMap { it.generated }.lastOrNull()?.let { File(it.path) } },
+                    onImage = { g -> updateLast { it.copy(generated = it.generated + g) } },
+                )
                 val r = AgentRunner(
-                    provider, key, model, AgentTools(files, pending), budget,
+                    provider, key, model, AgentTools(files, pending, toolbox), budget,
                     sendImages = ModelInfo.supportsImages(provider.id, model),
                 )
                 runner = r
                 val instructions = ProjectInstructions.load(files)
-                r.run(AgentPrompt.system(root.name, topLevel, instructions), history, sink)
+                r.run(AgentPrompt.system(root.name, topLevel, instructions, canPaintImages = toolbox.canRaster), history, sink)
                 if (_messages.value.lastOrNull()?.let { it.text.isBlank() && it.steps.isEmpty() } == true) {
                     rollback(startPos, text, "", images)
                     _error.value = "The model returned an empty response"
@@ -425,6 +442,45 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         }
     }
 
+    // ---- generated images: save / use as app icon ----
+
+    private val _notice = MutableStateFlow<String?>(null)
+    /** A short success message (saved, icon applied) shown as a dismissible card. */
+    val notice: StateFlow<String?> = _notice.asStateFlow()
+
+    fun dismissNotice() {
+        _notice.value = null
+    }
+
+    /** Saves the picture to Pictures/Kodex (PNG) or, with [svg], the vector source to Download/Kodex. */
+    fun saveImage(g: GeneratedImage, svg: Boolean) {
+        viewModelScope.launch {
+            val file = File(if (svg) g.svgPath ?: return@launch else g.path)
+            val base = g.title.ifBlank { "kodex-image" }.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+            val ok = withContext(Dispatchers.IO) {
+                AppIconApplier.saveToDevice(app, file, "$base-${System.currentTimeMillis() % 100000}." + if (svg) "svg" else "png", if (svg) "image/svg+xml" else "image/png")
+            }
+            if (ok) {
+                _notice.value = if (svg) "Saved the SVG to Download/Kodex" else "Saved to Pictures/Kodex"
+            } else {
+                _error.value = "Couldn't save the image"
+            }
+        }
+    }
+
+    /** Installs the picture as this project's launcher icon (all densities + adaptive icon + Play Store icon). */
+    fun applyAsAppIcon(g: GeneratedImage) {
+        viewModelScope.launch {
+            try {
+                val r = withContext(Dispatchers.IO) { AppIconApplier.apply(root, File(g.path)) }
+                _notice.value = r.note
+                refreshIndex()
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Couldn't apply the icon"
+            }
+        }
+    }
+
     // ---- saved chats ----
 
     private fun restore(chat: StoredChat) {
@@ -436,10 +492,17 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             val imgs = m.images.map { File(store.imageDir, it) }.filter { it.exists() }.map { ChatImage(it.absolutePath) }
             if (m.role == "user") history += AgentMessage.User(m.text, imgs)
             else if (m.text.isNotBlank()) history += AgentMessage.Assistant(m.text)
+            val gens = m.generated.filter { File(store.imageDir, it.png).exists() }.map {
+                GeneratedImage(
+                    File(store.imageDir, it.png).absolutePath,
+                    it.svg?.let { n -> File(store.imageDir, n) }?.takeIf { f -> f.exists() }?.absolutePath,
+                    it.title, it.purpose,
+                )
+            }
             ui += UiMessage(
                 nextId++, m.role, m.text,
                 m.steps.map { UiStep("s${nextId++}", it.label, if (it.ok) StepStatus.DONE else StepStatus.FAILED) },
-                m.attachments, false, pos, imgs,
+                m.attachments, false, pos, imgs, gens,
             )
         }
         _messages.value = ui
@@ -463,6 +526,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                     m.role, m.text, m.attachments,
                     m.steps.map { StoredStep(it.label, it.status != StepStatus.FAILED) },
                     m.images.map { File(it.path).name },
+                    m.generated.map { StoredGenerated(File(it.path).name, it.svgPath?.let { p -> File(p).name }, it.title, it.purpose) },
                 )
             },
         )

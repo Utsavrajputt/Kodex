@@ -7,6 +7,8 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.aspectRatio
+import com.invictus.kodex.ai.agent.GeneratedImage
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.CircularProgressIndicator
@@ -166,6 +168,7 @@ fun AgentChatContent(
     val applyError by vm.applyError.collectAsState()
     val index by vm.fileIndex.collectAsState()
     val chats by vm.chats.collectAsState()
+    val notice by vm.notice.collectAsState()
 
     var input by remember { mutableStateOf("") }
     val attached = remember { mutableStateListOf<String>() }
@@ -262,6 +265,8 @@ fun AgentChatContent(
                                 }
                             },
                             onApplyCode = { _, code -> applyDialog = code },
+                            onSaveImage = { g, svg -> vm.saveImage(g, svg) },
+                            onApplyIcon = { g -> vm.applyAsAppIcon(g) },
                         )
                     }
                 }
@@ -315,6 +320,20 @@ fun AgentChatContent(
                     }
                 }
             }
+            notice?.let { msg ->
+                Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(XIcons.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(20.dp))
+                        Text(
+                            msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 10.dp),
+                        )
+                        IconButton(onClick = { vm.dismissNotice() }) { Icon(XIcons.Close, contentDescription = stringResource(R.string.ai_chat_dismiss)) }
+                    }
+                }
+            }
             undo?.let { u ->
                 Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -359,7 +378,7 @@ fun AgentChatContent(
         var plusMenu by remember { mutableStateOf(false) }
         val cs = MaterialTheme.colorScheme
         // Like Claude: one rounded card. Photos / file chips and the text on top, then a row with + on the left
-        // and the model pill + send/stop on the right.
+        // and the model pill right next to it, send/stop on the far right.
         Surface(
             shape = RoundedCornerShape(28.dp),
             color = cs.surfaceContainerHigh,
@@ -443,11 +462,11 @@ fun AgentChatContent(
                             )
                         }
                     }
-                    Spacer(Modifier.weight(1f))
                     if (status.loaded) {
-                        ModelChip(status.modelLabel, onClick = { vm.refreshStatus(); showModels = true })
                         Spacer(Modifier.width(8.dp))
+                        ModelChip(status.modelLabel, onClick = { vm.refreshStatus(); showModels = true })
                     }
+                    Spacer(Modifier.weight(1f))
                     SendStopButton(
                         busy = busy,
                         canSend = input.isNotBlank(),
@@ -646,6 +665,8 @@ private fun MessageItem(
     onRegenerate: () -> Unit,
     onEdit: () -> Unit,
     onApplyCode: (String, String) -> Unit,
+    onSaveImage: (GeneratedImage, Boolean) -> Unit,
+    onApplyIcon: (GeneratedImage) -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
     if (m.role == "user") {
@@ -706,6 +727,9 @@ private fun MessageItem(
                     ThinkingLabel(seed = m.id, modifier = Modifier.padding(start = 10.dp))
                 }
             }
+            m.generated.forEach { g ->
+                GeneratedImageCard(g, onSave = { svg -> onSaveImage(g, svg) }, onApplyIcon = { onApplyIcon(g) })
+            }
             if (!m.streaming && m.text.isNotBlank()) {
                 Row {
                     IconButton(onClick = { clipboard.setText(AnnotatedString(m.text)) }) { Icon(XIcons.ContentCopy, contentDescription = stringResource(R.string.ai_chat_copy), modifier = Modifier.size(18.dp)) }
@@ -725,6 +749,7 @@ private fun stepIcon(label: String): ImageVector = when {
     label.startsWith("Editing") -> XIcons.Edit
     label.startsWith("Creating") -> XIcons.NoteAdd
     label.startsWith("Deleting") -> XIcons.Delete
+    label.startsWith("Generating") || label.startsWith("Drawing") -> XIcons.Palette
     else -> XIcons.Bolt
 }
 
@@ -967,6 +992,39 @@ private fun SendStopButton(busy: Boolean, canSend: Boolean, onSend: () -> Unit, 
                         modifier = Modifier.size(20.dp),
                     )
                 }
+            }
+        }
+    }
+}
+
+/** A picture the agent made: preview + Save (PNG, and SVG when it is vector art) + Use as app icon. */
+@Composable
+private fun GeneratedImageCard(g: GeneratedImage, onSave: (svg: Boolean) -> Unit, onApplyIcon: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = cs.surfaceContainerHigh,
+        border = BorderStroke(1.dp, cs.outlineVariant.copy(alpha = 0.5f)),
+        modifier = Modifier.padding(top = 10.dp).fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(g.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            AsyncImage(
+                model = File(g.path),
+                contentDescription = g.title,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(if (g.isIcon) 36.dp else 14.dp))
+                    .background(cs.surfaceContainerHighest),
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (g.isIcon) {
+                    Button(onClick = onApplyIcon) { Text("Use as app icon") }
+                }
+                OutlinedButton(onClick = { onSave(false) }) { Text("Save PNG") }
+                if (g.svgPath != null) OutlinedButton(onClick = { onSave(true) }) { Text("Save SVG") }
             }
         }
     }

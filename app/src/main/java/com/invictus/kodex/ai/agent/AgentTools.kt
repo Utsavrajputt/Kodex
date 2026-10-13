@@ -14,11 +14,18 @@ import org.json.JSONObject
  * The agent's tools. Reads (list/read/search) run immediately; writes (edit/create/delete) only STAGE
  * changes into [pending] -- the user reviews and applies them. Every path is sandboxed by [ProjectFiles].
  */
-class AgentTools(private val files: ProjectFiles, private val pending: PendingChanges) {
+class AgentTools(
+    private val files: ProjectFiles,
+    private val pending: PendingChanges,
+    /** Image tools (generate_image / render_svg); null disables them. */
+    private val images: ImageToolbox? = null,
+) {
 
     data class Outcome(val text: String, val isError: Boolean = false)
 
-    val specs: List<ToolSpec> = listOf(
+    val specs: List<ToolSpec> get() = baseSpecs + imageSpecs()
+
+    private val baseSpecs: List<ToolSpec> = listOf(
         ToolSpec(
             "list_files",
             "List files and folders in the project (names and sizes). Use it to explore the structure.",
@@ -92,6 +99,40 @@ class AgentTools(private val files: ProjectFiles, private val pending: PendingCh
         ),
     )
 
+    private fun imageSpecs(): List<ToolSpec> {
+        val box = images ?: return emptyList()
+        val out = ArrayList<ToolSpec>()
+        if (box.canRaster) {
+            out += ToolSpec(
+                "generate_image",
+                "Paint a picture with the image model (logos, app icons, illustrations, artwork) or edit / restyle a picture the user attached. " +
+                    "The result is shown to the user in the chat with Save and \"Use as app icon\" buttons; nothing is written to the project until they press it. " +
+                    "For crisp flat/geometric logos or when the user asks for SVG, prefer render_svg.",
+                schema(
+                    "prompt" to str("Detailed description: subject, style, colours, mood, composition. For edits, say exactly what to change and what to keep."),
+                    "purpose" to str("'app_icon' for a launcher icon (adds icon design rules), or 'image' (default)."),
+                    "title" to str("Short title for the result card, e.g. 'Kodex app icon'."),
+                    "use_reference" to str("'attached' = edit the photo the user attached; 'last_generated' = refine the previous generated image; 'none' (default) = create from scratch."),
+                    required = listOf("prompt"),
+                ),
+            )
+        }
+        out += ToolSpec(
+            "render_svg",
+            "Draw vector art as SVG and show it to the user in the chat as a PNG preview (the SVG source is kept so they can save it). " +
+                "Best for app icons, logos and flat illustrations; use it whenever the user asks for SVG. The SVG must be complete, " +
+                "self-contained (no external images or fonts), and have a viewBox, ideally viewBox=\"0 0 512 512\". " +
+                "If it fails to parse you get the error back: fix the SVG and call again.",
+            schema(
+                "svg" to str("The full <svg>…</svg> markup."),
+                "purpose" to str("'app_icon' for a launcher icon (full-bleed square artwork, key shapes inside the central 60%), or 'image' (default)."),
+                "title" to str("Short title for the result card."),
+                required = listOf("svg"),
+            ),
+        )
+        return out
+    }
+
     /** Short human label shown as a live step in the chat. */
     fun label(call: ToolCall): String {
         val a = call.args
@@ -103,6 +144,8 @@ class AgentTools(private val files: ProjectFiles, private val pending: PendingCh
             "edit_file" -> "Editing $path"
             "create_file" -> "Creating $path"
             "delete_file" -> "Deleting $path"
+            "generate_image" -> "Generating image" + a.optString("title").takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
+            "render_svg" -> "Drawing SVG" + a.optString("title").takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
             else -> call.name
         }
     }
@@ -123,6 +166,8 @@ class AgentTools(private val files: ProjectFiles, private val pending: PendingCh
         "edit_file" -> editFile(call.args)
         "create_file" -> createFile(call.args)
         "delete_file" -> deleteFile(call.args)
+        "generate_image" -> images?.generate(call.args) ?: err("Image tools are not available")
+        "render_svg" -> images?.renderSvg(call.args) ?: err("Image tools are not available")
         else -> err("Unknown tool: ${call.name}")
     }
 

@@ -8,6 +8,9 @@ import org.json.JSONObject
 
 data class StoredStep(val label: String, val ok: Boolean)
 
+/** A picture the agent made: PNG file name (+ SVG file name when it was drawn as vector) inside [ChatStore.imageDir]. */
+data class StoredGenerated(val png: String, val svg: String?, val title: String, val purpose: String)
+
 data class StoredMessage(
     val role: String,
     val text: String,
@@ -15,6 +18,7 @@ data class StoredMessage(
     val steps: List<StoredStep> = emptyList(),
     /** File names inside [ChatStore.imageDir]. */
     val images: List<String> = emptyList(),
+    val generated: List<StoredGenerated> = emptyList(),
 )
 
 data class StoredChat(val id: String, val title: String, val updatedAt: Long, val messages: List<StoredMessage>)
@@ -43,7 +47,9 @@ class ChatStore(app: Application, projectPath: String) {
     }
 
     fun delete(id: String) {
-        load(id)?.messages?.flatMap { it.images }?.forEach { File(imageDir, it).delete() }
+        val msgs = load(id)?.messages.orEmpty()
+        msgs.flatMap { it.images }.forEach { File(imageDir, it).delete() }
+        msgs.flatMap { m -> m.generated.flatMap { listOfNotNull(it.png, it.svg) } }.forEach { File(imageDir, it).delete() }
         File(dir, "$id.json").delete()
     }
 
@@ -56,6 +62,12 @@ class ChatStore(app: Application, projectPath: String) {
                 JSONObject().put("role", m.role).put("text", m.text)
                     .put("attachments", JSONArray(m.attachments))
                     .put("images", JSONArray(m.images))
+                    .put(
+                        "generated",
+                        JSONArray(m.generated.map { g ->
+                            JSONObject().put("png", g.png).put("svg", g.svg ?: JSONObject.NULL).put("title", g.title).put("purpose", g.purpose)
+                        }),
+                    )
                     .put("steps", JSONArray(m.steps.map { JSONObject().put("label", it.label).put("ok", it.ok) }))
             }))
             .toString()
@@ -70,11 +82,20 @@ class ChatStore(app: Application, projectPath: String) {
                     val atts = m.optJSONArray("attachments") ?: JSONArray()
                     val steps = m.optJSONArray("steps") ?: JSONArray()
                     val imgs = m.optJSONArray("images") ?: JSONArray()
+                    val gens = m.optJSONArray("generated") ?: JSONArray()
                     StoredMessage(
                         m.optString("role"), m.optString("text"),
                         (0 until atts.length()).map { atts.getString(it) },
                         (0 until steps.length()).map { steps.getJSONObject(it).let { s -> StoredStep(s.optString("label"), s.optBoolean("ok", true)) } },
                         (0 until imgs.length()).map { imgs.getString(it) },
+                        (0 until gens.length()).map { gens.getJSONObject(it) }.map { g ->
+                            StoredGenerated(
+                                g.optString("png"),
+                                if (g.isNull("svg")) null else g.optString("svg").takeIf { it.isNotEmpty() },
+                                g.optString("title"),
+                                g.optString("purpose"),
+                            )
+                        },
                     )
                 },
             )
