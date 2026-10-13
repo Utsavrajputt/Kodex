@@ -91,6 +91,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -720,14 +722,11 @@ private fun MessageItem(
                 ) { Icon(XIcons.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(13.dp)) }
                 Text(stringResource(R.string.ai_chat_kodex_ai), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp))
             }
-            if (m.steps.isNotEmpty()) StepsBlock(m)
+            // One status row, like Claude: the running step, else a cycling "Thinking…" word; tap opens the timeline.
+            val showSteps = m.steps.isNotEmpty() || (m.streaming && m.text.isBlank())
+            if (showSteps) StepsBlock(m)
             if (m.text.isNotBlank()) {
-                SelectionContainer { MarkdownContent(m.text, Modifier.padding(top = if (m.steps.isNotEmpty()) 8.dp else 0.dp), onApplyCode) }
-            } else if (m.streaming && m.steps.none { it.status == StepStatus.RUNNING }) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp)) {
-                    ClaudeSpinner(size = 20.dp)
-                    ThinkingLabel(seed = m.id, modifier = Modifier.padding(start = 10.dp))
-                }
+                SelectionContainer { MarkdownContent(m.text, Modifier.padding(top = if (showSteps) 8.dp else 0.dp), onApplyCode) }
             }
             m.generated.forEach { g ->
                 GeneratedImageCard(g, onSave = { svg -> onSaveImage(g, svg) }, onApplyIcon = { onApplyIcon(g) })
@@ -756,7 +755,9 @@ private fun stepIcon(label: String): ImageVector = when {
 }
 
 /** "Read 3 files · edited 1 file" style recap of what the agent did, for the collapsed row. */
-private fun stepsSummary(steps: List<AgentChatViewModel.UiStep>): String {
+private fun stepsSummary(allSteps: List<AgentChatViewModel.UiStep>): String {
+    val steps = allSteps.filter { !it.thought }
+    if (steps.isEmpty()) return "Thought"
     fun count(prefix: String) = steps.count { it.label.startsWith(prefix) }
     fun plural(n: Int, one: String, many: String) = if (n == 1) "$n $one" else "$n $many"
     val parts = buildList {
@@ -771,37 +772,53 @@ private fun stepsSummary(steps: List<AgentChatViewModel.UiStep>): String {
     return text.replaceFirstChar { it.uppercase() }
 }
 
+/** "**Heading**" runs in a reasoning summary become semi-bold. */
+private fun thoughtText(raw: String): AnnotatedString = buildAnnotatedString {
+    var i = 0
+    val bold = Regex("""\*\*(.+?)\*\*""", RegexOption.DOT_MATCHES_ALL)
+    for (m in bold.findAll(raw)) {
+        append(raw.substring(i, m.range.first))
+        pushStyle(SpanStyle(fontWeight = FontWeight.SemiBold))
+        append(m.groupValues[1])
+        pop()
+        i = m.range.last + 1
+    }
+    append(raw.substring(i))
+}
+
 /**
- * What the agent is doing, Claude style: one quiet line (clock + current action or a recap + chevron) that
- * opens into a timeline of every step on tap.
+ * What the agent is doing, Claude style: ONE quiet status line (spinner + the running step, or a cycling
+ * "Pondering…" word while it thinks; a recap + clock once it is done) that opens into a timeline of every
+ * step and, where the model sends them, its reasoning summaries.
  */
 @Composable
 private fun StepsBlock(m: UiMessage) {
     var expanded by remember(m.id) { mutableStateOf(false) }
-    val failed = m.steps.count { it.status == StepStatus.FAILED }
-    val running = m.steps.lastOrNull { it.status == StepStatus.RUNNING }
-    val headline = when {
-        m.streaming -> running?.label ?: m.steps.lastOrNull()?.label ?: stringResource(R.string.ai_chat_working)
-        else -> stepsSummary(m.steps) + if (failed > 0) stringResource(R.string.ai_chat_steps_failed, failed) else ""
-    }
+    val tools = m.steps.filter { !it.thought }
+    val failed = tools.count { it.status == StepStatus.FAILED }
+    val running = tools.lastOrNull { it.status == StepStatus.RUNNING }
+    val working = m.streaming && (running != null || m.text.isBlank())
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val chevron by animateFloatAsState(if (expanded) 90f else 0f, label = "stepsChevron")
+    val expandable = m.steps.isNotEmpty()
     Column(Modifier.fillMaxWidth().animateContentSize()) {
         Row(
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .clickable { expanded = !expanded }
+                .clickable(enabled = expandable) { expanded = !expanded }
                 .padding(vertical = 8.dp, horizontal = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (m.streaming) ClaudeSpinner(size = 20.dp)
+            if (working) ClaudeSpinner(size = 20.dp)
             else Icon(XIcons.Schedule, contentDescription = null, tint = muted, modifier = Modifier.size(18.dp))
-            if (m.streaming) {
-                ShimmerText(headline, modifier = Modifier.weight(1f).padding(horizontal = 10.dp))
-            } else {
-                Text(
-                    headline,
+            when {
+                working && running != null ->
+                    ShimmerText(running.label, modifier = Modifier.weight(1f).padding(horizontal = 10.dp))
+                working ->
+                    Box(Modifier.weight(1f).padding(horizontal = 10.dp)) { ThinkingLabel(seed = m.id) }
+                else -> Text(
+                    stepsSummary(m.steps) + if (failed > 0) stringResource(R.string.ai_chat_steps_failed, failed) else "",
                     style = MaterialTheme.typography.bodyMedium,
                     color = muted,
                     maxLines = 1,
@@ -809,12 +826,14 @@ private fun StepsBlock(m: UiMessage) {
                     modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
                 )
             }
-            Icon(
-                XIcons.ChevronRight, contentDescription = if (expanded) stringResource(R.string.ai_chat_hide_steps) else stringResource(R.string.ai_chat_show_steps), tint = muted,
-                modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = chevron },
-            )
+            if (expandable) {
+                Icon(
+                    XIcons.ChevronRight, contentDescription = if (expanded) stringResource(R.string.ai_chat_hide_steps) else stringResource(R.string.ai_chat_show_steps), tint = muted,
+                    modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = chevron },
+                )
+            }
         }
-        if (expanded) {
+        if (expanded && expandable) {
             val rail = MaterialTheme.colorScheme.outlineVariant
             val bg = MaterialTheme.colorScheme.background
             Column(
@@ -826,22 +845,36 @@ private fun StepsBlock(m: UiMessage) {
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 m.steps.forEach { st ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.background(bg).padding(vertical = 1.dp)) {
-                            Icon(stepIcon(st.label), contentDescription = null, tint = muted, modifier = Modifier.size(16.dp))
+                    if (st.thought) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Box(Modifier.background(bg).padding(vertical = 1.dp)) {
+                                Icon(XIcons.AutoAwesome, contentDescription = null, tint = muted, modifier = Modifier.size(16.dp))
+                            }
+                            Text(
+                                thoughtText(st.label.trim()),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = muted,
+                                modifier = Modifier.weight(1f).padding(start = 10.dp),
+                            )
                         }
-                        Text(
-                            st.label,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (st.status == StepStatus.FAILED) MaterialTheme.colorScheme.error else muted,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
-                        )
-                        when (st.status) {
-                            StepStatus.RUNNING -> ClaudeSpinner(size = 14.dp)
-                            StepStatus.DONE -> Icon(XIcons.Check, contentDescription = stringResource(R.string.ai_chat_done), tint = muted, modifier = Modifier.size(14.dp))
-                            StepStatus.FAILED -> Icon(XIcons.ErrorCircle, contentDescription = stringResource(R.string.ai_chat_failed), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.background(bg).padding(vertical = 1.dp)) {
+                                Icon(stepIcon(st.label), contentDescription = null, tint = muted, modifier = Modifier.size(16.dp))
+                            }
+                            Text(
+                                st.label,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (st.status == StepStatus.FAILED) MaterialTheme.colorScheme.error else muted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+                            )
+                            when (st.status) {
+                                StepStatus.RUNNING -> ClaudeSpinner(size = 14.dp)
+                                StepStatus.DONE -> Icon(XIcons.Check, contentDescription = stringResource(R.string.ai_chat_done), tint = muted, modifier = Modifier.size(14.dp))
+                                StepStatus.FAILED -> Icon(XIcons.ErrorCircle, contentDescription = stringResource(R.string.ai_chat_failed), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
+                            }
                         }
                     }
                 }

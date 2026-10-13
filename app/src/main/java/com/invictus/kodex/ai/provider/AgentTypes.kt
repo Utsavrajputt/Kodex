@@ -32,6 +32,9 @@ sealed interface AgentMessage {
 sealed interface AgentEvent {
     data class Delta(val text: String) : AgentEvent
     data class Call(val call: ToolCall) : AgentEvent
+
+    /** A summary of the model's reasoning (Gemini thought summaries); shown in the steps timeline, never sent back. */
+    data class Thought(val text: String) : AgentEvent
     data object Done : AgentEvent
     data class Error(val error: AiError) : AgentEvent
 }

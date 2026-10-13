@@ -67,7 +67,8 @@ import kotlinx.coroutines.withContext
 class AgentChatViewModel(private val app: Application, val projectPath: String) : ViewModel() {
 
     enum class StepStatus { RUNNING, DONE, FAILED }
-    data class UiStep(val id: String, val label: String, val status: StepStatus)
+    /** A tool step, or (with [thought]) a chunk of the model's reasoning summary shown in the same timeline. */
+    data class UiStep(val id: String, val label: String, val status: StepStatus, val thought: Boolean = false)
     data class UiMessage(
         val id: Long,
         val role: String,
@@ -430,6 +431,15 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             updateLast { it.copy(text = it.text + d) }
         }
 
+        override fun onThought(delta: String) = updateLast { m ->
+            val last = m.steps.lastOrNull()
+            if (last != null && last.thought) {
+                m.copy(steps = m.steps.dropLast(1) + last.copy(label = last.label + delta))
+            } else {
+                m.copy(steps = m.steps + UiStep("t${m.steps.size}_${System.nanoTime()}", delta, StepStatus.DONE, thought = true))
+            }
+        }
+
         override fun onStepStart(id: String, label: String) =
             updateLast { it.copy(steps = it.steps + UiStep(id, label, StepStatus.RUNNING)) }
 
@@ -505,7 +515,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             }
             ui += UiMessage(
                 nextId++, m.role, m.text,
-                m.steps.map { UiStep("s${nextId++}", it.label, if (it.ok) StepStatus.DONE else StepStatus.FAILED) },
+                m.steps.map { UiStep("s${nextId++}", it.label, if (it.ok) StepStatus.DONE else StepStatus.FAILED, it.thought) },
                 m.attachments, false, pos, imgs, gens,
             )
         }
@@ -528,7 +538,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             msgs.map { m ->
                 StoredMessage(
                     m.role, m.text, m.attachments,
-                    m.steps.map { StoredStep(it.label, it.status != StepStatus.FAILED) },
+                    m.steps.map { StoredStep(it.label, it.status != StepStatus.FAILED, it.thought) },
                     m.images.map { File(it.path).name },
                     m.generated.map { StoredGenerated(File(it.path).name, it.svgPath?.let { p -> File(p).name }, it.title, it.purpose) },
                 )

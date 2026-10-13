@@ -6,7 +6,7 @@ import java.security.MessageDigest
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class StoredStep(val label: String, val ok: Boolean)
+data class StoredStep(val label: String, val ok: Boolean, val thought: Boolean = false)
 
 /** A picture the agent made: PNG file name (+ SVG file name when it was drawn as vector) inside [ChatStore.imageDir]. */
 data class StoredGenerated(val png: String, val svg: String?, val title: String, val purpose: String)
@@ -68,7 +68,7 @@ class ChatStore(app: Application, projectPath: String) {
                             JSONObject().put("png", g.png).put("svg", g.svg ?: JSONObject.NULL).put("title", g.title).put("purpose", g.purpose)
                         }),
                     )
-                    .put("steps", JSONArray(m.steps.map { JSONObject().put("label", it.label).put("ok", it.ok) }))
+                    .put("steps", JSONArray(m.steps.map { JSONObject().put("label", it.label).put("ok", it.ok).apply { if (it.thought) put("thought", true) } }))
             }))
             .toString()
 
@@ -86,7 +86,7 @@ class ChatStore(app: Application, projectPath: String) {
                     StoredMessage(
                         m.optString("role"), m.optString("text"),
                         (0 until atts.length()).map { atts.getString(it) },
-                        (0 until steps.length()).map { steps.getJSONObject(it).let { s -> StoredStep(s.optString("label"), s.optBoolean("ok", true)) } },
+                        (0 until steps.length()).map { steps.getJSONObject(it).let { s -> StoredStep(s.optString("label"), s.optBoolean("ok", true), s.optBoolean("thought", false)) } },
                         (0 until imgs.length()).map { imgs.getString(it) },
                         (0 until gens.length()).map { gens.getJSONObject(it) }.map { g ->
                             StoredGenerated(

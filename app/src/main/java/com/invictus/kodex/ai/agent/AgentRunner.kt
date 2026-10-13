@@ -21,6 +21,9 @@ interface AgentSink {
     fun onStepStart(id: String, label: String)
     fun onStepEnd(id: String, ok: Boolean)
 
+    /** A chunk of the model's reasoning summary (when the provider sends one). */
+    fun onThought(delta: String) {}
+
     /** A 429 is being waited out ([info] set), or the wait is over ([info] null). */
     fun onRateLimit(info: RateLimitInfo?) {}
 
@@ -108,6 +111,7 @@ class AgentRunner(
                 when (ev) {
                     is AgentEvent.Delta -> { text.append(ev.text); sink.onText(ev.text) }
                     is AgentEvent.Call -> calls += ev.call
+                    is AgentEvent.Thought -> sink.onThought(ev.text)
                     AgentEvent.Done -> Unit
                     is AgentEvent.Error -> when (val e = ev.error) {
                         is AiError.ContextTooLong -> tooLong = true

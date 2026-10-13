@@ -72,7 +72,8 @@ class GeminiProvider : AiProvider {
         val generation = JSONObject().put("maxOutputTokens", maxOutputTokens)
         when {
             model.contains("2.5-flash") -> generation.put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
-            model.startsWith("gemini-3") -> generation.put("thinkingConfig", JSONObject().put("thinkingLevel", "low"))
+            model.startsWith("gemini-3") ->
+                generation.put("thinkingConfig", JSONObject().put("thinkingLevel", "low").put("includeThoughts", true))
         }
         val body = JSONObject()
             .put("systemInstruction", JSONObject().put("parts", JSONArray(listOf(JSONObject().put("text", system)))))
@@ -109,7 +110,9 @@ class GeminiProvider : AiProvider {
                             idFromApi = apiId.isNotEmpty(),
                         ),
                     )
-                } else if (!part.optBoolean("thought", false)) {
+                } else if (part.optBoolean("thought", false)) {
+                    part.optString("text").takeIf { it.isNotEmpty() }?.let { events += AgentEvent.Thought(it) }
+                } else {
                     part.optString("text").takeIf { it.isNotEmpty() }?.let { events += AgentEvent.Delta(it) }
                 }
             }
