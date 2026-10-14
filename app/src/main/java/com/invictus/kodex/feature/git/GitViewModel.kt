@@ -1265,10 +1265,23 @@ class GitViewModel(
         _uiState.update { it.copy(branchMenuOpen = false) }
         if (name == _uiState.value.snapshot?.headName) return
         viewModelScope.launch(io) {
-            when (val result = session.checkoutBranch(name, create = false)) {
+            val before = _uiState.value.snapshot
+            val result = withOpProgress(R.string.git_progress_switching) {
+                session.checkoutBranch(name, create = false)
+            }
+            when (result) {
                 is GitResult.Ok -> {
                     message(R.string.git_msg_switched_branch, name)
-                    refresh()
+                    // The header reads branch/tracking from the snapshot, which used to arrive only
+                    // after the full status walk (16-50s on big repos). Show it right away.
+                    val after = (session.headSnapshot() as? GitResult.Ok)?.value
+                    if (after != null) {
+                        _uiState.update { it.copy(snapshot = after) }
+                        statusCache[projectPath]?.let { statusCache[projectPath] = it.copy(snapshot = after) }
+                    }
+                    // Same commit => same tree => status is identical, so no new full walk.
+                    val sameCommit = before?.headId != null && before.headId == after?.headId
+                    if (!sameCommit) refresh()
                 }
                 is GitResult.Err -> _uiState.update { it.copy(error = result.error) }
             }

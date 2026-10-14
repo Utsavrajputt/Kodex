@@ -50,7 +50,9 @@ import org.eclipse.jgit.lib.ConfigConstants
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.FileMode
 import org.eclipse.jgit.lib.ObjectId
+import org.eclipse.jgit.lib.RefUpdate
 import org.eclipse.jgit.lib.Repository
+import org.eclipse.jgit.lib.RepositoryState
 import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.storage.file.FileBasedConfig
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
@@ -883,13 +885,13 @@ class GitSession(
                     if (repository.resolve(start) == null) throw IllegalArgumentException("Can't resolve '$start'.")
                     git.branchCreate().setName(n).setStartPoint(start)
                         .setUpstreamMode(CreateBranchCommand.SetupUpstreamMode.NOTRACK).call()
-                    if (checkout) git.checkout().setName(n).call()
+                    if (checkout && !relinkHeadIfSameCommit(n)) git.checkout().setName(n).call()
                 } else if (repository.resolve("HEAD") == null) {
                     // Unborn: branch has no tip yet, just point HEAD at the new name.
                     repository.updateRef(Constants.HEAD).link(Constants.R_HEADS + n)
                 } else {
                     git.branchCreate().setName(n).call()
-                    if (checkout) git.checkout().setName(n).call()
+                    if (checkout && !relinkHeadIfSameCommit(n)) git.checkout().setName(n).call()
                 }
             }
             Unit
@@ -905,7 +907,7 @@ class GitSession(
                 git.branchCreate().setName(local).setStartPoint(ref)
                     .setUpstreamMode(CreateBranchCommand.SetupUpstreamMode.TRACK).call()
             }
-            git.checkout().setName(local).call()
+            if (!relinkHeadIfSameCommit(local)) git.checkout().setName(local).call()
         }
         Unit
     }
@@ -915,12 +917,51 @@ class GitSession(
         timedLock {
             if (create && repository.resolve("HEAD") == null) {
                 repository.updateRef(Constants.HEAD).link(Constants.R_HEADS + n)
+            } else if (!create && relinkHeadIfSameCommit(n)) {
+                // Target branch already points at HEAD's commit: nothing to write, see below.
             } else {
                 git.checkout().setName(n).setCreateBranch(create).call()
             }
         }
         Unit
     }
+
+    /**
+     * Fast path for `checkout <branch>` when that branch's tip is the commit HEAD already is on
+     * (typical right after creating a branch, or switching between branches that haven't diverged).
+     * Same commit means same tree, so the index and working tree are already exactly what a checkout
+     * would produce - JGit's [CheckoutCommand] would still walk the whole working tree to find that
+     * out, which is the slow part on big repos. Only HEAD's symbolic ref moves.
+     *
+     * Returns true when HEAD now points at [branch]. Returns false - and touches nothing - whenever
+     * there is any doubt (merge/rebase/cherry-pick in progress, unmerged index entries, branch
+     * missing, different commit, ref lock failure), so the caller falls back to the regular JGit
+     * checkout with its normal conflict handling. Must be called under [mutex].
+     */
+    private fun relinkHeadIfSameCommit(branch: String): Boolean {
+        if (repository.repositoryState != RepositoryState.SAFE) return false
+        val headId = repository.resolve(Constants.HEAD) ?: return false
+        val targetRef = repository.exactRef(Constants.R_HEADS + branch) ?: return false
+        if (targetRef.objectId != headId) return false
+        if (repository.readDirCache().hasUnmergedPaths()) return false
+        val head = repository.exactRef(Constants.HEAD)
+        if (head != null && head.isSymbolic && head.target.name == targetRef.name) return true
+        val from = repository.branch ?: headId.name
+        val update = repository.updateRef(Constants.HEAD)
+        update.setRefLogMessage("checkout: moving from $from to $branch", false)
+        return when (update.link(targetRef.name)) {
+            RefUpdate.Result.NEW, RefUpdate.Result.FORCED, RefUpdate.Result.NO_CHANGE -> true
+            else -> false
+        }
+    }
+
+    /**
+     * Snapshot (HEAD, branch, tracking, merge/rebase state) WITHOUT [mutex] and without a
+     * working-tree walk: lets the UI show the new branch name right after a switch instead of
+     * waiting behind a long status walk. Same lock-free read rules as [readOnly].
+     */
+    suspend fun headSnapshot(): GitResult<GitRepoSnapshot> =
+        ioOp(TITLE_STATUS) { readOnly { doSnapshot() } }
 
     suspend fun renameBranch(oldName: String?, newName: String): GitResult<Unit> = ioOp(TITLE_BRANCH) {
         val nn = newName.trim()

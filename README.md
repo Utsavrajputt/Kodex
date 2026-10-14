@@ -11,8 +11,8 @@
 </p>
 
 > [!NOTE]
-> **Kodex 1.1.0 is out.** Grab the APK for your phone from the
-> [latest release](https://github.com/Utsavrajputt/Kodex/releases/latest) — see
+> **Kodex 1.2.0 is out — now with an AI assistant and a GitHub Manager.** Grab the APK for your phone
+> from the [latest release](https://github.com/Utsavrajputt/Kodex/releases/latest) — see
 > [APK variants](#-apk-variants) if you're not sure which one — and read what's new in
 > [CHANGELOG.md](CHANGELOG.md).
 
@@ -71,7 +71,7 @@ left to GitHub Actions or a PC — that is a different (and much heavier) proble
 | **Recent projects** | Home and *All projects* lists with search and sort. Per-project menu: **pin to top**, **rename**, **delete** (with confirmation), **project info** (size, files, last modified/opened, Git branch), copy path, remove from recents |
 | **Backup as ZIP** | One-tap project backup from the recents menu |
 | **Pinned files** | Pin files and folders to the top of a project's tree |
-| **Long names** | The file tree scrolls sideways only while a name is wider than the screen (Settings → Behavior → *Scroll long file names*, on by default) |
+| **Long names** | The file tree scrolls sideways only while a name is wider than the screen (Settings → Workspace → *Scroll long file names*, on by default) |
 | **Safety** | Binary/large-file open warning, hidden-files toggle, and device root, Documents and Downloads can never be deleted from the app |
 
 </details>
@@ -99,7 +99,7 @@ left to GitHub Actions or a PC — that is a different (and much heavier) proble
 | Feature | Description |
 |---|---|
 | **Core operations** | Clone with live progress, status, stage/unstage, commit (+ amend), push/pull/fetch, force push (incl. force-with-lease) behind a confirmation |
-| **Branches** | List, create, checkout, delete, rename, quick-switch dropdown — also before the first commit |
+| **Branches** | List, create, checkout, delete, rename, quick-switch dropdown — also before the first commit. Switching to a branch on the same commit is instant (no working-tree scan), with a progress dialog for the rest; make a branch the default on GitHub |
 | **Rebase** | Rebase onto a branch with continue / skip / abort and conflict resolution |
 | **History** | Log, commit detail, file history, search by message/author/hash |
 | **Diff** | GitHub-style unified and side-by-side viewer with word highlights, tap-to-open, inline editing, image diff preview |
@@ -128,14 +128,54 @@ Not planned: GPG commit signing, submodules, SSH auth.
 </details>
 
 <details>
-<summary><b>🎨 Themes & diagnostics</b></summary>
+<summary><b>🐙 GitHub Manager</b></summary>
+
+Open it from the workspace menu. It reuses the token you already saved for Git — no second login.
+
+| Feature | Description |
+|---|---|
+| **Actions runs** | Run list with status filters (All / Running / Success / Failed / Cancelled) and a *View all runs* screen |
+| **Run details** | Commit header, live steps with per-job progress and **live step timers**, copyable logs and an error excerpt |
+| **Run workflow** | Workflow and branch pickers; inputs are read from the workflow YAML (raw key/value editor as fallback) |
+| **Latest APK card** | Newest successful ARM64 build: download with progress, speed/ETA and pause/resume, signature/ABI/version checks, then **Install / Update / Open** — installs only after you tap |
+| **ARM64 builds** | Recent projects' ARM64 artifacts, newest first, with direct download and install |
+| **Artifacts & deployments** | Install, save to a folder or delete |
+| **Cleanup** | Runs, deployments and artifacts with filters and a preview; rate-limit-aware, keeps going in the background, never preselects the newest successful build |
+| **Notifications** | Live progress and results for downloads, installs, cleanup and workflow dispatch, plus build notifications that open the run |
+
+</details>
+
+<details>
+<summary><b>🤖 AI Assistant (optional)</b></summary>
+
+Bring your own key: **Anthropic Claude, OpenAI or Google Gemini**, stored in the Keystore-backed AES/GCM
+vault (Settings → AI Assistant). One APK — AI is a runtime toggle (**Settings → AI Assistant → Enable AI**);
+turning it off hides every AI entry point and disables every AI route.
+
+| Feature | Description |
+|---|---|
+| **Workspace agent** | Chat with full-project context, multi-file tools, change review with per-file diffs and undo; keeps running in the background and notifies you when done |
+| **Chat** | Markdown and code blocks, `@file` mentions, photo attachments, per-project history with rename, model picker in the composer, thinking summaries |
+| **Inline edit** | Selection → *Edit with AI* → search/replace proposal → per-hunk diff review → single-undo-step apply with stale-file protection |
+| **Explain** | Explain a selection, a diff (commit detail + diff review) or an error (run log, diagnostics) with an optional reviewed fix patch |
+| **Commit messages** | One tap in your saved style; long-press for style settings |
+| **Images** | AI image and app-icon generation |
+| **Memory & instructions** | Per-project `.kodex/memory.md` and `.kodex/instructions.md`, plus global custom instructions |
+| **Usage & limits** | Daily/monthly requests and tokens per model, custom daily limits, clear rate-limit handling |
+| **Privacy** | Secret redaction and exclusion globs; diagnostics logs redact AI and git tokens |
+
+</details>
+
+<details>
+<summary><b>🎨 Themes, settings & diagnostics</b></summary>
 
 | Feature | Description |
 |---|---|
 | **Material 3 Expressive UI** | Jetpack Compose throughout, with expressive motion and pill-shaped components |
 | **5 app themes** | Default, Aurora, Catppuccin, Nord and Rose Pine, plus an **AMOLED** true-black toggle |
 | **Editor themes** | Light/dark pairs including One Dark Pro, GitHub, Solarized, Monokai, Ayu, Darcula, VS Code and Kodex |
-| **Crash & Git logs** | On-device crash log and Git log viewers under Settings → Diagnostics |
+| **Settings backup** | Export and import app, editor, GitHub and AI preferences by category (Settings → Advanced) |
+| **Crash & Git logs** | On-device crash log and Git log viewers under Settings → Advanced |
 | **About** | Version, GitHub and Libraries buttons, Support, GitHub contributors and the AGPL-3.0 license under Settings → About |
 
 </details>
@@ -151,6 +191,7 @@ Not planned: GPG commit signing, submodules, SSH auth.
 | Editor | [`io.github.Rosemoe:editor`](https://github.com/Rosemoe/sora-editor) + TextMate grammars |
 | Git | [`org.eclipse.jgit`](https://www.eclipse.org/jgit/) |
 | Async | Coroutines + Flow |
+| Networking | OkHttp (GitHub API, AI providers) |
 | Storage | Room (recent projects, pins, search history), DataStore (settings) |
 | Token security | Android Keystore (AES/GCM) |
 | Images | Coil |
@@ -165,6 +206,7 @@ app/src/main/java/com/invictus/kodex/
  │   ├─ fs/          # file operations, directory/external-change watchers, storage permission
  │   ├─ git/         # JGit session, auth, cloner, conflict parser
  │   ├─ github/      # GitHub profile + contributors lookups
+ │   ├─ backup/      # settings export / import
  │   ├─ editor/      # tab buffers, language registry, TextMate + editor settings
  │   ├─ preview/     # preview helpers
  │   ├─ search/      # fuzzy file search, code search, search history
@@ -172,6 +214,8 @@ app/src/main/java/com/invictus/kodex/
  │   ├─ security/    # per-remote token vault
  │   ├─ data/        # Room database, DAOs, entities
  │   └─ diagnostics/ # crash + Git logs
+ ├─ ai/              # providers, agent, chat + editor AI UI, memory, usage
+ ├─ github/          # Actions runs, run logs, APK download/install, cleanup, notifications
  ├─ feature/
  │   ├─ home/        # home, all-projects list, project card menu
  │   ├─ project/     # Open Project sheet
@@ -180,7 +224,7 @@ app/src/main/java/com/invictus/kodex/
  │   ├─ git/         # status, commit, branches, diff, history, stash, remotes, onboarding
  │   ├─ preview/     # Markdown / HTML / SVG / image / video
  │   ├─ search/      # file search overlay, code search screen
- │   ├─ settings/    # appearance, editing, behaviour, GitHub, diagnostics, about + libraries
+ │   ├─ settings/    # appearance, editor, workspace, GitHub, AI, advanced, about + libraries
  │   ├─ permission/  # onboarding + storage permission flow
  │   └─ diagnostics/
  ├─ ui/              # theme, shared components, navigation
@@ -247,26 +291,26 @@ to `main` runs `.github/workflows/android-build.yml` and uploads the signed APKs
 Two tag-triggered workflows build signed APKs and publish them to GitHub Releases, with SHA-256
 checksums and notes pulled from `CHANGELOG.md`:
 
-- **`.github/workflows/release.yml`** — stable releases, tags matching `vX.Y.Z` (e.g. `v1.1.0`, the current release).
+- **`.github/workflows/release.yml`** — stable releases, tags matching `vX.Y.Z` (e.g. `v1.2.0`, the current release). The tag must start with a **lowercase** `v` — `V1.2.0` neither triggers the workflow nor passes `version-from-tag.sh`.
 - **`.github/workflows/prerelease.yml`** — pre-releases, tags matching `vX.Y.Z-suffix` (e.g.
-  `v1.1.0-beta.1`, `v1.1.0-rc.2`). The GitHub Release is flagged **Pre-release** automatically.
+  `v1.2.0-beta.1`, `v1.2.0-rc.2`). The GitHub Release is flagged **Pre-release** automatically.
 
 Both fail if any signing secret is missing — a release is never published unsigned.
 
 To cut a release:
 
-1. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [x.y.z] - YYYY-MM-DD` (pre-releases may keep
-   `[x.y.z]` or stay under `[Unreleased]`), then commit and push to `main`.
+1. In `CHANGELOG.md`, add a `## [x.y.z] - YYYY-MM-DD` section for the release (the workflows use the
+   section matching the tag), then commit and push to `main`.
 2. Tag the commit and push the tag:
 
    ```bash
    # stable
-   git tag v1.1.0
-   git push origin v1.1.0
+   git tag v1.2.0
+   git push origin v1.2.0
 
    # pre-release
-   git tag v1.1.0-beta.1
-   git push origin v1.1.0-beta.1
+   git tag v1.2.0-beta.1
+   git push origin v1.2.0-beta.1
    ```
 
 3. The matching job publishes the GitHub Release with all three APKs attached.
@@ -284,14 +328,16 @@ Run workflow** and typing the tag name, without pushing a tag first.
 ## 🔐 Permissions
 
 - `MANAGE_EXTERNAL_STORAGE` — "All files access", so Kodex can work directly on your project folders
-- `INTERNET` — Git clone/push/pull over HTTPS and GitHub profile lookups
-- `POST_NOTIFICATIONS` — clone and sync progress
+- `INTERNET` — Git clone/push/pull over HTTPS, the GitHub API and your chosen AI provider
+- `POST_NOTIFICATIONS` — clone and sync progress, GitHub build/download status and AI replies
+- `REQUEST_INSTALL_PACKAGES` — install APKs you download from your GitHub builds (only after you tap *Install*)
+- `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_DATA_SYNC` — keep long GitHub jobs and AI replies running while the app is in the background
 
 ---
 
 ## 🚫 Out of scope
 
-On-device build/run, SDK/Gradle/JDK management, a terminal, SSH auth, LSP servers, AI agents/MCP,
+On-device build/run, SDK/Gradle/JDK management, a terminal, SSH auth, LSP servers, MCP servers,
 a plugin system and a real Compose/XML/Flutter layout preview.
 
 ---
@@ -299,11 +345,3 @@ a plugin system and a real Compose/XML/Flutter layout preview.
 <div align="center">
   <sub>Built with ⚡ by <a href="https://github.com/Utsavrajputt">Utsav</a></sub>
 </div>
-
-## M17–M20: AI Assistant (single APK, runtime toggle)
-- One APK variant (no product flavors): AI is built in and controlled by **Settings → Behavior → Enable AI**. Turning it off hides the AI settings row, workspace/editor buttons, commit-message/explain helpers and disables every AI route.
-- Providers: Anthropic Claude, OpenAI, Google Gemini — BYOK, Keystore-AES/GCM vault (Settings → AI), manual SSE over OkHttp.
-- Editor AI panel (bottom split): streaming chat with file context + token estimate, secret redaction, exclusion globs.
-- Inline edit: selection → "Edit with AI" → search/replace proposal → per-hunk diff review → single-undo-step apply with stale-file protection.
-- Commit message generation (Git stage), explain-diff (commit detail + diff review), explain-error (Run log, Diagnostics) with optional reviewed fix patch.
-- Diagnostics logs redact AI/git tokens. CI builds 3 APKs per build (`kodex-arm64-v8a`, `kodex-armeabi-v7a`, `kodex-universal`).

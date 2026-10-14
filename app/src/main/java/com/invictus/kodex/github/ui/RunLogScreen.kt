@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,10 +66,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.invictus.kodex.R
+import com.invictus.kodex.github.api.GhClock
 import com.invictus.kodex.github.api.GhJob
 import com.invictus.kodex.github.api.GhRun
 import com.invictus.kodex.github.api.RunDisplayStatus
 import com.invictus.kodex.ui.icons.XIcons
+import kotlinx.coroutines.delay
+import java.time.Instant
 
 /**
  * Run details: commit on top, status line, live progress while the run builds, then the jobs with their
@@ -221,7 +225,14 @@ private fun RunHeader(run: GhRun, workflowName: String, p: GhPalette) {
                 Text(
                     runMeta(run), style = MaterialTheme.typography.bodySmall,
                     color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
+                // Running (not just queued) runs show how long they have been going, ticking every second.
+                val runStart = run.startedAt
+                if (run.display == RunDisplayStatus.Running && runStart != null) {
+                    Text(" • ", style = MaterialTheme.typography.bodySmall, color = p.onCardMuted)
+                    LiveElapsedText(runStart, MaterialTheme.typography.bodySmall, p.accent)
+                }
             }
         }
     }
@@ -295,14 +306,26 @@ private fun JobCard(job: GhJob, p: GhPalette, selected: Boolean, onClick: (() ->
                     )
                     if (!expanded && jobState == StepState.Current) {
                         steps.firstOrNull { stepState(it.status, it.conclusion) == StepState.Current }?.let {
-                            Text(
-                                prettyStepName(it.name), style = MaterialTheme.typography.labelSmall,
-                                color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    prettyStepName(it.name), style = MaterialTheme.typography.labelSmall,
+                                    color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                )
+                                it.startedAt?.let { start ->
+                                    Text(" • ", style = MaterialTheme.typography.labelSmall, color = p.onCardMuted)
+                                    LiveElapsedText(start, MaterialTheme.typography.labelSmall, p.accent)
+                                }
+                            }
                         }
                     }
                 }
-                job.durationMs?.let { Text(formatDuration(it), style = MaterialTheme.typography.labelMedium, color = p.onCardMuted) }
+                val jobStart = job.startedAt
+                if (jobState == StepState.Current && job.completedAt == null && jobStart != null) {
+                    LiveElapsedText(jobStart, MaterialTheme.typography.labelMedium, p.accent)
+                } else {
+                    job.durationMs?.let { Text(formatDuration(it), style = MaterialTheme.typography.labelMedium, color = p.onCardMuted) }
+                }
                 if (steps.isNotEmpty()) {
                     Spacer(Modifier.width(4.dp))
                     Icon(
@@ -337,12 +360,38 @@ private fun JobCard(job: GhJob, p: GhPalette, selected: Boolean, onClick: (() ->
                             },
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                         )
-                        step.durationMs?.let { Text(formatDuration(it), style = MaterialTheme.typography.labelSmall, color = p.onCardMuted) }
+                        val stepStart = step.startedAt
+                        if (st == StepState.Current && step.completedAt == null && stepStart != null) {
+                            LiveElapsedText(stepStart, MaterialTheme.typography.labelSmall, p.accent)
+                        } else {
+                            step.durationMs?.let { Text(formatDuration(it), style = MaterialTheme.typography.labelSmall, color = p.onCardMuted) }
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * Time since [since], redrawn once a second (on the second boundary, so several timers on screen tick
+ * together). GitHub only reports `started_at` for a running step/job, never an end time, so the elapsed
+ * time has to be counted on the device - against GitHub's clock ([GhClock], synced from API response
+ * dates), so a wrong phone clock does not skew it. Never goes below 0s.
+ */
+@Composable
+internal fun LiveElapsedText(since: Instant, style: TextStyle, color: Color) {
+    var now by remember { mutableStateOf(GhClock.now()) }
+    LaunchedEffect(since) {
+        while (true) {
+            now = GhClock.now()
+            delay(1000L - now % 1000L)
+        }
+    }
+    Text(
+        formatDuration((now - since.toEpochMilli()).coerceAtLeast(0)),
+        style = style, color = color, fontWeight = FontWeight.SemiBold, maxLines = 1,
+    )
 }
 
 @Composable

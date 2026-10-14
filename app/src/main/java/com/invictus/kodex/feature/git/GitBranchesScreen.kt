@@ -256,9 +256,15 @@ class GitBranchesViewModel(
 
     fun checkout(b: GitBranchDetail) {
         val name = b.name
+        if (_ui.value.busy) return
         viewModelScope.launch(io) {
-            val result = if (b.isRemote) session.checkoutRemoteBranch(name)
-            else session.checkoutBranch(name, create = false)
+            _ui.update { it.copy(busy = true, progressTask = "") }
+            val result = try {
+                if (b.isRemote) session.checkoutRemoteBranch(name)
+                else session.checkoutBranch(name, create = false)
+            } finally {
+                _ui.update { it.copy(busy = false, progressTask = "") }
+            }
             when (val r = result) {
                 is GitResult.Ok -> {
                     _messages.value = "Switched to '${if (b.isRemote) name.substringAfter('/') else name}'"

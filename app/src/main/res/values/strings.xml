@@ -670,6 +670,7 @@
     <string name="git_progress_continuing">Continuing rebase…</string>
     <string name="git_progress_aborting">Aborting…</string>
     <string name="git_progress_resetting">Resetting…</string>
+    <string name="git_progress_switching">Switching branch…</string>
     <string name="git_progress_count">%1$d / %2$d</string>
     <string name="git_progress_wait">Large repos can take a moment. Please wait.</string>
     <string name="home_hero_kicker">WELCOME TO KODEX</string>

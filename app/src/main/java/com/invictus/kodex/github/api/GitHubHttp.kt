@@ -19,6 +19,28 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.CoroutineContext
 
 /**
+ * GitHub's clock as seen from this phone. Step/job/run timestamps (`started_at`) are GitHub's, so an
+ * elapsed-time timer has to count against GitHub's time, not the phone's - a phone whose clock is a
+ * minute off would otherwise show a timer a minute off. The offset is learned from the `Date` header of
+ * API responses (see [GitHubHttp]); until the first response it is 0 (plain phone time).
+ */
+object GhClock {
+    @Volatile
+    private var offsetMs = 0L
+
+    /** Current time on GitHub's clock, in epoch millis. */
+    fun now(): Long = System.currentTimeMillis() + offsetMs
+
+    /**
+     * [serverMs] is the `Date` header, which HTTP truncates to whole seconds, so the real server time is
+     * somewhere in [serverMs, serverMs + 1s); the midpoint keeps the error to +-0.5s.
+     */
+    fun sync(serverMs: Long) {
+        offsetMs = serverMs + 500L - System.currentTimeMillis()
+    }
+}
+
+/**
  * Thin OkHttp wrapper (plan section 3): standard headers, typed errors, GET retry/backoff,
  * ETag cache and rate-limit capture. Android-free so it can be unit-tested.
  *
@@ -284,6 +306,8 @@ class GitHubHttp(
     }
 
     private fun capture(res: Response) {
+        // Every response (304s too) carries GitHub's clock; keep the phone-vs-GitHub offset fresh.
+        res.headers.getDate("Date")?.let { GhClock.sync(it.time) }
         val remaining = res.header("x-ratelimit-remaining")?.toIntOrNull() ?: return
         val limit = res.header("x-ratelimit-limit")?.toIntOrNull() ?: 0
         val reset = res.header("x-ratelimit-reset")?.toLongOrNull() ?: 0L

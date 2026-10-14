@@ -5,39 +5,66 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/), and 
 [SemVer](https://semver.org/) with pre-release identifiers (`-alpha.N`, `-beta.N`, `-rc.N`) leading up to
 stable releases.
 
-When cutting a release, rename `## [Unreleased]` to `## [x.y.z] - YYYY-MM-DD`; the release workflows
+When cutting a release, add a `## [x.y.z] - YYYY-MM-DD` section for it; the release workflows
 pick the matching section as the GitHub Release notes.
 
-## [1.2.0] - 2025-05-22
+## [1.2.0] - 2026-10-14
 
-**AI Assistant release.** Native AI agent with multi-file awareness, streaming chat, and inline diff-based editing, fully integrated into the editor and Git flow.
+**AI & GitHub release.** Kodex is rebranded, gains a native AI agent (Claude, OpenAI, Gemini) with multi-file editing, and a GitHub Manager that runs workflows and installs your latest build.
 
 ### ✨ Highlights
-- 🤖 **AI Agent on the workspace screen** — full-project context, multi-file editing, tool calling (Claude/OpenAI/Gemini).
+- 🏷️ **Rebranded to Kodex** — new package, identifiers, CI and docs.
+- 🐙 **GitHub Manager** — Actions runs, live run logs, workflow dispatch, latest APK card, artifacts, deployments and cleanup.
+- 🤖 **AI Agent on the workspace screen** — full-project context, multi-file editing, tool calling, review and undo.
 - 📝 **Inline Edit** — selection → "Edit with AI" → diff review → apply.
-- 🔄 **One-click Review** — batch edit application with per-file diff review.
-- 💬 **Premium Chat** — Markdown, code blocks, `@file` mentions, history per project.
-- 🛠️ **AI Status & Usage** — tracking, limits, and rate-limit handling.
+- 💬 **Claude-style chat** — Markdown, code blocks, `@file` mentions, photo attachments, history per project.
+- 🛠️ **AI status & usage** — request/token tracking, limits and clear rate-limit handling.
 
 ### ✨ Added
+- 🐙 **GitHub Manager** — open it from the workspace menu: workflows, runs and run logs (copyable), reusing the saved git token. Run a workflow with a branch picker and an inputs sheet parsed from the workflow YAML. Status filter chips (All / Running / Success / Failed / Cancelled), a *View all runs* screen and a live building card with steps.
+- 📲 **Latest APK card** — resolves the newest successful ARM64 build, downloads it with speed/ETA, pause/resume and variants, verifies ABI/signature/version, and installs only after an explicit tap. Shows **Install / Update / Open** based on the installed build commit, plus an Installed / Update / Downloaded status pill.
+- 📦 **ARM64 builds screen** — recent projects' ARM64 artifacts, newest first, with direct download and install. Artifacts and deployments can be installed, saved to a folder or deleted.
+- 🧹 **Cleanup sheet** — runs, deployments and artifacts with filters and a preview; rate-limit-aware deletes with stop and retry; the newest successful build is never preselected. It keeps running in the background.
+- 🔔 **GitHub notifications** — live progress and results for download, install, save, cleanup and workflow dispatch, plus push-triggered build notifications that open the repo. Long jobs survive leaving the screen.
+- 💾 **Persistent APK downloads** — kept in app storage so a self-update restart needs no re-download (newest 3 kept, older ones removed after 24 hours).
+- 🌿 **Make default branch on GitHub** from Branches.
+- 🤖 **AI agent & chat** — multi-file tools with review/undo, history and *New chat* in the top bar, model picker in the composer, photo attachments, AI image and app-icon generation, thinking summaries in an expandable timeline, and chat that keeps running in the background with a notification when it finishes.
+- ✨ **Quick AI commit message** — tap to generate in your saved style, long-press for style settings.
+- 🔎 **Explain from the selection popup** and a per-project AI instructions file.
+- 📊 **AI usage in the status card** — daily/monthly requests and tokens per model, custom daily limits, reset countdowns.
+- ⏱️ **Clear rate-limit handling** — auto-retries and advice; redesigned AI settings with privacy controls; live Gemini model list.
 - 🌐 **AI screens use string resources** — consistent localization.
-- 📊 **AI usage in the status card** — tracking requests and tokens.
-- 🤖 **Live Gemini model list** — dynamic updates.
-- 🎨 **Redesigned AI section** — structured cards and privacy controls.
-- ⏱️ **Clear rate-limit handling** — auto-retries and advice.
-- 🧭 **Better chat panel** — context-window meter, error handling, tool steps.
+- 💾 **Export / import settings** (Settings → Advanced) — back up app, editor, GitHub and AI preferences to a file and restore them by category.
+- 🧠 **AI project memory & instructions** — per-project `.kodex/memory.md` (the agent saves notes with `save_memory`, auto-condensed), global custom instructions in AI settings and per-project `.kodex/instructions.md`, all editable from a new **Memory & instructions** sheet. Chats can be renamed with a long-press in history; renamed titles stay locked.
+- 🔀 **Branch switch progress** — a "Switching branch…" dialog on the Git screen and a busy bar on the Branches screen.
 
 ### 🔄 Changed
-- 🤖 Editor AI panel now shares the agent engine.
-- 🤖 Gemini defaults updated to 3.8 Flash / 3.1 Pro.
+- 📦 **Single APK** — AI is a runtime toggle (*Enable AI*) instead of a separate flavor; AI replaces Refresh in the workspace top bar and a floating AI button sits above Source Control in the editor.
+- 🔏 **APK signing** now uses apksigner 34.0.0 with default signature schemes.
+- 📥 **Installer** — longer install timeout (3 minutes), the install state is no longer reset on resume, silent updates where allowed, and a clear message when Play Protect blocks the install.
+- 🤖 Editor AI panel shares the agent engine; Gemini defaults updated to 3.8 Flash / 3.1 Pro.
+- 🏠 Home: *Clone* moved into the New project sheet; the header icon opens the ARM64 builds screen.
+- ⚙️ **Settings reorganised into clearer groups** — Appearance (themes, font), Editor (typing, symbol bar, preview), Workspace (files & tabs, search), GitHub, AI Assistant, Advanced (git status polling, crash/git logs), About. *Enable AI* moved to the top of AI Assistant settings, and AI settings are grouped into Model & key, Memory & instructions, Editing & privacy, Usage & limits.
+- 🔴 **Failure notifications** use a red icon.
+- 📊 **GitHub builds** show per-job progress rows and an animated running step.
 
-### 🐛 Fixed
+### ⚡ Performance
+- 🔀 **Branch switching is faster** — when the target branch is on the same commit as HEAD (e.g. right after creating a branch) only HEAD is moved, with no working-tree walk; any doubt falls back to the normal checkout. The new branch name shows immediately instead of after the full status scan, and the full scan is skipped when the commit did not change.
+- ⚡ **Resolving a single conflict** is as fast as staging, with no progress dialog.
+
+### 🐞 Fixed
 - 🤖 Gemini "Test connection" 404s.
 - ⌨️ Text fields dropping characters.
+- 🐙 Other projects' APKs appearing on the current repo's APK card.
+- 🖼️ Logo fallback for projects without a launcher icon.
+- 🔔 Notification and signing issues.
+- 🏠 "Kodex" wordmark shrinking after navigating back.
+- 📊 Download/transfer button overlapping other controls on the GitHub screen.
 
 ### 🛠️ Technical
-- Single APK build (AI toggleable).
+- Build commit baked into `BuildConfig.GIT_SHA` (CI passes `-PgitSha`).
 - AES/GCM Keystore token vault.
+- GitHub API layer with ETag caching; unit tests for the workflow-input parser, APK resolver, cleanup planner and install decisions.
 
 ## [1.1.0] - 2026-10-09
 
