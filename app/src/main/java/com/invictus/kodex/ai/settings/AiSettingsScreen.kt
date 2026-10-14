@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -75,7 +76,8 @@ import com.invictus.kodex.ai.provider.AiMessage
 import com.invictus.kodex.ai.provider.AiModel
 import com.invictus.kodex.ai.provider.AiRequest
 import com.invictus.kodex.ai.provider.ModelInfo
-import com.invictus.kodex.ai.provider.ModelList
+import com.invictus.kodex.ai.provider.ModelCatalog
+import com.invictus.kodex.ai.provider.ProviderPresets
 import com.invictus.kodex.ai.provider.ProviderRegistry
 import com.invictus.kodex.ai.usage.UsageLedger
 import com.invictus.kodex.ai.usage.UsageStore
@@ -83,7 +85,6 @@ import com.invictus.kodex.ai.usage.UsageView
 import com.invictus.kodex.ai.ui.chat.AiTag
 import com.invictus.kodex.ai.ui.chat.TierTag
 import com.invictus.kodex.ui.icons.XIcons
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -135,6 +136,10 @@ class AiSettingsViewModel(
     val models: StateFlow<List<AiModel>> = _models.asStateFlow()
     private var modelsJob: Job? = null
 
+    private val _providersVersion = MutableStateFlow(0)
+    /** Bumped when a custom provider is added or removed, so the provider list recomposes. */
+    val providersVersion: StateFlow<Int> = _providersVersion.asStateFlow()
+
     private val _hasKey = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     val hasKey: StateFlow<Map<String, Boolean>> = _hasKey.asStateFlow()
 
@@ -165,21 +170,14 @@ class AiSettingsViewModel(
         }
     }
 
-    /** Shows the curated defaults at once, then swaps in the provider's live model list if a key is saved. */
+    /** Shows the last known list at once (cache, else the small fallback), then swaps in the live one if a key is saved. */
     private fun loadModels(providerId: String) {
         modelsJob?.cancel()
         val provider = ProviderRegistry.byId(providerId)
-        _models.value = provider.defaultModels
+        _models.value = ModelCatalog.models(provider)
         val key = keyStore.get(provider.id) ?: return
         modelsJob = viewModelScope.launch {
-            val fetched = try {
-                provider.listModels(key)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                null
-            }
-            if (fetched != null) _models.value = ModelList.merge(provider.defaultModels, fetched)
+            _models.value = ModelCatalog.refresh(provider, key, force = true)
         }
     }
 
@@ -246,6 +244,28 @@ class AiSettingsViewModel(
         if (provider == providerId.value) loadModels(provider)
     }
 
+    fun addCustomProvider(name: String, baseUrl: String, key: String) {
+        val def = ProviderRegistry.addCustom(app, name, baseUrl)
+        if (def == null) {
+            _messages.value = app.getString(R.string.ai_settings_custom_invalid)
+            return
+        }
+        if (key.isNotBlank()) keyStore.put(def.id, key.trim())
+        _providersVersion.value++
+        refresh()
+        selectProvider(def.id)
+    }
+
+    fun removeCustomProvider(id: String) {
+        keyStore.remove(id)
+        viewModelScope.launch {
+            if (providerId.value == id) selectProvider("claude")
+            ProviderRegistry.removeCustom(app, id)
+            _providersVersion.value++
+            refresh()
+        }
+    }
+
     fun testConnection() {
         val provider = ProviderRegistry.byId(providerId.value)
         val key = keyStore.get(provider.id)
@@ -253,7 +273,11 @@ class AiSettingsViewModel(
             _test.value = TestState.Failed(app.getString(R.string.ai_settings_no_key_saved), app.getString(R.string.ai_settings_paste_key_hint, provider.displayName))
             return
         }
-        val model = _modelId.value.ifEmpty { provider.defaultModels.first().id }
+        val model = _modelId.value.ifEmpty { _models.value.firstOrNull()?.id ?: provider.defaultModels.firstOrNull()?.id.orEmpty() }
+        if (model.isEmpty()) {
+            _test.value = TestState.Failed(app.getString(R.string.ai_settings_pick_model_first), app.getString(R.string.ai_settings_pick_model_first_hint))
+            return
+        }
         _test.value = TestState.Testing
         viewModelScope.launch {
             val started = System.nanoTime()
@@ -317,11 +341,22 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
     var reveal by remember(providerId) { mutableStateOf(false) }
     var showAllModels by remember(providerId) { mutableStateOf(false) }
     val keySaved = hasKey[providerId] == true
-    val modelList = models.ifEmpty { provider.defaultModels }
-    val selectedId = modelId.ifEmpty { provider.defaultModels.first().id }
+    val providersVersion by vm.providersVersion.collectAsState()
+    val providers = remember(providersVersion) { ProviderRegistry.all }
+    var showAddProvider by remember { mutableStateOf(false) }
+    var modelQuery by remember(providerId) { mutableStateOf("") }
+    val modelList = models.ifEmpty { ModelCatalog.models(provider) }
+    val selectedId = modelId.ifEmpty { modelList.firstOrNull()?.id.orEmpty() }
     val activeId = customModel.trim().ifEmpty { selectedId }
     val activeModel = modelList.firstOrNull { it.id == activeId } ?: provider.defaultModels.firstOrNull { it.id == activeId }
     val ready = keySaved && consent
+
+    if (showAddProvider) {
+        AddProviderDialog(
+            onDismiss = { showAddProvider = false },
+            onAdd = { name, url, key -> vm.addCustomProvider(name, url, key); showAddProvider = false },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -409,7 +444,7 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
 
                 // ---- provider ----
                 SectionCard(stringResource(R.string.ai_settings_provider), XIcons.Cloud, stringResource(R.string.ai_settings_who_runs_the_model_each)) {
-                    ProviderRegistry.all.forEach { p ->
+                    providers.forEach { p ->
                         SelectableRow(
                             selected = p.id == providerId,
                             onClick = { vm.selectProvider(p.id) },
@@ -422,11 +457,23 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            AiTag(
-                                stringResource(R.string.ai_settings_models, p.defaultModels.size),
-                                container = MaterialTheme.colorScheme.surfaceVariant,
-                            )
+                            val count = ModelCatalog.models(p).size
+                            if (count > 0) {
+                                AiTag(
+                                    stringResource(R.string.ai_settings_models, count),
+                                    container = MaterialTheme.colorScheme.surfaceVariant,
+                                )
+                            }
+                            if (ProviderRegistry.isCustom(p.id)) {
+                                IconButton(onClick = { vm.removeCustomProvider(p.id) }) {
+                                    Icon(XIcons.Delete, contentDescription = stringResource(R.string.ai_settings_remove))
+                                }
+                            }
                         }
+                    }
+                    TextButton(onClick = { showAddProvider = true }) {
+                        Icon(XIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text(stringResource(R.string.ai_settings_add_custom_provider), modifier = Modifier.padding(start = 6.dp))
                     }
                 }
 
@@ -436,7 +483,20 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                     XIcons.Tune,
                     stringResource(R.string.ai_settings_bigger_models_reason_better_but),
                 ) {
-                    val visible = if (showAllModels) modelList else modelList.take(6)
+                    val visible = if (showAllModels) ModelCatalog.search(modelList, modelQuery)
+                    else ModelCatalog.featured(modelList, selectedId, emptyList(), provider.defaultModels)
+                    if (modelList.isEmpty()) {
+                        InfoNote(stringResource(R.string.ai_settings_no_models_yet))
+                    }
+                    if (showAllModels) {
+                        OutlinedTextField(
+                            value = modelQuery,
+                            onValueChange = { modelQuery = it },
+                            label = { Text(stringResource(R.string.ai_comp_search_models)) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     visible.forEach { m ->
                         SelectableRow(selected = m.id == selectedId, onClick = { vm.selectModel(m.id) }) {
                             Column(Modifier.weight(1f)) {
@@ -449,8 +509,8 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                             }
                         }
                     }
-                    if (modelList.size > 6) {
-                        TextButton(onClick = { showAllModels = !showAllModels }) {
+                    if (modelList.size > visible.size || showAllModels) {
+                        TextButton(onClick = { showAllModels = !showAllModels; modelQuery = "" }) {
                             Text(if (showAllModels) stringResource(R.string.ai_settings_show_fewer) else stringResource(R.string.ai_settings_show_all_models, modelList.size))
                         }
                     }
@@ -484,13 +544,15 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(start = 8.dp).weight(1f),
                         )
-                        KEY_URLS[providerId]?.let { url ->
+                        (KEY_URLS[providerId] ?: ProviderPresets.all.firstOrNull { it.id == providerId }?.keyUrl)?.let { url ->
                             TextButton(onClick = { runCatching { uriHandler.openUri(url) } }) {
                                 Text(stringResource(R.string.ai_settings_get_a_key))
                                 Icon(XIcons.OpenInNew, contentDescription = null, modifier = Modifier.padding(start = 4.dp).size(14.dp))
                             }
                         }
                     }
+                    if (providerId == "ollama") InfoNote(stringResource(R.string.ai_settings_ollama_key_note))
+                    ProviderRegistry.customDef(providerId)?.let { InfoNote(it.baseUrl) }
                     OutlinedTextField(
                         value = keyDraft,
                         onValueChange = { keyDraft = it },
@@ -667,6 +729,51 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
             Spacer(Modifier.height(16.dp))
         }
     }
+}
+
+@Composable
+private fun AddProviderDialog(onDismiss: () -> Unit, onAdd: (name: String, baseUrl: String, key: String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+    var key by remember { mutableStateOf("") }
+    val urlOk = ProviderRegistry.normalizeBaseUrl(url) != null
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.ai_settings_add_custom_provider)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.ai_settings_custom_provider_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = name, onValueChange = { name = it }, singleLine = true,
+                    label = { Text(stringResource(R.string.ai_settings_custom_name)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = url, onValueChange = { url = it }, singleLine = true,
+                    label = { Text(stringResource(R.string.ai_settings_custom_base_url)) },
+                    placeholder = { Text("https://api.example.com/v1") },
+                    isError = url.isNotBlank() && !urlOk,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = key, onValueChange = { key = it }, singleLine = true,
+                    label = { Text(stringResource(R.string.ai_settings_paste_api_key)) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onAdd(name, url, key) }, enabled = name.isNotBlank() && urlOk) {
+                Text(stringResource(R.string.ai_settings_add))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ai_settings_cancel)) } },
+    )
 }
 
 private val KEY_URLS = mapOf(

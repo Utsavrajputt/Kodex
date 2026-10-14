@@ -1303,4 +1303,18 @@
     <string name="backup_error_export">Export failed: %1$s</string>
     <string name="backup_error_import">Import failed: %1$s</string>
     <string name="gh_jobs_more">+%1$d more jobs</string>
+    <string name="ai_comp_all_models">All models (%1$d)</string>
+    <string name="ai_comp_search_models">Search models</string>
+    <string name="ai_comp_no_models_yet">No models loaded yet. Save your API key in AI settings to load the list.</string>
+    <string name="ai_settings_add_custom_provider">Add custom provider</string>
+    <string name="ai_settings_custom_provider_desc">Any OpenAI-compatible endpoint. Use the base URL, usually ending in /v1.</string>
+    <string name="ai_settings_custom_name">Name</string>
+    <string name="ai_settings_custom_base_url">Base URL</string>
+    <string name="ai_settings_custom_invalid">Enter a name and a valid http(s) address</string>
+    <string name="ai_settings_add">Add</string>
+    <string name="ai_settings_cancel">Cancel</string>
+    <string name="ai_settings_no_models_yet">Models appear here once your API key is saved, or type a model ID below.</string>
+    <string name="ai_settings_pick_model_first">Pick a model first</string>
+    <string name="ai_settings_pick_model_first_hint">Choose a model, or type a model ID below, then test again.</string>
+    <string name="ai_settings_ollama_key_note">Ollama needs no key: enter any text (for example ollama). The server must run on this device at localhost:11434.</string>
 </resources>

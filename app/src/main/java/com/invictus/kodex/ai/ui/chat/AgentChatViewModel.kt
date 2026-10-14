@@ -242,7 +242,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             val provider = ProviderRegistry.byId(prefs.providerId.first())
             val custom = prefs.customModel.first().trim()
             val model = prefs.currentModel(provider.id, provider.defaultModels)
-            val known = provider.defaultModels.firstOrNull { it.id == model }
+            val known = com.invictus.kodex.ai.provider.ModelCatalog.find(provider.id, model)
             _status.value = AiStatus(
                 loaded = true,
                 providerId = provider.id,
@@ -364,7 +364,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                 val files = ProjectFiles(root, globs.value, io)
                 history += AgentMessage.User(buildUserText(files, attachedAll, ctx, text), images)
                 val (provider, model, key) = runtime.resolve()
-                val budget = (provider.defaultModels.firstOrNull { it.id == model }?.maxContextChars ?: 100_000)
+                val budget = (com.invictus.kodex.ai.provider.ModelCatalog.find(provider.id, model)?.maxContextChars ?: 100_000)
                     .let { (it * 0.6).toInt().coerceAtMost(300_000) }
                 val topLevel = withContext(Dispatchers.IO) {
                     root.listFiles().orEmpty()

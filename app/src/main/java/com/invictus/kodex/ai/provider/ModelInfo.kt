@@ -26,9 +26,20 @@ object ModelInfo {
             "gemini" -> l.startsWith("gemini") && "embedding" !in l
             "openai" -> listOf("gpt-3", "o1-mini", "o1-preview", "o3-mini", "instruct", "embedding", "audio", "tts", "whisper", "davinci")
                 .none { l.startsWith(it) || it in l }
-            else -> false
+            else -> guessesVision(l)
         }
     }
+
+    // Hosts that serve many vendors' models (OpenRouter, Together, Hugging Face, custom...) don't say which take
+    // photos in a common way, so go by well-known name markers; anything else keeps the image option off.
+    private val VISION_HINTS = listOf(
+        "vision", "-vl", "vl-", "gpt-4o", "gpt-4.1", "gpt-5", "claude", "gemini", "gemma-3", "gemma3", "llava",
+        "pixtral", "llama-4", "llama-3.2-11b", "llama-3.2-90b", "grok-4", "mistral-medium", "mistral-small-3",
+        "mistral-large-3", "internvl", "minicpm-v", "kimi-k2.5", "glm-4.5v", "glm-4.6v",
+    )
+    private val NOT_VISION = listOf("embed", "whisper", "tts", "audio", "rerank", "guard", "coder", "instruct-0")
+
+    private fun guessesVision(l: String) = NOT_VISION.none { it in l } && VISION_HINTS.any { it in l }
 
     /** 1_000_000 → "1M", 200_000 → "200K", 850 → "850". */
     fun formatTokens(n: Long): String = when {

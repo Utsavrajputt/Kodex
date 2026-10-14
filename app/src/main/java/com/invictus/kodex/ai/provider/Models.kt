@@ -1,11 +1,12 @@
 package com.invictus.kodex.ai.provider
 
-data class AiModel(val id: String, val label: String, val maxContextChars: Int)
+/** [created] = release time in epoch seconds when the API reports it (0 = unknown); used to list newest first. */
+data class AiModel(val id: String, val label: String, val maxContextChars: Int, val created: Long = 0L)
 
 object ModelList {
     /**
      * Dropdown contents: our curated defaults first (only those the key can actually use, with our
-     * labels), then every other model the API reports, newest id first. An empty [fetched] list
+     * labels), then every other model the API reports, newest first (by release time, else id). An empty [fetched] list
      * (offline, no key, listing failed) leaves the curated defaults untouched.
      */
     fun merge(defaults: List<AiModel>, fetched: List<AiModel>): List<AiModel> {
@@ -13,7 +14,8 @@ object ModelList {
         val byId = fetched.associateBy { it.id }
         val head = defaults.filter { it.id in byId }
         val headIds = head.map { it.id }.toSet()
-        val rest = fetched.filter { it.id !in headIds }.distinctBy { it.id }.sortedByDescending { it.id }
+        val rest = fetched.filter { it.id !in headIds }.distinctBy { it.id }
+            .sortedWith(compareByDescending<AiModel> { it.created }.thenByDescending { it.id })
         return (head + rest).ifEmpty { defaults }
     }
 }

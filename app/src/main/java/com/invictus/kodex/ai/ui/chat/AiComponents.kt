@@ -17,6 +17,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
+import com.invictus.kodex.ai.keys.AiKeyStore
+import com.invictus.kodex.ai.prefs.AiPrefs
+import com.invictus.kodex.ai.provider.ModelCatalog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -272,7 +280,10 @@ fun ContextMeter(usedTokens: Int, maxTokens: Int, modifier: Modifier = Modifier)
     }
 }
 
-/** Quick provider/model switcher opened from the chat header or from a rate-limit/error card. */
+/**
+ * Quick provider/model switcher opened from the chat header or from a rate-limit/error card. Shows a few featured
+ * models (active, recent, the provider's picks, newest) and puts the rest, fetched live, under "All models".
+ */
 @Composable
 fun ModelSwitchSheet(
     status: AgentChatViewModel.AiStatus,
@@ -280,8 +291,28 @@ fun ModelSwitchSheet(
     onOpenSettings: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
+    val appContext = LocalContext.current.applicationContext
+    val prefs = remember { AiPrefs(appContext) }
+    val keyStore = remember { AiKeyStore(appContext) }
     var providerId by remember { mutableStateOf(status.providerId) }
     val provider = ProviderRegistry.byId(providerId)
+    var models by remember(providerId) { mutableStateOf(ModelCatalog.models(provider)) }
+    var loading by remember(providerId) { mutableStateOf(false) }
+    var showAll by remember(providerId) { mutableStateOf(false) }
+    var query by remember(providerId) { mutableStateOf("") }
+    val recent by remember(providerId) { prefs.recentModels(providerId) }.collectAsState(initial = emptyList())
+    LaunchedEffect(providerId) {
+        val key = keyStore.get(providerId)?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        loading = true
+        models = ModelCatalog.refresh(provider, key)
+        loading = false
+    }
+    val activeId = if (providerId == status.providerId) status.modelId else ""
+    val shown = if (showAll) ModelCatalog.search(models, query)
+    else ModelCatalog.featured(models, activeId, recent, provider.defaultModels)
+    // Only providers with a saved key are usable; the open one stays so the sheet never loses its own header chip.
+    val chips = ProviderRegistry.all.filter { it.id in status.keyedProviders || it.id == providerId }
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
             Text(stringResource(R.string.ai_comp_switch_model), style = MaterialTheme.typography.titleMedium)
@@ -292,13 +323,11 @@ fun ModelSwitchSheet(
                 modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ProviderRegistry.all.forEach { p ->
-                    val keyed = p.id in status.keyedProviders
+                chips.forEach { p ->
                     FilterChip(
                         selected = p.id == providerId,
                         onClick = { providerId = p.id },
-                        enabled = keyed,
-                        label = { Text(if (keyed) p.displayName else stringResource(R.string.ai_comp_no_key, p.displayName)) },
+                        label = { Text(p.displayName) },
                     )
                 }
             }
@@ -310,8 +339,31 @@ fun ModelSwitchSheet(
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
-            Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                provider.defaultModels.forEach { m ->
+            if (showAll) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text(stringResource(R.string.ai_comp_search_models)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                )
+            }
+            if (loading && models.isEmpty()) {
+                CircularProgressIndicator(Modifier.padding(top = 14.dp).size(22.dp), strokeWidth = 2.dp)
+            }
+            if (!loading && models.isEmpty()) {
+                Text(
+                    stringResource(R.string.ai_comp_no_models_yet),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
+            LazyColumn(
+                Modifier.heightIn(max = 380.dp).padding(top = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                items(shown, key = { it.id }) { m ->
                     val selected = provider.id == status.providerId && m.id == status.modelId
                     Surface(
                         onClick = { onPick(provider.id, m); onDismiss() },
@@ -321,7 +373,10 @@ fun ModelSwitchSheet(
                     ) {
                         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(m.label, style = MaterialTheme.typography.titleSmall)
+                                Text(m.label, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (showAll && m.label != m.id) {
+                                    Text(m.id, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                                 Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     ModelInfo.tier(m.id)?.let { TierTag(it) }
                                     AiTag(ModelInfo.contextLabel(m.maxContextChars))
@@ -330,6 +385,14 @@ fun ModelSwitchSheet(
                             if (selected) Icon(XIcons.CheckCircle, contentDescription = stringResource(R.string.ai_comp_selected), tint = MaterialTheme.colorScheme.primary)
                         }
                     }
+                }
+            }
+            if (models.size > shown.size || showAll) {
+                TextButton(onClick = { showAll = !showAll; query = "" }) {
+                    Text(
+                        if (showAll) stringResource(R.string.ai_settings_show_fewer)
+                        else stringResource(R.string.ai_comp_all_models, models.size),
+                    )
                 }
             }
             if (onOpenSettings != null) {

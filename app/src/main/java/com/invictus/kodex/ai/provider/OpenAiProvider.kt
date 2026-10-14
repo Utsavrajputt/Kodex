@@ -5,28 +5,64 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 
-class OpenAiProvider : AiProvider {
-    override val id = "openai"
-    override val displayName = "OpenAI"
+/**
+ * Chat-completions client. Defaults to OpenAI itself; with another [baseUrl] it serves every
+ * OpenAI-compatible host (OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, Ollama, Hugging Face, custom).
+ * [defaultModels] is only the offline / listing-failed fallback; the live list comes from [listModels].
+ */
+class OpenAiProvider(
+    override val id: String = "openai",
+    override val displayName: String = "OpenAI",
+    baseUrl: String = "https://api.openai.com/v1",
     // Defaults follow OpenAI's current GPT-5.6 tiers; any other id can go in the custom-model field.
-    override val defaultModels = listOf(
+    override val defaultModels: List<AiModel> = listOf(
         AiModel("gpt-5.6-luna", "GPT-5.6 Luna", 400_000),
         AiModel("gpt-5.6-terra", "GPT-5.6 Terra", 400_000),
         AiModel("gpt-5.6-sol", "GPT-5.6 Sol", 400_000),
-    )
+    ),
+    /** OpenAI's GPT-5 family rejects `max_tokens`; most other hosts only know `max_tokens`. */
+    private val tokenParam: String = "max_completion_tokens",
+) : AiProvider {
+    private val base = baseUrl.trim().trimEnd('/')
+    private val chatUrl = "$base/chat/completions"
 
     override fun capabilities() = Capabilities()
+
+    override suspend fun listModels(key: String): List<AiModel>? {
+        val req = Request.Builder().url("$base/models").header("Authorization", "Bearer $key").get().build()
+        val http = AiHttp.complete(req) as? AiHttp.CompleteResult.Http ?: return null
+        if (http.code !in 200..299) return null
+        val body = http.body.trim()
+        val arr = runCatching {
+            if (body.startsWith("[")) JSONArray(body) else JSONObject(body).optJSONArray("data")
+        }.getOrNull() ?: return null
+        val out = (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { parseModel(it) } }
+        return out.ifEmpty { null }
+    }
+
+    private fun parseModel(m: JSONObject): AiModel? {
+        val id = m.optString("id").takeIf { it.isNotBlank() } ?: return null
+        val l = id.lowercase()
+        if (NOT_CHAT.any { it in l }) return null
+        // Hosts that say what a model is (Together `type`, Mistral `capabilities`) let us drop non-chat ones exactly.
+        m.optString("type").takeIf { it.isNotBlank() }?.let { if (it != "chat" && it != "language" && it != "code") return null }
+        m.optJSONObject("capabilities")?.let { if (it.has("completion_chat") && !it.optBoolean("completion_chat")) return null }
+        val tokens = maxOf(m.optLong("context_length"), m.optLong("context_window"), m.optLong("max_model_len"))
+        val chars = if (tokens > 0) (tokens * 3L).coerceIn(100_000L, 1_000_000L).toInt() else DEFAULT_CONTEXT_CHARS
+        val label = m.optString("name").takeIf { it.isNotBlank() && it != id } ?: id
+        return AiModel(id, label, chars, m.optLong("created", 0L))
+    }
 
     private fun body(req: AiRequest, stream: Boolean) = JSONObject()
         .put("model", req.model)
         .put("messages", JSONArray(req.messages.map { JSONObject().put("role", it.role).put("content", it.content) }))
         // GPT-5-era models reject `max_tokens` and any non-default `temperature`; max_completion_tokens
         // is accepted by every current chat-completions model, so send only that.
-        .put("max_completion_tokens", req.maxOutputTokens)
+        .put(tokenParam, req.maxOutputTokens)
         .put("stream", stream)
 
     private fun request(key: String, req: AiRequest, stream: Boolean) = Request.Builder()
-        .url("https://api.openai.com/v1/chat/completions")
+        .url(chatUrl)
         .header("Authorization", "Bearer $key")
         .header("content-type", "application/json")
         .post(AiHttp.jsonBody(body(req, stream)))
@@ -54,7 +90,7 @@ class OpenAiProvider : AiProvider {
         val body = JSONObject()
             .put("model", model)
             .put("messages", all)
-            .put("max_completion_tokens", maxOutputTokens)
+            .put(tokenParam, maxOutputTokens)
             .put("stream", true)
         if (tools.isNotEmpty()) {
             body.put("tools", JSONArray(tools.map {
@@ -65,7 +101,7 @@ class OpenAiProvider : AiProvider {
             }))
         }
         val req = Request.Builder()
-            .url("https://api.openai.com/v1/chat/completions")
+            .url(chatUrl)
             .header("Authorization", "Bearer $key")
             .header("content-type", "application/json")
             .post(AiHttp.jsonBody(body))
@@ -100,6 +136,12 @@ class OpenAiProvider : AiProvider {
     }
 
     companion object {
+        const val DEFAULT_CONTEXT_CHARS = 400_000
+        private val NOT_CHAT = listOf(
+            "embed", "whisper", "tts", "dall-e", "moderation", "image", "audio", "realtime", "transcribe",
+            "rerank", "guard", "davinci", "babbage", "sora", "speech",
+        )
+
         /** Neutral transcript -> chat-completions messages (no system message; the caller prepends it). */
         fun toMessages(msgs: List<AgentMessage>): JSONArray = JSONArray().also { out ->
             msgs.forEach { m ->

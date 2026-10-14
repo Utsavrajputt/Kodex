@@ -17,6 +17,21 @@ class ClaudeProvider : AiProvider {
 
     override fun capabilities() = Capabilities()
 
+    override suspend fun listModels(key: String): List<AiModel>? {
+        val rb = Request.Builder().url("https://api.anthropic.com/v1/models?limit=100")
+        headers(key).forEach { (h, v) -> rb.header(h, v) }
+        val http = AiHttp.complete(rb.get().build()) as? AiHttp.CompleteResult.Http ?: return null
+        if (http.code !in 200..299) return null
+        val arr = runCatching { JSONObject(http.body).optJSONArray("data") }.getOrNull() ?: return null
+        val out = (0 until arr.length()).mapNotNull { i ->
+            val m = arr.optJSONObject(i) ?: return@mapNotNull null
+            val id = m.optString("id").takeIf { it.startsWith("claude") } ?: return@mapNotNull null
+            val created = runCatching { java.time.Instant.parse(m.optString("created_at")).epochSecond }.getOrDefault(0L)
+            AiModel(id, m.optString("display_name").ifBlank { id }, 800_000, created)
+        }
+        return out.ifEmpty { null }
+    }
+
     private fun headers(key: String) = listOf(
         "x-api-key" to key, "anthropic-version" to "2023-06-01", "content-type" to "application/json",
     )

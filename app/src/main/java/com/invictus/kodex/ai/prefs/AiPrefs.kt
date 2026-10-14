@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.invictus.kodex.ai.provider.AiModel
+import com.invictus.kodex.ai.provider.ModelCatalog
 import com.invictus.kodex.core.backup.PrefsJson
 import com.invictus.kodex.ai.provider.GeminiProvider
 import kotlinx.coroutines.flow.Flow
@@ -27,6 +28,7 @@ class AiPrefs(private val context: Context) {
         val GLOBAL_INSTRUCTIONS = stringPreferencesKey("ai.global_instructions")
         val MEMORY_ENABLED = booleanPreferencesKey("ai.memory_enabled")
         fun model(p: String) = stringPreferencesKey("ai.model.$p")
+        fun recent(p: String) = stringPreferencesKey("ai.recent.$p")
     }
 
     /** Settings backup: every stored entry whose key passes [accept], as typed JSON. */
@@ -42,7 +44,19 @@ class AiPrefs(private val context: Context) {
     suspend fun setProviderId(v: String) { context.aiPrefsStore.edit { it[K.PROVIDER] = v } }
 
     fun modelId(provider: String): Flow<String> = context.aiPrefsStore.data.map { it[K.model(provider)] ?: "" }
-    suspend fun setModelId(provider: String, v: String) { context.aiPrefsStore.edit { it[K.model(provider)] = v } }
+    suspend fun setModelId(provider: String, v: String) {
+        context.aiPrefsStore.edit {
+            it[K.model(provider)] = v
+            if (v.isNotBlank()) {
+                val old = it[K.recent(provider)].orEmpty().split("|").filter { id -> id.isNotBlank() && id != v }
+                it[K.recent(provider)] = (listOf(v) + old).take(RECENT_MAX).joinToString("|")
+            }
+        }
+    }
+
+    /** Models last picked for [provider], newest first; they lead the quick picker. */
+    fun recentModels(provider: String): Flow<List<String>> =
+        context.aiPrefsStore.data.map { p -> p[K.recent(provider)].orEmpty().split("|").filter { it.isNotBlank() } }
 
     val customModel: Flow<String> = context.aiPrefsStore.data.map { it[K.CUSTOM_MODEL] ?: "" }
     suspend fun setCustomModel(v: String) { context.aiPrefsStore.edit { it[K.CUSTOM_MODEL] = v } }
@@ -88,12 +102,13 @@ class AiPrefs(private val context: Context) {
         return when {
             custom.isNotEmpty() -> custom
             saved.isNotEmpty() -> saved
-            else -> defaults.firstOrNull()?.id ?: ""
+            else -> defaults.firstOrNull()?.id ?: ModelCatalog.cached(provider).firstOrNull()?.id ?: ""
         }
     }
 
     companion object {
         const val GLOBAL_INSTRUCTIONS_MAX = 4_000
+        private const val RECENT_MAX = 3
 
         private val RETIRED = mapOf(
             "gemini-2.5-flash" to GeminiProvider.DEFAULT_MODEL_ID,

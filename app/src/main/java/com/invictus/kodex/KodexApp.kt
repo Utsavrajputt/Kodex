@@ -19,6 +19,8 @@ class KodexApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        com.invictus.kodex.ai.provider.ProviderRegistry.init(this)
+        com.invictus.kodex.ai.provider.ModelCatalog.init(this)
         com.invictus.kodex.ai.AiSwitch.init(this)
         com.invictus.kodex.ai.AiFlavor.init(this)
         com.invictus.kodex.ai.usage.UsageStore.init(this)
