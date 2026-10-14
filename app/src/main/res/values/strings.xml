@@ -1319,4 +1319,8 @@
     <string name="ai_settings_ollama_key_note">Ollama needs no key: enter any text (for example ollama). The server must run on this device at localhost:11434.</string>
     <string name="ai_chat_search_chats">Search chats</string>
     <string name="ai_chat_no_matching_chats">No chats match your search</string>
+    <string name="gh_tag_suggested">Suggested next tag</string>
+    <string name="gh_tag_existing">Existing tags</string>
+    <string name="gh_tag_format_hint">Format: %1$s</string>
+    <string name="gh_tag_format_error">Use the format %1$s</string>
 </resources>

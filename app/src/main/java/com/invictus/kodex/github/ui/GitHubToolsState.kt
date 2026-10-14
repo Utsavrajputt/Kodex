@@ -40,6 +40,8 @@ data class RunWorkflowState(
     val values: Map<String, String> = emptyMap(),
     val rawInputs: List<RawInput> = emptyList(),
     val missingRequired: Set<String> = emptySet(),
+    /** The repo's existing tags, loaded when the sheet has a release-tag input. */
+    val tags: List<String> = emptyList(),
 )
 
 /** Where a transfer (download of an artifact zip) is happening and what it is for. */

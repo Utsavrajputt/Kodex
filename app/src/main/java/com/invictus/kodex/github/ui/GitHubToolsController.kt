@@ -23,6 +23,7 @@ import com.invictus.kodex.github.data.CleanupResult
 import com.invictus.kodex.github.data.CleanupRunner
 import com.invictus.kodex.github.data.DispatchInfo
 import com.invictus.kodex.github.data.GitHubRepository
+import com.invictus.kodex.github.data.TagSuggestions
 import com.invictus.kodex.github.data.WorkflowInputParser
 import com.invictus.kodex.github.install.ApkDownloader
 import com.invictus.kodex.github.notify.ArmBuildWatch
@@ -309,19 +310,44 @@ class GitHubToolsController(
             is DispatchInfoState.Loaded -> when {
                 !info.info.supported -> emit(GhEvent.Snack(GhText.Res(R.string.gh_run_no_manual_trigger)))
                 info.info.inputs.isEmpty() && !info.info.parseFailed -> dispatch(workflow, ref, emptyMap())
-                else -> openInputsSheet(info.info)
+                else -> openInputsSheet(info.info, workflow)
             }
-            is DispatchInfoState.Failed -> openInputsSheet(null)
+            is DispatchInfoState.Failed -> openInputsSheet(null, workflow)
             else -> Unit // still loading: the button is disabled in the UI
         }
     }
 
-    private fun openInputsSheet(info: DispatchInfo?) {
+    private fun openInputsSheet(info: DispatchInfo?, workflow: GhWorkflow) {
         val defaults = info?.inputs.orEmpty().associate { i ->
             i.name to (i.default ?: if (i.type == "boolean") "false" else if (i.type == "choice") i.options.firstOrNull().orEmpty() else "")
         }
         val raw = if (info == null || info.parseFailed) listOf(RawInput()) else emptyList()
-        updateRun { it.copy(sheetOpen = true, values = defaults, rawInputs = raw, missingRequired = emptySet()) }
+        updateRun { it.copy(sheetOpen = true, values = defaults, rawInputs = raw, missingRequired = emptySet(), tags = emptyList()) }
+        loadTagsFor(info, workflow)
+    }
+
+    /** Release workflows ask for a tag: fetch the repo's tags, then pre-fill an empty tag field with the best next one. */
+    private fun loadTagsFor(info: DispatchInfo?, workflow: GhWorkflow) {
+        val tagInputs = info?.inputs.orEmpty().filter { TagSuggestions.isTagInput(it) }
+        if (tagInputs.isEmpty()) return
+        val repo = repoProvider() ?: return
+        val pre = TagSuggestions.isPrerelease(workflow.name, workflow.path)
+        scope.launch {
+            val tags = try {
+                repo.tags()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: GitHubError) {
+                emptyList()
+            }
+            val first = TagSuggestions.suggest(tags, pre).firstOrNull() ?: TagSuggestions.format(pre)
+            updateRun { r ->
+                if (!r.sheetOpen) return@updateRun r
+                val filled = r.values.toMutableMap()
+                tagInputs.forEach { i -> if (filled[i.name].isNullOrBlank()) filled[i.name] = first }
+                r.copy(tags = tags, values = filled)
+            }
+        }
     }
 
     fun closeInputsSheet() = updateRun { it.copy(sheetOpen = false, missingRequired = emptySet()) }
@@ -343,7 +369,10 @@ class GitHubToolsController(
         val r = _state.value.run
         val info = (r.info as? DispatchInfoState.Loaded)?.info
         val typed = info?.inputs.orEmpty()
-        val missing = typed.filter { it.required && r.values[it.name].isNullOrBlank() }.map { it.name }.toSet()
+        val pre = TagSuggestions.isPrerelease(workflow.name, workflow.path)
+        // A wrong tag only fails the run after it has started, so catch the format here.
+        val badTag = typed.filter { TagSuggestions.isTagInput(it) && r.values[it.name].orEmpty().isNotBlank() && !TagSuggestions.isValid(r.values[it.name].orEmpty(), pre) }
+        val missing = (typed.filter { it.required && r.values[it.name].isNullOrBlank() } + badTag).map { it.name }.toSet()
         if (missing.isNotEmpty()) {
             updateRun { it.copy(missingRequired = missing) }
             return

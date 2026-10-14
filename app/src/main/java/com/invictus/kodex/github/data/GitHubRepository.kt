@@ -55,6 +55,8 @@ class GitHubRepository(
 
     suspend fun branches(page: Int): Page<String> = api.listBranches(page)
 
+    suspend fun tags(): List<String> = api.listTags()
+
     suspend fun workflowFile(workflow: GhWorkflow, ref: String?): String = api.getWorkflowFileText(workflow.path, ref)
 
     suspend fun dispatch(workflowId: Long, ref: String, inputs: Map<String, String>) =

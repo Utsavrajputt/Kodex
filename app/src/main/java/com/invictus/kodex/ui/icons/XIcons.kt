@@ -43,7 +43,22 @@ import com.composables.icons.materialsymbols.roundedfilled.Undo
 object XIcons {
     val Folder: ImageVector = MaterialSymbols.RoundedFilled.Folder
     /** Brain: the AI's memory (distinct from [AutoAwesome], which means "run AI"). */
-    val Psychology: ImageVector = MaterialSymbols.RoundedFilled.Psychology
+    val Psychology: ImageVector by lazy {
+        icon(
+            "Psychology",
+            "M13,8.57c-0.79,0 -1.43,0.64 -1.43,1.43s0.64,1.43 1.43,1.43 1.43,-0.64 1.43,-1.43 -0.64,-1.43 -1.43,-1.43z" +
+                "M13,3C9.25,3 6.2,5.94 6.01,9.64L4.1,12.2c-0.25,0.33 -0.01,0.8 0.4,0.8H6v3c0,1.1 0.9,2 2,2h1v3h7v-4.68" +
+                "c2.36,-1.12 4,-3.53 4,-6.32 0,-3.87 -3.13,-7 -7,-7z" +
+                "M16,10c0,0.13 -0.01,0.26 -0.02,0.39l0.83,0.66c0.08,0.06 0.1,0.16 0.05,0.25l-0.8,1.39c-0.05,0.09 -0.15,0.12 -0.24,0.09" +
+                "l-0.99,-0.4c-0.21,0.16 -0.43,0.29 -0.67,0.39L14,13.83c-0.01,0.1 -0.1,0.17 -0.2,0.17h-1.6c-0.1,0 -0.18,-0.07 -0.2,-0.17" +
+                "l-0.15,-1.06c-0.25,-0.1 -0.47,-0.23 -0.68,-0.39l-0.99,0.4c-0.09,0.03 -0.2,0 -0.25,-0.09l-0.8,-1.39" +
+                "c-0.05,-0.08 -0.03,-0.19 0.05,-0.25l0.84,-0.66C10.01,10.26 10,10.13 10,10s0.01,-0.26 0.02,-0.39l-0.84,-0.66" +
+                "c-0.08,-0.06 -0.1,-0.16 -0.05,-0.25l0.8,-1.39c0.05,-0.09 0.15,-0.12 0.24,-0.09l0.99,0.4c0.21,-0.16 0.43,-0.29 0.67,-0.39" +
+                "L12,6.17c0.01,-0.1 0.1,-0.17 0.2,-0.17h1.6c0.1,0 0.18,0.07 0.2,0.17l0.15,1.06c0.24,0.1 0.46,0.23 0.67,0.39" +
+                "l0.99,-0.4c0.09,-0.03 0.2,0 0.25,0.09l0.8,1.39c0.05,0.08 0.03,0.19 -0.05,0.25l-0.84,0.66C15.99,9.74 16,9.87 16,10z",
+            evenOdd = true,
+        )
+    }
     val FolderOpen: ImageVector = MaterialSymbols.RoundedFilled.Folder_open
     val ChevronRight: ImageVector = MaterialSymbols.RoundedFilled.Chevron_right
     val ChevronLeft: ImageVector = MaterialSymbols.RoundedFilled.Chevron_left
@@ -398,7 +413,7 @@ object XIcons {
         )
     }
 
-    private fun iconScaled(name: String, pathData: String, scale: Float): ImageVector =
+    private fun iconScaled(name: String, pathData: String, scale: Float, evenOdd: Boolean = false): ImageVector =
         ImageVector.Builder(
             name = name,
             defaultWidth = 24.dp,
@@ -409,6 +424,7 @@ object XIcons {
             .addGroup(scaleX = scale, scaleY = scale, pivotX = 12f, pivotY = 12f)
             .addPath(
                 pathData = PathParser().parsePathString(pathData).toNodes(),
+                pathFillType = if (evenOdd) PathFillType.EvenOdd else PathFillType.NonZero,
                 fill = SolidColor(Color.Black),
             )
             .clearGroup()
@@ -430,7 +446,7 @@ object XIcons {
             )
             .build()
 
-    private fun icon(name: String, pathData: String): ImageVector =
+    private fun icon(name: String, pathData: String, evenOdd: Boolean = false): ImageVector =
         ImageVector.Builder(
             name = name,
             defaultWidth = 24.dp,

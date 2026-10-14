@@ -41,6 +41,7 @@ pick the matching section as the GitHub Release notes.
 - 🔄 **Live model lists** — models are fetched from each provider (now also Claude and OpenAI) instead of a hardcoded list, newest first and cached for offline use. A small built-in fallback remains for when the list can't be fetched.
 - 🎯 **Quick model picker** — shows 3 featured models (active, recently used, provider picks, newest); the rest are under **All models** with search, in the chat switcher and in AI settings.
 - 🔎 **Chat history search** — filter saved chats by title.
+- 🏷️ **Release tag picker** — *Make release* / *Make pre-release* now show the expected format (`v1.2.0`, `v1.2.0-beta.1`), next-version suggestions from your repo's tags and a list of existing tags to tap. The tag field is pre-filled and checked before the run starts, so a mistyped tag no longer fails the run.
 - 🔀 **Branch switch progress** — a "Switching branch…" dialog on the Git screen and a busy bar on the Branches screen.
 
 ### 🔄 Changed

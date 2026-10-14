@@ -86,6 +86,12 @@ class GitHubApi(private val http: GitHubHttp, private val repo: GhRepoRef) {
         return Page(names, page, hasMore = names.size == perPage, total = names.size)
     }
 
+    /** `GET /repos/{o}/{r}/tags` (names only, newest 100): feeds release-tag suggestions. */
+    suspend fun listTags(): List<String> {
+        val arr = JSONArray(http.getJson("$base/tags", mapOf("per_page" to "100")))
+        return buildList { for (i in 0 until arr.length()) add(arr.getJSONObject(i).optString("name")) }
+    }
+
     /** `GET /repos/{o}/{r}/contents/{path}?ref=` as raw text (workflow YAML). */
     suspend fun getWorkflowFileText(path: String, ref: String?): String =
         http.getJson(

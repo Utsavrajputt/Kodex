@@ -7,6 +7,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -61,6 +63,7 @@ import com.invictus.kodex.github.api.GhWorkflow
 import com.invictus.kodex.github.data.CleanupFilters
 import com.invictus.kodex.github.data.CleanupItem
 import com.invictus.kodex.github.data.CleanupKind
+import com.invictus.kodex.github.data.TagSuggestions
 import com.invictus.kodex.github.data.WorkflowInput
 import com.invictus.kodex.ui.icons.XIcons
 
@@ -156,13 +159,25 @@ private fun RunInputsSheet(workflow: GhWorkflow, ref: String, state: RunWorkflow
         ) {
             Text(stringResource(R.string.gh_inputs_title, workflow.name, ref), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
+            val prerelease = TagSuggestions.isPrerelease(workflow.name, workflow.path)
             info?.inputs.orEmpty().forEach { input ->
-                InputField(
-                    input = input,
-                    value = state.values[input.name].orEmpty(),
-                    error = input.name in state.missingRequired,
-                    onChange = { tools.setInput(input.name, it) },
-                )
+                if (TagSuggestions.isTagInput(input)) {
+                    TagInputField(
+                        input = input,
+                        value = state.values[input.name].orEmpty(),
+                        error = input.name in state.missingRequired,
+                        prerelease = prerelease,
+                        tags = state.tags,
+                        onChange = { tools.setInput(input.name, it) },
+                    )
+                } else {
+                    InputField(
+                        input = input,
+                        value = state.values[input.name].orEmpty(),
+                        error = input.name in state.missingRequired,
+                        onChange = { tools.setInput(input.name, it) },
+                    )
+                }
             }
 
             if (state.rawInputs.isNotEmpty()) {
@@ -194,6 +209,49 @@ private fun RunInputsSheet(workflow: GhWorkflow, ref: String, state: RunWorkflow
                     if (state.dispatching) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     else Text(stringResource(R.string.gh_run_action_label))
                 }
+            }
+        }
+    }
+}
+
+/** A release-tag input: the expected format, tappable next-version suggestions and the repo's existing tags. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TagInputField(
+    input: WorkflowInput,
+    value: String,
+    error: Boolean,
+    prerelease: Boolean,
+    tags: List<String>,
+    onChange: (String) -> Unit,
+) {
+    val label = if (input.required) "${input.name} *" else input.name
+    val format = TagSuggestions.format(prerelease)
+    val invalid = error || (value.isNotBlank() && !TagSuggestions.isValid(value, prerelease))
+    val suggested = remember(tags, prerelease) { TagSuggestions.suggest(tags, prerelease) }
+    val existing = remember(tags, prerelease) { TagSuggestions.existing(tags, prerelease) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = { onChange(it.filter { c -> !c.isWhitespace() }) },
+            label = { Text(label) },
+            supportingText = {
+                Text(stringResource(if (invalid) R.string.gh_tag_format_error else R.string.gh_tag_format_hint, format))
+            },
+            isError = invalid,
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (suggested.isNotEmpty()) {
+            Text(stringResource(R.string.gh_tag_suggested), style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                suggested.forEach { t -> FilterChip(selected = value == t, onClick = { onChange(t) }, label = { Text(t) }) }
+            }
+        }
+        if (existing.isNotEmpty()) {
+            Text(stringResource(R.string.gh_tag_existing), style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                existing.forEach { t -> FilterChip(selected = value == t, onClick = { onChange(t) }, label = { Text(t) }) }
             }
         }
     }
