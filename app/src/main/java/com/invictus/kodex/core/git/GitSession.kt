@@ -530,7 +530,7 @@ class GitSession(
                 if (rejected) throw GitPushRejectedException()
             }
             // `git push -u` behaviour: JGit never writes branch.<name>.remote/merge itself, so a
-            // freshly pushed branch kept showing "No upstream" forever.
+            // freshly pushed branch kept showing "No upstream" (or a stale one) forever.
             val pushed = results.flatMap { it.remoteUpdates }.any {
                 it.status == RemoteRefUpdate.Status.OK || it.status == RemoteRefUpdate.Status.UP_TO_DATE
             }
@@ -539,15 +539,30 @@ class GitSession(
         Unit
     }
 
-    /** Writes branch.<[branch]>.remote/merge unless the branch already tracks something. */
+    /**
+     * `git push -u` behaviour. Push always sends the branch to the same-named remote branch, so the branch has to
+     * track that one afterwards: a branch cut from origin/lyrics keeps tracking it while its commits go to
+     * origin/icon, which left "origin/lyrics ↑39" on screen after a successful push. Writes
+     * branch.<[branch]>.remote/merge unless they already point at [remote]/[branch], and makes sure the
+     * remote-tracking ref exists so ahead/behind has something to count against.
+     */
     private fun setUpstreamIfMissing(branch: String, remote: String) {
         runCatching {
             val cfg = repository.config
+            val wanted = Constants.R_HEADS + branch
             val hasRemote = cfg.getString(ConfigConstants.CONFIG_BRANCH_SECTION, branch, ConfigConstants.CONFIG_KEY_REMOTE)
             val hasMerge = cfg.getString(ConfigConstants.CONFIG_BRANCH_SECTION, branch, ConfigConstants.CONFIG_KEY_MERGE)
-            if (hasRemote != null && hasMerge != null) return
+            if (hasRemote == remote && hasMerge == wanted) return
+            val trackingRef = "${Constants.R_REMOTES}$remote/$branch"
+            if (repository.resolve(trackingRef) == null) {
+                val tip = repository.resolve(Constants.R_HEADS + branch) ?: return
+                repository.updateRef(trackingRef).also {
+                    it.setNewObjectId(tip)
+                    it.update()
+                }
+            }
             cfg.setString(ConfigConstants.CONFIG_BRANCH_SECTION, branch, ConfigConstants.CONFIG_KEY_REMOTE, remote)
-            cfg.setString(ConfigConstants.CONFIG_BRANCH_SECTION, branch, ConfigConstants.CONFIG_KEY_MERGE, Constants.R_HEADS + branch)
+            cfg.setString(ConfigConstants.CONFIG_BRANCH_SECTION, branch, ConfigConstants.CONFIG_KEY_MERGE, wanted)
             cfg.save()
         }
     }
@@ -1539,6 +1554,29 @@ class GitSession(
     ): GitResult<GitStatusPatch> = ioOp(TITLE_MERGE) {
         val ps = paths.map { it.normalized() }.distinct()
         timedLock {
+            resolveIndex(ps, side, onProgress)
+            statusForPaths(ps)
+        }
+    }
+
+    /**
+     * Same index rewrite as [resolveConflicts] but without the status walk afterwards, so one file resolves as
+     * fast as [stage] does. The caller flips the row locally and corrects it with [pathStatusPatch] in the background.
+     */
+    suspend fun resolveConflictsQuick(paths: List<String>, side: GitConflictSide?): GitResult<Unit> = ioOp(TITLE_MERGE) {
+        val ps = paths.map { it.normalized() }.distinct()
+        timedLock { resolveIndex(ps, side) { _, _ -> } }
+        Unit
+    }
+
+    /** Path-filtered status for [paths]: the cheap way to confirm what a quick local update assumed. */
+    suspend fun pathStatusPatch(paths: List<String>): GitResult<GitStatusPatch> = ioOp(TITLE_STAGE) {
+        val ps = paths.map { it.normalized() }.distinct()
+        timedLock { statusForPaths(ps) }
+    }
+
+    /** The index rewrite itself; callers hold the lock. */
+    private fun resolveIndex(ps: List<String>, side: GitConflictSide?, onProgress: (done: Int, total: Int) -> Unit) {
             val special = ArrayList<String>()
             val dc = repository.lockDirCache()
             var success = false
@@ -1580,8 +1618,10 @@ class GitSession(
                                 val length = file.length()
                                 ent.length = length.toInt()
                                 ent.lastModified = file.lastModified()
+                                // Ours/theirs: the file was just written from this stage's blob, so that blob id is
+                                // already the answer; re-reading and re-hashing the file would be wasted I/O.
                                 ent.setObjectId(
-                                    FileInputStream(file).use {
+                                    stageEntry?.objectId ?: FileInputStream(file).use {
                                         inserter.insert(Constants.OBJ_BLOB, length, it)
                                     },
                                 )
@@ -1623,8 +1663,6 @@ class GitSession(
                 }
                 git.add().addFilepattern(p).call()
             }
-            statusForPaths(ps)
-        }
     }
 
 

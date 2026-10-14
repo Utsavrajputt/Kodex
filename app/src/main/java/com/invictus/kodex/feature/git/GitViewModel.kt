@@ -519,6 +519,19 @@ class GitViewModel(
         }
     }
 
+    /** A resolved conflict is staged: flip its row out of the conflict list right away (the status patch refines it). */
+    private fun applyLocalResolved(paths: List<String>) {
+        val set = paths.toSet()
+        _uiState.update { state ->
+            val status = state.status ?: return@update state
+            val changes = status.changes.map { change ->
+                if (change.repoRelativePath !in set || change.unstaged != GitWorkingState.CONFLICT) return@map change
+                change.copy(staged = GitStageState.MODIFIED, unstaged = GitWorkingState.NONE)
+            }
+            state.copy(status = status.copy(changes = changes))
+        }
+    }
+
     /** Flips [path]'s staged state locally to mirror what [GitSession.stage] just did. */
     private fun applyLocalStage(path: String) {
         _uiState.update { state ->
@@ -925,6 +938,21 @@ class GitViewModel(
     /** One batched index rewrite + path-filtered status; progress dialog while it runs. */
     private fun resolvePaths(paths: List<String>, side: GitConflictSide?) {
         viewModelScope.launch(io) {
+            if (paths.size == 1) {
+                // One file behaves like Stage: no blocking progress dialog and no status walk before the
+                // row moves. The row flips locally at once; a path-filtered status then confirms it quietly.
+                when (val r = session.resolveConflictsQuick(paths, side)) {
+                    is GitResult.Ok -> {
+                        applyLocalResolved(paths)
+                        (session.pathStatusPatch(paths) as? GitResult.Ok)?.let { applyStatusPatch(it.value) }
+                    }
+                    is GitResult.Err -> {
+                        _uiState.update { it.copy(error = r.error) }
+                        refresh()
+                    }
+                }
+                return@launch
+            }
             val result = withOpProgress(R.string.git_progress_resolving) {
                 session.resolveConflicts(paths, side) { done, total -> reportProgress(done, total) }
             }

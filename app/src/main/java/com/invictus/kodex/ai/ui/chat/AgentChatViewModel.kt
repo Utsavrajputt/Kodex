@@ -29,6 +29,7 @@ import com.invictus.kodex.ai.agent.DiskIo
 import com.invictus.kodex.ai.agent.FileChange
 import com.invictus.kodex.ai.agent.PendingChanges
 import com.invictus.kodex.ai.agent.ProjectFiles
+import com.invictus.kodex.feature.git.GitViewModel
 import com.invictus.kodex.ai.agent.StoredChat
 import com.invictus.kodex.ai.agent.AppIconApplier
 import com.invictus.kodex.ai.agent.GeneratedImage
@@ -150,6 +151,14 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         turnUndo[path] = UndoEntry(path, if (first != null) first.before else before, after)
     }
 
+    /** Tells Source Control which files the AI just wrote, so they show up at once instead of after a whole-repo status walk. */
+    private fun notifyGit(rels: Collection<String>) {
+        if (rels.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { GitViewModel.onFilesSaved(projectPath, rels.map { File(root, it) }) }
+        }
+    }
+
     /** Writes one staged change to disk (through the editor's open buffer if any). False = left staged for review. */
     private suspend fun writeThrough(c: FileChange): Boolean {
         val f = File(root, c.path)
@@ -172,6 +181,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                     recordApplied(c.path, c.baseText, null)
                 }
             }
+            notifyGit(listOf(c.path))
             true
         } catch (ce: CancellationException) {
             throw ce
@@ -773,6 +783,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             _reviewOpen.value = false
             _applyError.value = null
             _lastApplied.value = UndoInfo(done)
+            notifyGit(done.map { it.path })
             refreshIndex()
         }
     }
@@ -781,6 +792,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         val f = File(root, u.path)
         val before = u.before
         if (before == null) io.delete(f) else io.write(f, before)
+        notifyGit(listOf(u.path))
     }
 
     fun undoLast() {
