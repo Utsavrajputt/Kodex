@@ -233,15 +233,15 @@ fun SettingsBackupDialog(onDismiss: () -> Unit) {
                 busy = false
             }
         }
+        // joinToString's lambda is not inline, so resolve the names here rather than with stringResource inside it.
+        val applicableNames = BackupCategory.entries.filter { it in applicable }
+            .joinToString(", ") { c -> context.getString(categoryTitleRes(c)) }
         AlertDialog(
             onDismissRequest = { pending = null },
             title = { Text(stringResource(R.string.backup_mode_title)) },
             text = {
                 Text(
-                    stringResource(
-                        R.string.backup_mode_body,
-                        BackupCategory.entries.filter { it in applicable }.joinToString(", ") { c -> stringResource(categoryTitleRes(c)) },
-                    ),
+                    stringResource(R.string.backup_mode_body, applicableNames),
                 )
             },
             confirmButton = {
