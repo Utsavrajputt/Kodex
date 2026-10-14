@@ -10,7 +10,7 @@ pick the matching section as the GitHub Release notes.
 
 ## [1.2.0] - 2026-10-14
 
-**AI & GitHub release.** Kodex is rebranded, gains a native AI agent (Claude, OpenAI, Gemini) with multi-file editing, and a GitHub Manager that runs workflows and installs your latest build.
+**AI & GitHub release.** Kodex is rebranded, gains a native AI agent that works with any provider (Claude, OpenAI, Gemini, OpenRouter, Groq, DeepSeek and more, or your own endpoint) with multi-file editing, and a GitHub Manager that runs workflows and installs your latest build.
 
 ### ✨ Highlights
 - 🏷️ **Rebranded to Kodex** — new package, identifiers, CI and docs.
@@ -18,6 +18,7 @@ pick the matching section as the GitHub Release notes.
 - 🤖 **AI Agent on the workspace screen** — full-project context, multi-file editing, tool calling, review and undo.
 - 📝 **Inline Edit** — selection → "Edit with AI" → diff review → apply.
 - 💬 **Claude-style chat** — Markdown, code blocks, `@file` mentions, photo attachments, history per project.
+- 🌍 **Universal AI** — presets for OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, Hugging Face and local Ollama, plus custom OpenAI-compatible providers. Model lists load live from each provider.
 - 🛠️ **AI status & usage** — request/token tracking, limits and clear rate-limit handling.
 
 ### ✨ Added
@@ -36,12 +37,19 @@ pick the matching section as the GitHub Release notes.
 - 🌐 **AI screens use string resources** — consistent localization.
 - 💾 **Export / import settings** (Settings → Advanced) — back up app, editor, GitHub and AI preferences to a file and restore them by category.
 - 🧠 **AI project memory & instructions** — per-project `.kodex/memory.md` (the agent saves notes with `save_memory`, auto-condensed), global custom instructions in AI settings and per-project `.kodex/instructions.md`, all editable from a new **Memory & instructions** sheet. Chats can be renamed with a long-press in history; renamed titles stay locked.
+- 🌍 **Universal AI providers** — built-in presets for OpenRouter, Groq, DeepSeek, Mistral, xAI, Together AI, Hugging Face and Ollama (local), plus **Add custom provider** (name + base URL + key) for any OpenAI-compatible endpoint.
+- 🔄 **Live model lists** — models are fetched from each provider (now also Claude and OpenAI) instead of a hardcoded list, newest first and cached for offline use. A small built-in fallback remains for when the list can't be fetched.
+- 🎯 **Quick model picker** — shows 3 featured models (active, recently used, provider picks, newest); the rest are under **All models** with search, in the chat switcher and in AI settings.
+- 🔎 **Chat history search** — filter saved chats by title.
 - 🔀 **Branch switch progress** — a "Switching branch…" dialog on the Git screen and a busy bar on the Branches screen.
 
 ### 🔄 Changed
 - 📦 **Single APK** — AI is a runtime toggle (*Enable AI*) instead of a separate flavor; AI replaces Refresh in the workspace top bar and a floating AI button sits above Source Control in the editor.
 - 🔏 **APK signing** now uses apksigner 34.0.0 with default signature schemes.
 - 📥 **Installer** — longer install timeout (3 minutes), the install state is no longer reset on resume, silent updates where allowed, and a clear message when Play Protect blocks the install.
+- 🧠 **Memory icon** — Memory & instructions now uses a brain icon instead of the AI sparkles, and the chat top bar order is Memory, History, New chat.
+- 🕒 **Chat history** is one newest-first list with the date and time on every chat instead of Today / Yesterday groups.
+- 🔌 **Network security** — cleartext HTTP is allowed only for `localhost` / `127.0.0.1` (local model servers); everything else stays HTTPS-only.
 - 🤖 Editor AI panel shares the agent engine; Gemini defaults updated to 3.8 Flash / 3.1 Pro.
 - 🏠 Home: *Clone* moved into the New project sheet; the header icon opens the ARM64 builds screen.
 - ⚙️ **Settings reorganised into clearer groups** — Appearance (themes, font), Editor (typing, symbol bar, preview), Workspace (files & tabs, search), GitHub, AI Assistant, Advanced (git status polling, crash/git logs), About. *Enable AI* moved to the top of AI Assistant settings, and AI settings are grouped into Model & key, Memory & instructions, Editing & privacy, Usage & limits.

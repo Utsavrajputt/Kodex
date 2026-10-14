@@ -1317,4 +1317,6 @@
     <string name="ai_settings_pick_model_first">Pick a model first</string>
     <string name="ai_settings_pick_model_first_hint">Choose a model, or type a model ID below, then test again.</string>
     <string name="ai_settings_ollama_key_note">Ollama needs no key: enter any text (for example ollama). The server must run on this device at localhost:11434.</string>
+    <string name="ai_chat_search_chats">Search chats</string>
+    <string name="ai_chat_no_matching_chats">No chats match your search</string>
 </resources>
