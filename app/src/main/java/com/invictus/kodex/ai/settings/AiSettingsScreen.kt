@@ -598,7 +598,7 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                 SettingsSectionHeader(stringResource(R.string.ai_settings_group_memory))
 
                 // ---- universal memory + instructions ----
-                SectionCard(stringResource(R.string.ai_settings_universal), XIcons.AutoAwesome, stringResource(R.string.ai_settings_universal_sub)) {
+                SectionCard(stringResource(R.string.ai_settings_universal), XIcons.Psychology, stringResource(R.string.ai_settings_universal_sub)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Row(
                             Modifier

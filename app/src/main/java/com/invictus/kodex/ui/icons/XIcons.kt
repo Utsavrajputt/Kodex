@@ -42,6 +42,8 @@ import com.composables.icons.materialsymbols.roundedfilled.Undo
  */
 object XIcons {
     val Folder: ImageVector = MaterialSymbols.RoundedFilled.Folder
+    /** Brain: the AI's memory (distinct from [AutoAwesome], which means "run AI"). */
+    val Psychology: ImageVector = MaterialSymbols.RoundedFilled.Psychology
     val FolderOpen: ImageVector = MaterialSymbols.RoundedFilled.Folder_open
     val ChevronRight: ImageVector = MaterialSymbols.RoundedFilled.Chevron_right
     val ChevronLeft: ImageVector = MaterialSymbols.RoundedFilled.Chevron_left

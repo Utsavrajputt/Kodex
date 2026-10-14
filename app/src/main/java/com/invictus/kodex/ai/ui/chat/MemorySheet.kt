@@ -84,7 +84,7 @@ fun MemorySheet(docs: MemoryDocs, onDismiss: () -> Unit) {
                 Box(
                     Modifier.size(40.dp).clip(CircleShape).background(cs.primaryContainer),
                     contentAlignment = Alignment.Center,
-                ) { Icon(XIcons.AutoAwesome, contentDescription = null, tint = cs.onPrimaryContainer, modifier = Modifier.size(22.dp)) }
+                ) { Icon(XIcons.Psychology, contentDescription = null, tint = cs.onPrimaryContainer, modifier = Modifier.size(22.dp)) }
                 Text(
                     stringResource(if (docs.isGlobal) R.string.ai_memory_title_global else R.string.ai_memory_title),
                     style = MaterialTheme.typography.titleLarge,

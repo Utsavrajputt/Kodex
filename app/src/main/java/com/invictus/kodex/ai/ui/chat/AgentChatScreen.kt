@@ -130,11 +130,11 @@ fun AgentChatScreen(vm: AgentChatViewModel, projectName: String, onBack: () -> U
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.ai_settings_back)) } },
                 actions = {
+                    IconButton(onClick = { showMemory = true }) {
+                        Icon(XIcons.Psychology, contentDescription = stringResource(R.string.ai_chat_memory_menu))
+                    }
                     IconButton(onClick = { vm.refreshChats(); showHistory = true }) {
                         Icon(XIcons.Restore, contentDescription = stringResource(R.string.ai_chat_chat_history))
-                    }
-                    IconButton(onClick = { showMemory = true }) {
-                        Icon(XIcons.AutoAwesome, contentDescription = stringResource(R.string.ai_chat_memory_menu))
                     }
                     IconButton(onClick = { vm.newChat() }) { Icon(XIcons.Add, contentDescription = stringResource(R.string.ai_chat_new_chat)) }
                 },
@@ -251,8 +251,8 @@ fun AgentChatContent(
                 TextButton(onClick = { vm.openReview() }) { Text(stringResource(R.string.ai_chat_review, changes.size)) }
             }
             if (headerActions) {
+                IconButton(onClick = { setMemory(true) }) { Icon(XIcons.Psychology, contentDescription = stringResource(R.string.ai_chat_memory_menu)) }
                 IconButton(onClick = { vm.refreshChats(); setHistory(true) }) { Icon(XIcons.Restore, contentDescription = stringResource(R.string.ai_chat_chat_history)) }
-                IconButton(onClick = { setMemory(true) }) { Icon(XIcons.AutoAwesome, contentDescription = stringResource(R.string.ai_chat_memory_menu)) }
                 IconButton(onClick = { vm.newChat() }) { Icon(XIcons.Add, contentDescription = stringResource(R.string.ai_chat_new_chat)) }
             }
             trailing()
