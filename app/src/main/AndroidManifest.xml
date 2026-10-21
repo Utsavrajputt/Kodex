@@ -1135,6 +1135,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Git clone: keeps a running clone alive in the background. -->
+        <service
+            android:name=".core.git.GitCloneService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- Git clone: the notification's Cancel action. -->
         <receiver
             android:name=".core.git.GitCloneCancelReceiver"

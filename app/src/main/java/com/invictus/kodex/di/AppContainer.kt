@@ -18,6 +18,7 @@ import com.invictus.kodex.core.project.ProjectRepository
 import com.invictus.kodex.core.search.CodeSearchEngine
 import com.invictus.kodex.core.search.FileSearchEngine
 import com.invictus.kodex.core.search.SearchHistoryStore
+import com.invictus.kodex.core.git.GitCloneManager
 import com.invictus.kodex.core.security.GitCredentialStore
 import com.invictus.kodex.github.api.GhRepoRef
 import com.invictus.kodex.github.api.GitHubApi
@@ -62,6 +63,9 @@ class AppContainer(context: Context) {
     val editorSettingsStore: EditorSettingsStore by lazy { EditorSettingsStore(appContext) }
 
     val gitCredentialStore: GitCredentialStore by lazy { GitCredentialStore(appContext) }
+
+    /** Owns the running git clone so it outlives the Clone screen. */
+    val gitCloneManager: GitCloneManager by lazy { GitCloneManager(appContext, gitCredentialStore, editorSettingsStore) }
 
     val gitOnboardingPrefs: GitOnboardingPrefs by lazy { GitOnboardingPrefs(appContext) }
 

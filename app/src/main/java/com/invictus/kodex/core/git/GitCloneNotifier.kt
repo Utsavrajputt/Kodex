@@ -14,6 +14,7 @@ import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.invictus.kodex.KodexApp
 import com.invictus.kodex.R
 import com.invictus.kodex.ai.notify.AppVisibility
 
@@ -62,6 +63,10 @@ class GitCloneNotifier(context: Context) {
         lastPostMs = now
         post(PROGRESS_ID, progressNotification(repo, stage, percent))
     }
+
+    /** The notification the foreground service shows (replaced in place by [progress] updates). */
+    fun foregroundNotification(repo: String): Notification =
+        progressNotification(repo, lastStage ?: GitCloneStage.Preparing, lastPercent.takeIf { it >= 0 })
 
     /** Removes the live notification (success, failure, cancel, or screen closed). */
     fun dismiss() = nm.cancel(PROGRESS_ID)
@@ -148,22 +153,20 @@ class GitCloneNotifier(context: Context) {
         const val ACTION_CANCEL = "com.invictus.kodex.action.CLONE_CANCEL"
         private const val CHANNEL_PROGRESS = "git_clone_progress"
         private const val CHANNEL_RESULT = "git_clone_result"
-        private const val PROGRESS_ID = 7400
+        const val PROGRESS_ID = 7400
         private const val RESULT_ID = 7401
         private const val MIN_INTERVAL_MS = 400L
     }
 }
 
-/** Bridge from the notification's Cancel action to whichever clone is running right now. */
-object GitCloneCancelBus {
-    @Volatile var handler: (() -> Unit)? = null
-    fun cancel() { handler?.invoke() }
-}
-
 class GitCloneCancelReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        GitCloneCancelBus.cancel()
-        // If the process was recreated there is no clone left to cancel; never leave a stale bar behind.
-        GitCloneNotifier(context).dismiss()
+        val manager = (context.applicationContext as? KodexApp)?.container?.gitCloneManager
+        if (manager != null && manager.run.value.cloning) {
+            manager.cancel()
+        } else {
+            // Process was recreated: no clone left to cancel, so never leave a stale bar behind.
+            GitCloneNotifier(context).dismiss()
+        }
     }
 }

@@ -697,6 +697,10 @@
     <string name="new_project_location">Location</string>
     <string name="new_project_change">Change</string>
     <string name="new_project_create">Create</string>
+    <string name="new_project_subtitle">Start fresh in an empty folder</string>
+    <string name="new_project_will_create">Will be created at</string>
+    <string name="new_project_or">or</string>
+    <string name="new_project_clone_subtitle">Download a project from GitHub or any Git URL</string>
 
     <!-- Settings: file tree horizontal scroll -->
     <string name="settings_tree_hscroll">Scroll long file names</string>
@@ -1328,10 +1332,6 @@
     <string name="clone_cancel">Cancel</string>
     <string name="clone_cancelling">Cancelling…</string>
     <string name="clone_cancelled">Clone cancelled</string>
-    <string name="clone_stop_title">Stop cloning?</string>
-    <string name="clone_stop_body">The clone is still running. Leaving now cancels it and removes the partial folder.</string>
-    <string name="clone_stop_confirm">Stop and leave</string>
-    <string name="clone_stop_keep">Keep cloning</string>
     <string name="clone_step_prepare">Counting</string>
     <string name="clone_step_receive">Receiving</string>
     <string name="clone_step_resolve">Resolving</string>
@@ -1341,6 +1341,10 @@
     <string name="clone_status_done">Completed</string>
     <string name="clone_status_stopped">Stopped</string>
     <string name="clone_log_title">Log</string>
+    <string name="clone_card_source">Source</string>
+    <string name="clone_card_destination">Destination</string>
+    <string name="clone_card_progress">Progress</string>
+    <string name="clone_background_hint">You can leave this screen. Cloning continues in the background.</string>
     <string name="clone_notif_channel">Repository cloning</string>
     <string name="clone_notif_channel_result">Clone results</string>
     <string name="clone_notif_title">Cloning %1$s</string>

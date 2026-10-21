@@ -256,6 +256,16 @@ object XIcons {
                 "M10.5,9.5h3v3.5h2.2L12,17.2 8.3,13h2.2z",
         )
     }
+    /**
+     * Git clone: a copy of a card (back L-bracket + front card) with a git fork cut out of the front
+     * one. Cut-outs wind the opposite way so the non-zero fill leaves them transparent.
+     */
+    val GitClone: ImageVector by lazy {
+        icon(
+            "GitClone",
+            "M4,16V5c0,-1.1 0.9,-2 2,-2h11v2H6v11H4zM10,7h9c1.1,0 2,0.9 2,2v9c0,1.1 -0.9,2 -2,2h-9c-1.1,0 -2,-0.9 -2,-2V9c0,-1.1 0.9,-2 2,-2zM12,11.7v3.6h1v-3.6zM13.8,10.4a1.3,1.3 0 1,0 -2.6,0a1.3,1.3 0 1,0 2.6,0zM13.8,16.6a1.3,1.3 0 1,0 -2.6,0a1.3,1.3 0 1,0 2.6,0zM18.3,10.4a1.3,1.3 0 1,0 -2.6,0a1.3,1.3 0 1,0 2.6,0zM16.5,11.7v1.8H13v1h4.5v-2.8z",
+        )
+    }
     val Sync: ImageVector by lazy {
         icon(
             "Sync",

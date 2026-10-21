@@ -235,6 +235,10 @@ fun HomeScreen(
                             Icon(XIcons.Download, contentDescription = stringResource(R.string.home_apks))
                         }
                         Spacer(Modifier.width(10.dp))
+                        HeaderIconButton(onClick = onClone) {
+                            Icon(XIcons.GitClone, contentDescription = stringResource(R.string.home_clone))
+                        }
+                        Spacer(Modifier.width(10.dp))
                         HeaderIconButton(onClick = onOpenSettings) {
                             Icon(XIcons.Settings, contentDescription = stringResource(R.string.action_settings))
                         }

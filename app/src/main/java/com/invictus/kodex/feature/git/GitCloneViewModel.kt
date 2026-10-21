@@ -6,42 +6,38 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.invictus.kodex.R
 import com.invictus.kodex.KodexApp
-import com.invictus.kodex.core.editor.EditorSettingsStore
-import com.invictus.kodex.core.git.GitCloneCancelBus
+import com.invictus.kodex.R
 import com.invictus.kodex.core.git.GitCloneLogLine
-import com.invictus.kodex.core.git.GitCloneNotifier
-import com.invictus.kodex.core.git.GitCloner
-import com.invictus.kodex.core.git.GitCredential
-import com.invictus.kodex.core.git.GitResult
-import com.invictus.kodex.core.git.normalizeHost
-import com.invictus.kodex.core.git.overallFraction
-import com.invictus.kodex.core.git.stage
+import com.invictus.kodex.core.git.GitCloneManager
+import com.invictus.kodex.core.git.GitCloneOutcome
+import com.invictus.kodex.core.git.GitCloneRequest
+import com.invictus.kodex.core.git.GitCloneRun
 import com.invictus.kodex.core.git.model.GitErrorDetails
-import com.invictus.kodex.core.git.model.isAuthError
 import com.invictus.kodex.core.security.GitCredentialStore
+import com.invictus.kodex.core.git.normalizeHost
 import com.invictus.kodex.feature.workspace.UiText
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
 
+/**
+ * Form state + glue only. The clone itself lives in [GitCloneManager], so leaving this screen
+ * (or minimizing the app) never interrupts it; reopening the screen picks the live run back up.
+ */
 class GitCloneViewModel(
     private val credentialStore: GitCredentialStore,
-    private val settingsStore: EditorSettingsStore,
-    private val notifier: GitCloneNotifier,
+    private val manager: GitCloneManager,
     private val defaultParent: File,
-    private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
     data class UiState(
@@ -66,33 +62,65 @@ class GitCloneViewModel(
         data object OpenGitHubSettings : Effect
     }
 
-    private val _uiState = MutableStateFlow(UiState(parentPath = defaultParent.absolutePath))
-    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+    private data class Form(
+        val url: String = "",
+        val parentPath: String = "",
+        val folderName: String = "",
+        val branch: String = "",
+    )
 
-    @Volatile private var cancelRequested = false
+    // A run still alive (or finished while the screen was closed) repopulates the form from its request.
+    private val form = MutableStateFlow(
+        manager.run.value.request
+            ?.let { Form(it.url, it.parent, it.folder, it.branch) }
+            ?: Form(parentPath = defaultParent.absolutePath),
+    )
+
+    private fun build(f: Form, run: GitCloneRun, outcome: GitCloneOutcome?) = UiState(
+        url = f.url,
+        parentPath = f.parentPath,
+        folderName = f.folderName,
+        branch = f.branch,
+        cloning = run.cloning,
+        cancelling = run.cancelling,
+        logLines = run.logLines,
+        completed = run.completed,
+        error = (outcome as? GitCloneOutcome.Failed)?.error,
+        privateRepoHost = (outcome as? GitCloneOutcome.NeedsToken)?.host,
+    )
+
+    val uiState: StateFlow<UiState> = combine(form, manager.run, manager.outcome) { f, run, outcome -> build(f, run, outcome) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, build(form.value, manager.run.value, manager.outcome.value))
 
     private val _effects = Channel<Effect>(Channel.BUFFERED)
     val effects = _effects.receiveAsFlow()
 
+    init {
+        viewModelScope.launch { manager.cancelled.collect { message(R.string.clone_cancelled) } }
+    }
+
     fun onEvent(event: GitCloneEvent) {
         when (event) {
-            is GitCloneEvent.UrlChange -> _uiState.update {
+            is GitCloneEvent.UrlChange -> form.update {
                 it.copy(
                     url = event.value,
                     folderName = if (it.folderName.isBlank()) deriveFolder(event.value) else it.folderName,
                 )
             }
-            is GitCloneEvent.ParentChange -> _uiState.update { it.copy(parentPath = event.value) }
-            is GitCloneEvent.FolderChange -> _uiState.update { it.copy(folderName = event.value) }
-            is GitCloneEvent.BranchChange -> _uiState.update { it.copy(branch = event.value) }
+            is GitCloneEvent.ParentChange -> form.update { it.copy(parentPath = event.value) }
+            is GitCloneEvent.FolderChange -> form.update { it.copy(folderName = event.value) }
+            is GitCloneEvent.BranchChange -> form.update { it.copy(branch = event.value) }
             GitCloneEvent.Start -> startClone()
-            GitCloneEvent.Cancel -> requestCancel()
-            GitCloneEvent.DismissError -> _uiState.update { it.copy(error = null) }
-            GitCloneEvent.Done -> _effects.trySend(Effect.NavigateBack)
+            GitCloneEvent.Cancel -> manager.cancel()
+            GitCloneEvent.DismissError -> manager.consumeOutcome()
+            GitCloneEvent.Done -> {
+                manager.reset()
+                _effects.trySend(Effect.NavigateBack)
+            }
             is GitCloneEvent.ConfirmPrivateToken -> confirmPrivateToken(event.username, event.token)
-            GitCloneEvent.DismissPrivateRepoDialog -> _uiState.update { it.copy(privateRepoHost = null) }
+            GitCloneEvent.DismissPrivateRepoDialog -> manager.consumeOutcome()
             GitCloneEvent.ConfigureCredentials -> {
-                _uiState.update { it.copy(privateRepoHost = null) }
+                manager.consumeOutcome()
                 _effects.trySend(Effect.OpenGitHubSettings)
             }
         }
@@ -102,114 +130,45 @@ class GitCloneViewModel(
         url.trim().removeSuffix("/").substringAfterLast('/').removeSuffix(".git")
 
     private fun startClone() {
-        val s = _uiState.value
-        val url = s.url.trim()
-        val folder = s.folderName.trim()
+        val f = form.value
+        val url = f.url.trim()
+        val folder = f.folderName.trim()
         when {
             !url.startsWith("https://") && !url.startsWith("http://") ->
                 return message(R.string.clone_invalid_url)
             folder.isEmpty() -> return message(R.string.clone_empty_folder)
         }
-        val target = File(s.parentPath.trim(), folder)
+        val target = File(f.parentPath.trim(), folder)
         if (target.exists()) return message(R.string.clone_folder_exists, folder)
         // Try with whatever's already saved for this host (often nothing, for a public repo).
         val host = runCatching { normalizeHost(url) }.getOrNull()
         val credential = host?.let { credentialStore.get(it) }
-        performClone(url, target, credential?.username ?: DEFAULT_USERNAME, credential?.token.orEmpty())
+        begin(f, target, credential?.username ?: DEFAULT_USERNAME, credential?.token.orEmpty())
     }
 
     private fun confirmPrivateToken(username: String, token: String) {
-        val s = _uiState.value
-        val folder = s.folderName.trim()
-        val target = File(s.parentPath.trim(), folder)
-        _uiState.update { it.copy(privateRepoHost = null) }
-        performClone(s.url.trim(), target, username.ifBlank { DEFAULT_USERNAME }, token)
+        val f = form.value
+        manager.consumeOutcome()
+        begin(f, File(f.parentPath.trim(), f.folderName.trim()), username.ifBlank { DEFAULT_USERNAME }, token)
     }
 
-    private fun rememberParent(path: String) {
-        val clean = path.trim()
-        if (clean.isEmpty()) return
-        viewModelScope.launch(io) { runCatching { settingsStore.setCloneDefaultParent(clean) } }
-    }
-
-    /** Safe from any thread: called by the Cancel button and by the notification's Cancel action. */
-    private fun requestCancel() {
-        if (!_uiState.value.cloning) return
-        cancelRequested = true
-        _uiState.update { it.copy(cancelling = true) }
-    }
-
-    private fun performClone(url: String, target: File, username: String, token: String) {
-        viewModelScope.launch(io) {
-            val repoName = target.name
-            cancelRequested = false
-            GitCloneCancelBus.handler = this@GitCloneViewModel::requestCancel
-            _uiState.update { it.copy(cloning = true, cancelling = false, completed = false, logLines = emptyList()) }
-            notifier.start(repoName)
-            try {
-                val result = GitCloner.clone(
-                    url = url,
-                    username = username,
-                    token = token,
-                    directory = target,
-                    branch = _uiState.value.branch.trim().ifBlank { null },
-                    isCancelled = { cancelRequested },
-                ) { progress ->
-                    _uiState.update { it.copy(logLines = progress.lines) }
-                    notifier.progress(repoName, progress.stage(), progress.overallFraction())
-                }
-                when (result) {
-                    is GitResult.Ok -> {
-                        if (token.isNotBlank()) {
-                            credentialStore.put(GitCredential(normalizeHost(url), username, token))
-                        }
-                        // Only a folder that just worked becomes next time's default.
-                        rememberParent(_uiState.value.parentPath)
-                        message(R.string.clone_done, target.absolutePath)
-                        notifier.finished(repoName, target.absolutePath)
-                        // Stay on screen with the full transcript; the person taps Done to leave.
-                        _uiState.update { it.copy(completed = true) }
-                    }
-                    is GitResult.Err -> {
-                        // Don't leave a half-downloaded repo behind.
-                        if (target.exists()) target.deleteRecursively()
-                        val host = runCatching { normalizeHost(url) }.getOrNull()
-                        when {
-                            cancelRequested -> {
-                                _uiState.update { it.copy(logLines = emptyList()) }
-                                message(R.string.clone_cancelled)
-                            }
-                            host != null && result.error.authFailure.isAuthError() ->
-                                _uiState.update { it.copy(privateRepoHost = host) }
-                            else -> {
-                                notifier.failed(repoName, result.error.message)
-                                _uiState.update { it.copy(error = result.error) }
-                            }
-                        }
-                    }
-                }
-            } catch (e: CancellationException) {
-                // Screen closed mid-clone: JGit was told to stop, so remove what it left.
-                if (target.exists()) target.deleteRecursively()
-                throw e
-            } finally {
-                GitCloneCancelBus.handler = null
-                notifier.dismiss()
-                _uiState.update { it.copy(cloning = false, cancelling = false) }
-            }
-        }
-    }
-
-    override fun onCleared() {
-        // Leaving the screen mid-clone stops it (the UI asks for confirmation first).
-        if (_uiState.value.cloning) cancelRequested = true
-        GitCloneCancelBus.handler = null
-        notifier.dismiss()
-        super.onCleared()
+    private fun begin(f: Form, target: File, username: String, token: String) {
+        manager.start(
+            request = GitCloneRequest(f.url.trim(), f.parentPath.trim(), f.folderName.trim(), f.branch.trim()),
+            target = target,
+            username = username,
+            token = token,
+        )
     }
 
     private fun message(res: Int, vararg args: Any) {
         _effects.trySend(Effect.Message(UiText(res, args.toList())))
+    }
+
+    override fun onCleared() {
+        // Leaving a finished/stopped screen forgets it; a clone still running keeps going untouched.
+        manager.reset()
+        super.onCleared()
     }
 
     companion object {
@@ -223,8 +182,7 @@ class GitCloneViewModel(
                     ?: Environment.getExternalStorageDirectory()
                 GitCloneViewModel(
                     credentialStore = app.container.gitCredentialStore,
-                    settingsStore = app.container.editorSettingsStore,
-                    notifier = GitCloneNotifier(app),
+                    manager = app.container.gitCloneManager,
                     defaultParent = defaultParent,
                 )
             }

@@ -1,11 +1,10 @@
 package com.invictus.kodex.feature.git
 
-import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,42 +22,38 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -73,6 +68,8 @@ import com.invictus.kodex.core.git.GitCloneProgress
 import com.invictus.kodex.core.git.GitCloneStage
 import com.invictus.kodex.core.git.overallFraction
 import com.invictus.kodex.core.git.stage
+import com.invictus.kodex.github.ui.GhCard
+import com.invictus.kodex.github.ui.ghPalette
 import com.invictus.kodex.ui.components.rememberFolderPickerLauncher
 import com.invictus.kodex.ui.icons.XIcons
 import kotlinx.coroutines.launch
@@ -89,7 +86,7 @@ fun GitCloneScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    var showStopDialog by remember { mutableStateOf(false) }
+    val pal = ghPalette()
 
     LaunchedEffect(viewModel) {
         viewModel.effects.collect { effect ->
@@ -102,31 +99,8 @@ fun GitCloneScreen(
         }
     }
 
-    // Leaving mid-clone would silently throw away the download, so ask first.
-    BackHandler(enabled = state.cloning) { showStopDialog = true }
-    val requestBack: () -> Unit = { if (state.cloning) showStopDialog = true else onBack() }
-
     val fieldsLocked = state.cloning || state.completed
 
-    if (showStopDialog) {
-        AlertDialog(
-            onDismissRequest = { showStopDialog = false },
-            title = { Text(stringResource(R.string.clone_stop_title)) },
-            text = { Text(stringResource(R.string.clone_stop_body)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showStopDialog = false
-                        viewModel.onEvent(GitCloneEvent.Cancel)
-                        onBack()
-                    },
-                ) { Text(stringResource(R.string.clone_stop_confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showStopDialog = false }) { Text(stringResource(R.string.clone_stop_keep)) }
-            },
-        )
-    }
     state.error?.let { details ->
         GitErrorDialog(details = details, onDismiss = { viewModel.onEvent(GitCloneEvent.DismissError) })
     }
@@ -142,12 +116,54 @@ fun GitCloneScreen(
     }
 
     Scaffold(
+        modifier = Modifier.background(pal.screen),
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.clone_title)) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                    titleContentColor = pal.onCard,
+                    navigationIconContentColor = pal.onCard,
+                    actionIconContentColor = pal.onCard,
+                ),
+                title = {
+                    Text(
+                        stringResource(R.string.clone_title),
+                        maxLines = 1,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
+                // Going back never stops a running clone; it keeps going in the background.
                 navigationIcon = {
-                    IconButton(onClick = requestBack) {
+                    IconButton(onClick = onBack) {
                         Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back))
+                    }
+                },
+                actions = {
+                    when {
+                        state.completed -> ActionPill(
+                            text = stringResource(R.string.clone_finish_button),
+                            icon = XIcons.Check,
+                            brush = pal.installBrush,
+                            content = pal.onInstall,
+                            enabled = true,
+                        ) { viewModel.onEvent(GitCloneEvent.Done) }
+                        state.cloning -> ActionPill(
+                            text = stringResource(if (state.cancelling) R.string.clone_cancelling else R.string.clone_cancel),
+                            icon = XIcons.Close,
+                            brush = SolidColor(pal.dangerAction),
+                            content = pal.onDangerAction,
+                            enabled = !state.cancelling,
+                        ) { viewModel.onEvent(GitCloneEvent.Cancel) }
+                        else -> ActionPill(
+                            text = stringResource(R.string.clone_start),
+                            icon = XIcons.CloudDownload,
+                            brush = pal.installBrush,
+                            content = pal.onInstall,
+                            enabled = state.url.isNotBlank() && state.folderName.isNotBlank(),
+                        ) { viewModel.onEvent(GitCloneEvent.Start) }
                     }
                 },
             )
@@ -155,138 +171,183 @@ fun GitCloneScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { innerPadding ->
         Column(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .consumeWindowInsets(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 24.dp),
         ) {
-            CloneForm(state = state, locked = fieldsLocked, onEvent = viewModel::onEvent)
-
+            SourceCard(state = state, locked = fieldsLocked, onEvent = viewModel::onEvent)
+            DestinationCard(state = state, locked = fieldsLocked, onEvent = viewModel::onEvent)
             if (state.cloning || state.logLines.isNotEmpty()) {
-                CloneProgressCard(state = state)
-            }
-
-            val buttonModifier = Modifier.fillMaxWidth().height(56.dp)
-            when {
-                state.completed -> Button(
-                    onClick = { viewModel.onEvent(GitCloneEvent.Done) },
-                    modifier = buttonModifier,
-                ) {
-                    Icon(XIcons.Check, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.clone_finish_button))
-                }
-                state.cloning -> OutlinedButton(
-                    onClick = { viewModel.onEvent(GitCloneEvent.Cancel) },
-                    enabled = !state.cancelling,
-                    modifier = buttonModifier,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = if (state.cancelling) 0.4f else 1f)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) {
-                    Icon(XIcons.Close, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(if (state.cancelling) R.string.clone_cancelling else R.string.clone_cancel))
-                }
-                else -> Button(
-                    onClick = { viewModel.onEvent(GitCloneEvent.Start) },
-                    enabled = state.url.isNotBlank() && state.folderName.isNotBlank(),
-                    modifier = buttonModifier,
-                ) {
-                    Icon(XIcons.CloudDownload, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.clone_start))
-                }
+                ProgressCard(state = state)
             }
         }
     }
 }
 
+/** Compact pill in the top bar: Clone / Cancel / Done. */
 @Composable
-private fun CloneForm(
-    state: GitCloneViewModel.UiState,
-    locked: Boolean,
-    onEvent: (GitCloneEvent) -> Unit,
+private fun ActionPill(
+    text: String,
+    icon: ImageVector,
+    brush: Brush,
+    content: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
 ) {
-    val pickParentFolder = rememberFolderPickerLauncher(
-        onPicked = { path -> onEvent(GitCloneEvent.ParentChange(path)) },
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        CloneField(
-            value = state.url,
-            onChange = { onEvent(GitCloneEvent.UrlChange(it)) },
-            label = R.string.clone_url_hint,
-            enabled = !locked,
-            leading = XIcons.CloudDownload,
-            keyboardType = KeyboardType.Uri,
-        )
-        CloneField(
-            value = state.folderName,
-            onChange = { onEvent(GitCloneEvent.FolderChange(it)) },
-            label = R.string.clone_folder_hint,
-            enabled = !locked,
-            leading = XIcons.Folder,
-        )
-        CloneField(
-            value = state.parentPath,
-            onChange = { onEvent(GitCloneEvent.ParentChange(it)) },
-            label = R.string.clone_parent_hint,
-            enabled = !locked,
-            trailing = {
-                IconButton(onClick = pickParentFolder, enabled = !locked) {
-                    Icon(XIcons.FolderOpen, contentDescription = stringResource(R.string.clone_browse_folder))
-                }
-            },
-        )
-        CloneField(
-            value = state.branch,
-            onChange = { onEvent(GitCloneEvent.BranchChange(it)) },
-            label = R.string.clone_branch_hint,
-            enabled = !locked,
-            leading = XIcons.Branch,
+    Row(
+        modifier = Modifier
+            .padding(end = 10.dp)
+            .height(38.dp)
+            .alpha(if (enabled) 1f else 0.45f)
+            .clip(CircleShape)
+            .background(brush)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
+        Text(
+            text = text,
+            color = content,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
         )
     }
 }
 
 @Composable
-private fun CloneField(
-    value: String,
-    onChange: (String) -> Unit,
-    @StringRes label: Int,
-    enabled: Boolean,
-    modifier: Modifier = Modifier,
-    leading: ImageVector? = null,
-    trailing: (@Composable () -> Unit)? = null,
-    keyboardType: KeyboardType = KeyboardType.Text,
-) {
-    val container = MaterialTheme.colorScheme.surfaceContainerHighest
-    TextField(
-        value = value,
-        onValueChange = onChange,
-        modifier = modifier.fillMaxWidth(),
-        enabled = enabled,
-        singleLine = true,
-        label = { Text(stringResource(label)) },
-        leadingIcon = leading?.let { icon -> { Icon(icon, contentDescription = null) } },
-        trailingIcon = trailing,
-        shape = RoundedCornerShape(16.dp),
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Next),
-        colors = TextFieldDefaults.colors(
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent,
-            errorIndicatorColor = Color.Transparent,
-            focusedContainerColor = container,
-            unfocusedContainerColor = container,
-            disabledContainerColor = container.copy(alpha = 0.55f),
-        ),
+private fun CardTitle(@StringRes title: Int, modifier: Modifier = Modifier) {
+    Text(
+        text = stringResource(title),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = ghPalette().onCard,
+        modifier = modifier,
     )
 }
 
 @Composable
-private fun CloneProgressCard(state: GitCloneViewModel.UiState) {
+private fun SourceCard(state: GitCloneViewModel.UiState, locked: Boolean, onEvent: (GitCloneEvent) -> Unit) {
+    val p = ghPalette()
+    GhCard(p.card, p.cardBorder) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            CardTitle(R.string.clone_card_source)
+            CloneInput(
+                value = state.url,
+                onChange = { onEvent(GitCloneEvent.UrlChange(it)) },
+                hint = R.string.clone_url_hint,
+                leading = XIcons.CloudDownload,
+                enabled = !locked,
+                keyboardType = KeyboardType.Uri,
+            )
+            CloneInput(
+                value = state.branch,
+                onChange = { onEvent(GitCloneEvent.BranchChange(it)) },
+                hint = R.string.clone_branch_hint,
+                leading = XIcons.Branch,
+                enabled = !locked,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DestinationCard(state: GitCloneViewModel.UiState, locked: Boolean, onEvent: (GitCloneEvent) -> Unit) {
+    val p = ghPalette()
+    val pickParentFolder = rememberFolderPickerLauncher(
+        onPicked = { path -> onEvent(GitCloneEvent.ParentChange(path)) },
+    )
+    GhCard(p.card, p.cardBorder) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            CardTitle(R.string.clone_card_destination)
+            CloneInput(
+                value = state.folderName,
+                onChange = { onEvent(GitCloneEvent.FolderChange(it)) },
+                hint = R.string.clone_folder_hint,
+                leading = XIcons.Edit,
+                enabled = !locked,
+            )
+            CloneInput(
+                value = state.parentPath,
+                onChange = { onEvent(GitCloneEvent.ParentChange(it)) },
+                hint = R.string.clone_parent_hint,
+                leading = XIcons.Folder,
+                enabled = !locked,
+                trailing = {
+                    IconButton(onClick = pickParentFolder, enabled = !locked, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            XIcons.FolderOpen,
+                            contentDescription = stringResource(R.string.clone_browse_folder),
+                            tint = p.accent,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                },
+            )
+        }
+    }
+}
+
+/** Slim 44dp field in the same tile style as the GitHub workflow pickers. */
+@Composable
+private fun CloneInput(
+    value: String,
+    onChange: (String) -> Unit,
+    @StringRes hint: Int,
+    leading: ImageVector,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
+    keyboardType: KeyboardType = KeyboardType.Text,
+) {
+    val p = ghPalette()
+    val shape = RoundedCornerShape(12.dp)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .alpha(if (enabled) 1f else 0.6f)
+            .clip(shape)
+            .background(p.tileFill)
+            .border(1.dp, p.pickerBorder, shape)
+            .padding(start = 12.dp, end = if (trailing != null) 4.dp else 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(leading, contentDescription = null, tint = p.onCardMuted, modifier = Modifier.size(18.dp))
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            if (value.isEmpty()) {
+                Text(
+                    stringResource(hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = p.onCardMuted,
+                    maxLines = 1,
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                enabled = enabled,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = p.onCard),
+                cursorBrush = SolidColor(p.accent),
+                keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        trailing?.invoke()
+    }
+}
+
+@Composable
+private fun ProgressCard(state: GitCloneViewModel.UiState) {
+    val p = ghPalette()
     val progress = GitCloneProgress(state.logLines)
     val stage = progress.stage()
     val fraction = if (state.completed) 1f else progress.overallFraction()
@@ -305,42 +366,36 @@ private fun CloneProgressCard(state: GitCloneViewModel.UiState) {
         else -> stringResource(R.string.clone_status_stopped)
     }
 
-    Card(
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier.padding(16.dp),
-        ) {
-            Row(verticalAlignment = Alignment.Bottom) {
+    GhCard(p.card, p.cardBorder) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CardTitle(R.string.clone_card_progress, Modifier.weight(1f))
+                Text(status, style = MaterialTheme.typography.labelLarge, color = p.onCardMuted, maxLines = 1)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = "${(animated * 100).roundToInt()}%",
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = p.accent,
+                    modifier = Modifier.width(54.dp),
                 )
-                Text(
-                    text = status,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 6.dp),
-                )
-            }
-            val barModifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(50))
-            if (state.cloning && fraction == null) {
-                LinearProgressIndicator(modifier = barModifier)
-            } else {
-                LinearProgressIndicator(progress = { animated }, modifier = barModifier)
+                val bar = Modifier.weight(1f).height(8.dp).clip(RoundedCornerShape(50))
+                if (state.cloning && fraction == null) {
+                    LinearProgressIndicator(modifier = bar, color = p.accent, trackColor = p.tileFill)
+                } else {
+                    LinearProgressIndicator(progress = { animated }, modifier = bar, color = p.accent, trackColor = p.tileFill)
+                }
             }
             CloneSteps(current = stage, completed = state.completed)
-            Text(
-                text = stringResource(R.string.clone_log_title),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            CloneLog(lines = state.logLines, modifier = Modifier.fillMaxWidth().height(180.dp))
+            CloneLog(lines = state.logLines, modifier = Modifier.fillMaxWidth().height(150.dp))
+            if (state.cloning) {
+                Text(
+                    stringResource(R.string.clone_background_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = p.onCardMuted,
+                )
+            }
         }
     }
 }
@@ -370,16 +425,12 @@ private fun CloneSteps(current: GitCloneStage, completed: Boolean) {
 
 @Composable
 private fun CloneStageChip(label: String, done: Boolean, active: Boolean, modifier: Modifier = Modifier) {
-    val scheme = MaterialTheme.colorScheme
-    val container = when {
-        done -> scheme.primaryContainer
-        active -> scheme.secondaryContainer
-        else -> scheme.surfaceContainerHigh
-    }
+    val p = ghPalette()
+    val container = if (done) p.accent.copy(alpha = 0.2f) else p.tileFill
     val content = when {
-        done -> scheme.onPrimaryContainer
-        active -> scheme.onSecondaryContainer
-        else -> scheme.onSurfaceVariant
+        done -> p.accent
+        active -> p.onCard
+        else -> p.onCardMuted
     }
     val pill = RoundedCornerShape(50)
     Row(
@@ -388,8 +439,8 @@ private fun CloneStageChip(label: String, done: Boolean, active: Boolean, modifi
         modifier = modifier
             .clip(pill)
             .background(container)
-            .then(if (active) Modifier.border(1.5.dp, scheme.primary, pill) else Modifier)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .border(1.dp, if (active) p.accent else p.pickerBorder, pill)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
         if (done) {
             Icon(XIcons.Check, contentDescription = null, tint = content, modifier = Modifier.size(14.dp))
@@ -408,12 +459,12 @@ private fun CloneLog(lines: List<GitCloneLogLine>, modifier: Modifier = Modifier
     }
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(TerminalBackground),
     ) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(12.dp),
+            contentPadding = PaddingValues(10.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
             itemsIndexed(lines, key = { index, line -> "$index-${line.taskName}" }) { _, line ->
