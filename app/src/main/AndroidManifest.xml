@@ -1135,6 +1135,11 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Git clone: the notification's Cancel action. -->
+        <receiver
+            android:name=".core.git.GitCloneCancelReceiver"
+            android:exported="false" />
+
         <service
             android:name=".github.notify.ArmBuildJobService"
             android:exported="false"

@@ -34,7 +34,11 @@ private const val TASK_RESOLVING_DELTAS = "Resolving deltas"
  * high-level CloneCommand/ProgressMonitor API. [finish] appends an equivalent summary built from
  * the object/delta totals this monitor already saw instead.
  */
-internal class GitCloneProgressTracker(private val onProgress: (GitCloneProgress) -> Unit) {
+internal class GitCloneProgressTracker(
+    /** Polled by JGit between work units; returning true aborts the clone. */
+    private val cancelCheck: () -> Boolean = { false },
+    private val onProgress: (GitCloneProgress) -> Unit,
+) {
     private val lines = mutableListOf<GitCloneLogLine>()
     private var receivingStartedAtNanos = 0L
     private var receivingBytes = 0L
@@ -47,6 +51,8 @@ internal class GitCloneProgressTracker(private val onProgress: (GitCloneProgress
     }
 
     val monitor: BatchingProgressMonitor = object : BatchingProgressMonitor() {
+        override fun isCancelled(): Boolean = cancelCheck()
+
         override fun onUpdate(taskName: String?, workCurr: Int) =
             emit(taskName.orEmpty(), workCurr, 0, 0, done = false)
 
@@ -96,4 +102,28 @@ private fun formatBytes(bytes: Long): String {
     val kib = bytes / 1024.0
     if (kib < 1024.0) return String.format(Locale.US, "%.2f KiB", kib)
     return String.format(Locale.US, "%.2f MiB", kib / 1024.0)
+}
+
+/** Coarse clone phases, in the order a clone moves through them. */
+enum class GitCloneStage { Preparing, Receiving, Resolving }
+
+fun GitCloneProgress.stage(): GitCloneStage = when {
+    lines.any { it.taskName == TASK_RESOLVING_DELTAS } -> GitCloneStage.Resolving
+    lines.any { it.taskName == TASK_RECEIVING_OBJECTS } -> GitCloneStage.Receiving
+    else -> GitCloneStage.Preparing
+}
+
+/**
+ * One 0..1 number for the whole clone: receiving objects is ~70% of it, resolving deltas the
+ * remaining ~30%. Null while the server is still preparing the pack (nothing measurable yet).
+ */
+fun GitCloneProgress.overallFraction(): Float? {
+    val receiving = lines.lastOrNull { it.taskName == TASK_RECEIVING_OBJECTS }
+    val resolving = lines.lastOrNull { it.taskName == TASK_RESOLVING_DELTAS }
+    fun GitCloneLogLine.fraction(): Float = (if (done) 100 else percent ?: 0) / 100f
+    return when {
+        resolving != null -> 0.7f + 0.3f * resolving.fraction()
+        receiving != null -> 0.7f * receiving.fraction()
+        else -> null
+    }
 }

@@ -1323,4 +1323,29 @@
     <string name="gh_tag_existing">Existing tags</string>
     <string name="gh_tag_format_hint">Format: %1$s</string>
     <string name="gh_tag_format_error">Use the format %1$s</string>
+
+    <!-- Clone screen: progress, cancel, notification -->
+    <string name="clone_cancel">Cancel</string>
+    <string name="clone_cancelling">Cancelling…</string>
+    <string name="clone_cancelled">Clone cancelled</string>
+    <string name="clone_stop_title">Stop cloning?</string>
+    <string name="clone_stop_body">The clone is still running. Leaving now cancels it and removes the partial folder.</string>
+    <string name="clone_stop_confirm">Stop and leave</string>
+    <string name="clone_stop_keep">Keep cloning</string>
+    <string name="clone_step_prepare">Counting</string>
+    <string name="clone_step_receive">Receiving</string>
+    <string name="clone_step_resolve">Resolving</string>
+    <string name="clone_stage_preparing">Counting objects…</string>
+    <string name="clone_stage_receiving">Receiving objects</string>
+    <string name="clone_stage_resolving">Resolving deltas</string>
+    <string name="clone_status_done">Completed</string>
+    <string name="clone_status_stopped">Stopped</string>
+    <string name="clone_log_title">Log</string>
+    <string name="clone_notif_channel">Repository cloning</string>
+    <string name="clone_notif_channel_result">Clone results</string>
+    <string name="clone_notif_title">Cloning %1$s</string>
+    <string name="clone_notif_text">%1$s · %2$d%%</string>
+    <string name="clone_notif_done_title">Clone complete</string>
+    <string name="clone_notif_done_text">%1$s cloned to %2$s</string>
+    <string name="clone_notif_failed_title">Clone failed</string>
 </resources>

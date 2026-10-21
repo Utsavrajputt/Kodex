@@ -88,6 +88,8 @@ sealed interface GitCloneEvent {
     data class FolderChange(val value: String) : GitCloneEvent
     data class BranchChange(val value: String) : GitCloneEvent
     data object Start : GitCloneEvent
+    /** Stop a running clone (button, notification action or confirmed back-press). */
+    data object Cancel : GitCloneEvent
     data object DismissError : GitCloneEvent
     /** The person tapped Done on the finished clone transcript. */
     data object Done : GitCloneEvent

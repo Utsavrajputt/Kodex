@@ -16,11 +16,12 @@ object GitCloner {
         token: String,
         directory: File,
         branch: String?,
+        isCancelled: () -> Boolean = { false },
         onProgress: (GitCloneProgress) -> Unit,
     ): GitResult<File> = withContext(Dispatchers.IO) {
         val startNs = System.nanoTime()
         try {
-            val tracker = GitCloneProgressTracker(onProgress)
+            val tracker = GitCloneProgressTracker(cancelCheck = isCancelled, onProgress = onProgress)
             val cmd = Git.cloneRepository()
                 .setURI(url)
                 .setDirectory(directory)
