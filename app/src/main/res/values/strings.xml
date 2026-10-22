@@ -656,6 +656,13 @@
     <string name="settings_github_avatar_desc">%1$s avatar</string>
     <string name="settings_github_profile_stats">%1$d repos · %2$d followers · %3$d following</string>
     <string name="settings_github_autofill">Fill from GitHub</string>
+    <string name="settings_github_connected">Connected</string>
+    <string name="settings_github_hero_title">GitHub</string>
+    <string name="settings_github_hero_empty">Add an access token to clone and sync private repositories.</string>
+    <string name="settings_github_hero_token_only">Token saved. Profile details load when GitHub is reachable.</string>
+    <string name="settings_github_stat_repos">%1$d repos</string>
+    <string name="settings_github_stat_followers">%1$d followers</string>
+    <string name="settings_github_stat_following">%1$d following</string>
 
     <string name="editor_paged_opened">Large file opened in %1$d pages</string>
     <string name="editor_page_indicator">Page %1$d / %2$d</string>

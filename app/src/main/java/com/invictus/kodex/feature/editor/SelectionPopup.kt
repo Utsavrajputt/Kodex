@@ -12,6 +12,8 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.content.res.ColorStateList
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
@@ -24,7 +26,7 @@ import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
 import java.util.WeakHashMap
 
 /**
- * Our own selection popup (Select all / Cut / Copy / Paste as text buttons). Sora's built-in
+ * Our own selection popup (Select all / Cut / Copy / Paste as text buttons, plus an AI spark icon for Explain). Sora's built-in
  * icon popup is switched off and this one is shown instead, so labels and width are fully ours.
  *
  * It is a non-focusable [PopupWindow], so the editor keeps focus, the keyboard and the handles.
@@ -187,6 +189,29 @@ private class SelectionPopup(
             )
         }
 
+        /** Icon-only action (the AI spark); [label] stays as the accessibility description. */
+        fun addIcon(icon: Int, label: Int, action: () -> Unit) {
+            row.addView(
+                ImageView(ctx).apply {
+                    setImageResource(icon)
+                    imageTintList = ColorStateList.valueOf(fg)
+                    contentDescription = ctx.getString(label)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                    setPadding((14 * density).toInt(), (10 * density).toInt(), (14 * density).toInt(), (10 * density).toInt())
+                    minimumHeight = (44 * density).toInt()
+                    val ripple = TypedValue()
+                    if (ctx.theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true)) {
+                        setBackgroundResource(ripple.resourceId)
+                    }
+                    setOnClickListener {
+                        dismiss()
+                        action()
+                    }
+                },
+                LinearLayout.LayoutParams((52 * density).toInt(), (44 * density).toInt()),
+            )
+        }
+
         val editable = editor.isEditable
         val hasClip = (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.hasPrimaryClip() == true
         add(R.string.qa_select_all) { editor.selectAll() }
@@ -195,7 +220,7 @@ private class SelectionPopup(
         if (editable && hasClip) add(R.string.qa_paste) { editor.pasteText() }
         // Only when AI is on: hands the selected code to the editor's AI panel.
         explainProvider()?.let { explain ->
-            add(R.string.qa_explain) {
+            addIcon(R.drawable.ic_stat_ai, R.string.qa_explain) {
                 val code = runCatching {
                     editor.text.subSequence(editor.cursor.left, editor.cursor.right).toString()
                 }.getOrDefault("")

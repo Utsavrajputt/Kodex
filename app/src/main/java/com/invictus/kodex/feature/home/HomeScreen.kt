@@ -231,12 +231,12 @@ fun HomeScreen(
                             }
                             Spacer(Modifier.width(10.dp))
                         }
-                        HeaderIconButton(onClick = onOpenApks) {
-                            Icon(XIcons.Download, contentDescription = stringResource(R.string.home_apks))
-                        }
-                        Spacer(Modifier.width(10.dp))
                         HeaderIconButton(onClick = onClone) {
                             Icon(XIcons.GitClone, contentDescription = stringResource(R.string.home_clone))
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        HeaderIconButton(onClick = onOpenApks) {
+                            Icon(XIcons.Download, contentDescription = stringResource(R.string.home_apks))
                         }
                         Spacer(Modifier.width(10.dp))
                         HeaderIconButton(onClick = onOpenSettings) {
@@ -345,11 +345,6 @@ fun HomeScreen(
             error = projectsState.createError,
             onCreate = { parent, name -> projectsViewModel.onEvent(ProjectsEvent.CreateProject(parent, name)) },
             onDismissError = { projectsViewModel.onEvent(ProjectsEvent.DismissCreateError) },
-            onClone = {
-                showNewSheet = false
-                projectsViewModel.onEvent(ProjectsEvent.DismissCreateError)
-                onClone()
-            },
             onDismiss = {
                 showNewSheet = false
                 projectsViewModel.onEvent(ProjectsEvent.DismissCreateError)

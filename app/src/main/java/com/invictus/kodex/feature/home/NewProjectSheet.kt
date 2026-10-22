@@ -54,9 +54,9 @@ import com.invictus.kodex.ui.icons.XIcons
 import java.io.File
 
 /**
- * Bottom sheet for starting a project: a name and the folder to create it in, or a jump to Clone.
+ * Bottom sheet for starting a project: a name and the folder to create it in.
  * Layout: icon badge + title, name field, location card with a live "will be created at" preview,
- * a tall Create button, then an "or" divider and a Clone card.
+ * and a tall Create button.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,7 +65,6 @@ fun NewProjectSheet(
     error: UiText?,
     onCreate: (parent: File, name: String) -> Unit,
     onDismissError: () -> Unit,
-    onClone: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var name by rememberSaveable { mutableStateOf("") }
@@ -179,53 +178,6 @@ fun NewProjectSheet(
                 Icon(XIcons.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(R.string.new_project_create), style = MaterialTheme.typography.titleMedium)
-            }
-
-            // "or" divider.
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                HorizontalDivider(Modifier.weight(1f), color = cs.outlineVariant)
-                Text(
-                    stringResource(R.string.new_project_or),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = cs.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                )
-                HorizontalDivider(Modifier.weight(1f), color = cs.outlineVariant)
-            }
-
-            // Clone card.
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = cs.secondaryContainer,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier.clip(RoundedCornerShape(20.dp))
-                        .expressiveClickable(onClick = onClone)
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp))
-                            .background(cs.onSecondaryContainer.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(XIcons.GitClone, contentDescription = null, tint = cs.onSecondaryContainer)
-                    }
-                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text(
-                            stringResource(R.string.home_clone),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = cs.onSecondaryContainer,
-                        )
-                        Text(
-                            stringResource(R.string.new_project_clone_subtitle),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = cs.onSecondaryContainer.copy(alpha = 0.75f),
-                        )
-                    }
-                    Icon(XIcons.ChevronRight, contentDescription = null, tint = cs.onSecondaryContainer)
-                }
             }
         }
     }
