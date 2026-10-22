@@ -238,10 +238,15 @@ class GitHubManagerViewModel(
                 if (active != null) {
                     val latest = repo.run(active.id)
                     if (latest.isCompleted) {
-                        _state.update { st -> st.copy(live = null, runs = st.runs.map { r -> if (r.id == latest.id) latest else r }) }
-                        delay(AFTER_DONE_MS) // artifacts show up a moment after the run completes
-                        loadRuns(reset = true)
-                        tools.loadArtifactsAndApk()
+                        _state.update { st -> st.copy(live = null, settling = !tools.showsBuildOf(latest.id), runs = st.runs.map { r -> if (r.id == latest.id) latest else r }) }
+                        try {
+                            delay(AFTER_DONE_MS) // artifacts show up a moment after the run completes
+                            loadRuns(reset = true)
+                            tools.loadArtifactsAndApk()
+                            tools.awaitArtifactsLoad() // APK card re-appears together with the fresh artifacts, no gap
+                        } finally {
+                            _state.update { it.copy(settling = false) }
+                        }
                     } else {
                         val progress = RunProgress.of(repo.jobs(active.id))
                         _state.update { st ->

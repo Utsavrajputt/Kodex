@@ -432,6 +432,13 @@ class GitHubToolsController(
 
     // ---- artifacts + APK card (plan 8.3 / 8.5) -------------------------------------------------
 
+    /** True when the APK card already shows an artifact built by run [runId]. */
+    fun showsBuildOf(runId: Long): Boolean =
+        (_state.value.apk as? ApkCardState.Found)?.candidate?.artifact?.runId == runId
+
+    /** Suspends until the running [loadArtifactsAndApk] (artifacts + APK resolution) has finished. */
+    suspend fun awaitArtifactsLoad() { artifactsJob?.join() }
+
     fun loadArtifactsAndApk() {
         val repo = repoProvider() ?: return
         artifactsPage = 1
@@ -477,11 +484,8 @@ class GitHubToolsController(
         try {
             val page = repo.artifacts(1)
             val now = clock()
-            val defaultBranch = repoRefProvider()?.defaultBranch
-            val arm = page.items.filter {
-                it.runId == runId && ApkResolver.isArm64(it.name) && !it.isExpiredAt(now) &&
-                    (defaultBranch == null || it.branch == defaultBranch)
-            }
+            // The run the user is watching: no branch filter, show its ARM64 build the moment it is uploaded.
+            val arm = page.items.filter { it.runId == runId && ApkResolver.isArm64(it.name) && !it.isExpiredAt(now) }
             if (arm.isEmpty()) return
             val shown = (_state.value.apk as? ApkCardState.Found)?.variants?.map { it.id }?.toSet()
             if (shown != null && arm.all { it.id in shown }) return

@@ -242,11 +242,18 @@ private fun ReadyContent(
             }
             state.live?.let { live ->
                 item(key = "building") {
-                    BuildingCard(live, onOpen = { onOpenRunLog(live.run.id) }, onCancel = { pendingCancel = live.run })
+                    Box(Modifier.animateItem()) {
+                        BuildingCard(live, onOpen = { onOpenRunLog(live.run.id) }, onCancel = { pendingCancel = live.run })
+                    }
                 }
             }
-            if (apkCardVisible(toolsState)) {
-                item(key = "apk") { ApkCard(toolsState, tools, onRunShortcut, vm.projectPath, state.repo?.owner) }
+            // While a build runs the card stays hidden (no stale APK) until this run's ARM64 is uploaded, then it appears at once.
+            val liveRunId = state.live?.run?.id
+            val apkOfLiveRun = liveRunId != null && (toolsState.apk as? ApkCardState.Found)?.candidate?.artifact?.runId == liveRunId
+            if ((liveRunId == null || apkOfLiveRun) && !state.settling && apkCardVisible(toolsState)) {
+                item(key = "apk") {
+                    Box(Modifier.animateItem()) { ApkCard(toolsState, tools, onRunShortcut, vm.projectPath, state.repo?.owner) }
+                }
             }
             item(key = "runs_header") {
                 Row(

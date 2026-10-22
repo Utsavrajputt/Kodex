@@ -58,6 +58,8 @@ data class GitHubManagerState(
     val busyRunIds: Set<Long> = emptySet(),
     /** The run that is queued / building right now (drives the "Building APK…" card). */
     val live: LiveBuild? = null,
+    /** A run just finished and its artifacts / APK are still being re-checked: the APK card stays hidden so it never shows a stale build. */
+    val settling: Boolean = false,
 ) {
     fun workflowName(run: GhRun): String =
         workflows.firstOrNull { it.id == run.workflowId }?.name ?: run.name
