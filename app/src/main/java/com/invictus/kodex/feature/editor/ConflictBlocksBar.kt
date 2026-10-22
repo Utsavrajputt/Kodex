@@ -3,14 +3,16 @@ package com.invictus.kodex.feature.editor
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -20,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -83,8 +86,8 @@ internal fun ConflictBlocksBar(
     if (sheetBlock in blocks.indices) {
         ConflictBlockSheet(
             block = blocks[sheetBlock],
-            onChoice = { choice ->
-                applyConflictChoice(handle.editor, blocks[sheetBlock], choice)
+            onApply = { replacement ->
+                applyConflictReplacement(handle.editor, blocks[sheetBlock], replacement)
                 onEdited()
                 sheetBlock = -1
             },
@@ -102,6 +105,16 @@ internal fun applyConflictChoice(
     editor: CodeEditor?,
     block: ConflictParser.Block,
     choice: ConflictParser.Choice,
+) = applyConflictReplacement(editor, block, block.replacement(choice))
+
+/**
+ * Replaces the marker region with [repl] (a side, both, or the user's own edit), then scrolls to the
+ * written code and flashes it so the person sees exactly what landed. Fires ContentChangeEvent -> dirty.
+ */
+internal fun applyConflictReplacement(
+    editor: CodeEditor?,
+    block: ConflictParser.Block,
+    repl: String,
 ) {
     editor ?: return
     runCatching {
@@ -112,18 +125,28 @@ internal fun applyConflictChoice(
             content.getColumnCount(block.endLine),
         )
         content.delete(start, end)
-        val repl = block.replacement(choice)
         if (repl.isNotEmpty()) content.insert(block.startLine, 0, repl)
+        val firstLine = block.startLine.coerceIn(0, content.lineCount - 1)
+        editor.setSelection(firstLine, 0, true) // scroll there
+        if (repl.isNotEmpty()) {
+            val lastLine = (block.startLine + repl.count { it == '\n' }).coerceIn(firstLine, content.lineCount - 1)
+            val lastCol = content.getColumnCount(lastLine)
+            // After layout, so the scroll above has settled before the highlight starts.
+            editor.post { editor.post { flashRegion(editor, firstLine, 0, lastLine, lastCol) } }
+        }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ConflictBlockSheet(
     block: ConflictParser.Block,
-    onChoice: (ConflictParser.Choice) -> Unit,
+    onApply: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    var editing by rememberSaveable { mutableStateOf(false) }
+    var result by rememberSaveable { mutableStateOf(block.replacement(ConflictParser.Choice.BOTH)) }
+    val onChoice = { choice: ConflictParser.Choice -> onApply(block.replacement(choice)) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier
@@ -160,22 +183,51 @@ private fun ConflictBlockSheet(
                 maxLines = 8,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(onClick = { onChoice(ConflictParser.Choice.OURS) }) {
-                    Text(stringResource(R.string.conflict_accept_ours))
+            if (editing) {
+                Text(
+                    stringResource(R.string.conflict_result_label),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                OutlinedTextField(
+                    value = result,
+                    onValueChange = { result = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    minLines = 3,
+                    maxLines = 12,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AssistChip(onClick = { result = block.replacement(ConflictParser.Choice.OURS) }, label = { Text(stringResource(R.string.git_conflict_ours)) })
+                    AssistChip(onClick = { result = block.replacement(ConflictParser.Choice.THEIRS) }, label = { Text(stringResource(R.string.git_conflict_theirs)) })
+                    AssistChip(onClick = { result = block.replacement(ConflictParser.Choice.BOTH) }, label = { Text(stringResource(R.string.conflict_accept_both)) })
                 }
-                Button(onClick = { onChoice(ConflictParser.Choice.THEIRS) }) {
-                    Text(stringResource(R.string.conflict_accept_theirs))
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(onClick = { onApply(result) }) { Text(stringResource(R.string.conflict_apply)) }
+                    TextButton(onClick = { editing = false }) { Text(stringResource(R.string.conflict_back)) }
                 }
-                TextButton(onClick = { onChoice(ConflictParser.Choice.BOTH) }) {
-                    Text(stringResource(R.string.conflict_accept_both))
-                }
-                Spacer(Modifier.width(4.dp))
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.action_cancel))
+            } else {
+                FlowRow(
+                    Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Button(onClick = { onChoice(ConflictParser.Choice.OURS) }) {
+                        Text(stringResource(R.string.conflict_accept_ours))
+                    }
+                    Button(onClick = { onChoice(ConflictParser.Choice.THEIRS) }) {
+                        Text(stringResource(R.string.conflict_accept_theirs))
+                    }
+                    TextButton(onClick = { onChoice(ConflictParser.Choice.BOTH) }) {
+                        Text(stringResource(R.string.conflict_accept_both))
+                    }
+                    TextButton(onClick = { editing = true }) {
+                        Text(stringResource(R.string.conflict_edit))
+                    }
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
                 }
             }
         }

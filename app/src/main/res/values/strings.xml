@@ -602,6 +602,10 @@
 <string name="conflict_accept_ours">Accept ours</string>
 <string name="conflict_accept_theirs">Accept theirs</string>
 <string name="conflict_accept_both">Accept both</string>
+<string name="conflict_edit">Edit…</string>
+<string name="conflict_result_label">Result (editable)</string>
+<string name="conflict_apply">Apply</string>
+<string name="conflict_back">Back</string>
     <string name="settings_section_git_logs">Git logs</string>
     <string name="settings_category_git_logs_desc">Every git operation with timings; copy or share</string>
     <string name="git_logs_title">Git logs</string>

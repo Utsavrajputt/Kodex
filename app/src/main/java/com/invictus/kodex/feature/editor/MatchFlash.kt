@@ -24,17 +24,32 @@ internal fun isFlashing(editor: CodeEditor): Boolean = running.containsKey(edito
  */
 internal fun flashMatch(editor: CodeEditor, line: Int, column: Int, length: Int) {
     runCatching {
-        running.remove(editor)?.cancel()
         val content = editor.text
         if (line !in 0 until content.lineCount) return
         val lineLen = content.getColumnCount(line)
         val start = column.coerceIn(0, lineLen)
         val end = (start + length).coerceIn(start, lineLen)
         if (end <= start) return
+        flashRegion(editor, line, start, line, end)
+    }
+}
+
+/**
+ * Same highlight for a (possibly multi-line) region, e.g. the code a merge-conflict choice just wrote:
+ * scrolls it into view, selects it in the accent colour, then fades out. Lines are 0-based.
+ */
+internal fun flashRegion(editor: CodeEditor, startLine: Int, startCol: Int, endLine: Int, endCol: Int) {
+    runCatching {
+        running.remove(editor)?.cancel()
+        val line = startLine
+        val start = startCol
+        val end = endCol
+        val content = editor.text
+        if (startLine !in 0 until content.lineCount || endLine !in startLine until content.lineCount) return
 
         // Programmatic selection must not pop the cut/copy toolbar over the match.
         suppressSelectionPopup(editor)
-        editor.setSelectionRegion(line, start, line, end)
+        editor.setSelectionRegion(startLine, startCol, endLine, endCol)
         suppressSelectionPopup(editor)
 
         val scheme = editor.colorScheme
@@ -61,8 +76,8 @@ internal fun flashMatch(editor: CodeEditor, line: Int, column: Int, length: Int)
                     scheme.setColor(EditorColorScheme.SELECTED_TEXT_BACKGROUND, original)
                     // Only clear the selection if it is still our match (user hasn't selected something else).
                     val cursor = editor.cursor
-                    if (cursor.isSelected && cursor.leftLine == line && cursor.leftColumn == start &&
-                        cursor.rightLine == line && cursor.rightColumn == end
+                    if (cursor.isSelected && cursor.leftLine == startLine && cursor.leftColumn == startCol &&
+                        cursor.rightLine == endLine && cursor.rightColumn == endCol
                     ) {
                         editor.setSelection(line, start)
                     }

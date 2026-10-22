@@ -41,6 +41,9 @@ object RunCompletionWatch {
         jobs.values.forEach { it.cancel() }
     }
 
+    /** When the run started (queued time while it still waits): drives the notification's elapsed-time chronometer. */
+    private fun startedMs(run: GhRun): Long? = (run.startedAt ?: run.createdAt)?.toEpochMilli()
+
     /** Idempotent: calling it again for a run that is already watched (or finished) does nothing. */
     fun watch(context: Context, repoRef: GhRepoRef, run: GhRun, projectPath: String? = null) {
         if (!run.isActive || !watching.add(run.id)) return
@@ -49,7 +52,7 @@ object RunCompletionWatch {
         val job = GhBackground.scope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
             val notifier = GhNotifier(app)
             // Post the real text first, so the foreground service that starts next shows it instead of a generic one.
-            notifier.updateLive(title, app.getString(R.string.gh_notif_run_waiting, repoRef.name), null, projectPath, run.id, stoppable = true)
+            notifier.updateLive(title, app.getString(R.string.gh_notif_run_waiting, repoRef.name), null, projectPath, run.id, stoppable = true, startedAtMs = startedMs(run))
             GhBackground.begin(app)
             try {
                 val repo = (app as KodexApp).container.gitHubRepository(repoRef)
@@ -78,7 +81,7 @@ object RunCompletionWatch {
                                 ?: progress.steps.firstOrNull { it.state == StepState.Pending }?.name
                             notifier.updateLive(
                                 title, listOfNotNull(repoRef.name, step).joinToString(" \u2022 "),
-                                progress.percent, projectPath, run.id, stoppable = true,
+                                progress.percent, projectPath, run.id, stoppable = true, startedAtMs = startedMs(latest),
                             )
                         }
                         continue

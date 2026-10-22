@@ -74,6 +74,8 @@ class GhNotifier(context: Context) {
         val runId: Long = 0L,
         /** Adds a Stop button (ends the background build watch). */
         val stoppable: Boolean = false,
+        /** Epoch ms the process started; when set the notification shows a live elapsed-time chronometer. */
+        val startedAtMs: Long? = null,
     )
 
     /**
@@ -92,6 +94,7 @@ class GhNotifier(context: Context) {
             .setSilent(true)
             .setContentIntent(openApp(spec.projectPath, spec.runId))
             .setProgress(100, spec.progress ?: 0, spec.progress == null)
+        spec.startedAtMs?.let { b.setWhen(it.coerceAtMost(System.currentTimeMillis())).setShowWhen(true).setUsesChronometer(true) }
         if (spec.stoppable) b.addAction(0, ctx.getString(R.string.gh_notif_stop_watching), stopWatchingIntent())
         return b.build()
     }
@@ -105,8 +108,9 @@ class GhNotifier(context: Context) {
         projectPath: String? = null,
         runId: Long = 0L,
         stoppable: Boolean = false,
+        startedAtMs: Long? = null,
     ) {
-        val spec = LiveSpec(title, text, progress, projectPath, runId, stoppable)
+        val spec = LiveSpec(title, text, progress, projectPath, runId, stoppable, startedAtMs)
         lastLive = spec
         post(LIVE_ID, live(spec))
     }

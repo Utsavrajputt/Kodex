@@ -136,6 +136,10 @@
 <string name="conflict_accept_ours">Accept ours</string>
 <string name="conflict_accept_theirs">Accept theirs</string>
 <string name="conflict_accept_both">Accept both</string>
+<string name="conflict_edit">Edit…</string>
+<string name="conflict_result_label">Result (editable)</string>
+<string name="conflict_apply">Apply</string>
+<string name="conflict_back">Back</string>
 
 <!-- M11: rebase -->
 <string name="git_branch_more">More</string>
