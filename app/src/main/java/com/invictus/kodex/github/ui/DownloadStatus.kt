@@ -48,39 +48,50 @@ import androidx.compose.ui.unit.dp
 import com.invictus.kodex.R
 import com.invictus.kodex.ui.icons.XIcons
 
+/** Progress UI refresh cadence besides the 1% steps, so speed/ETA keep moving on slow downloads. */
+internal const val UI_TICK_MS = 500L
+
 /**
- * ETA from the average speed of the current run (it starts over after a resume). Sampling begins with the
- * first progress report, so a partial file that is re-downloaded from zero cannot skew the estimate.
+ * Speed and ETA of the current run (it starts over after a resume). Sampling begins with the first progress
+ * report, so a partial file that is re-downloaded from zero cannot skew the numbers.
+ *
+ * Feed it on EVERY progress report (cheap): the speed is the byte rate over the last [WINDOW_MS], so it follows
+ * the real rate whatever the UI update cadence is. The ETA stays the average since the run started.
  */
 class DownloadMeter {
     private var startBytes = -1L
     private var startMs = 0L
-    private var lastBytes = 0L
-    private var lastMs = 0L
-    private var smoothed = 0.0
+    private val samples = ArrayDeque<LongArray>() // [timeMs, bytes], oldest first
 
-    /** Smoothed current speed in bytes/s (null until two samples are in). Updated by [etaSeconds]. */
+    /** Byte rate over the last few seconds in bytes/s (null until there is enough to measure). Updated by [etaSeconds]. */
     var speedBytesPerSec: Long? = null
         private set
 
     fun etaSeconds(bytes: Long, total: Long, nowMs: Long = System.currentTimeMillis()): Long? {
         if (startBytes < 0) {
-            startBytes = bytes; startMs = nowMs; lastBytes = bytes; lastMs = nowMs
+            startBytes = bytes; startMs = nowMs
+            samples.addLast(longArrayOf(nowMs, bytes))
             return null
         }
-        val dt = nowMs - lastMs
-        if (dt > 0 && bytes > lastBytes) {
-            val instant = (bytes - lastBytes) * 1000.0 / dt
-            smoothed = if (smoothed <= 0.0) instant else 0.3 * instant + 0.7 * smoothed
-            lastBytes = bytes; lastMs = nowMs
+        samples.addLast(longArrayOf(nowMs, bytes))
+        while (samples.size > 2 && nowMs - samples.first()[0] > WINDOW_MS) samples.removeFirst()
+        val oldest = samples.first()
+        val dt = nowMs - oldest[0]
+        if (dt >= MIN_SPAN_MS) {
+            val rate = (bytes - oldest[1]) * 1000L / dt
+            speedBytesPerSec = rate.takeIf { it > 0L }
         }
-        speedBytesPerSec = smoothed.takeIf { it > 0.0 }?.toLong()
         if (total <= 0 || bytes >= total) return null
         val elapsed = nowMs - startMs
         val got = bytes - startBytes
         if (elapsed < 1500 || got <= 0) return null
         val bytesPerMs = got.toDouble() / elapsed
         return ((total - bytes) / bytesPerMs / 1000.0).toLong().coerceAtLeast(1L)
+    }
+
+    private companion object {
+        const val WINDOW_MS = 3_000L
+        const val MIN_SPAN_MS = 400L
     }
 }
 

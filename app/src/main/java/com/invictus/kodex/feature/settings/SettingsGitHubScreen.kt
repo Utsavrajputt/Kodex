@@ -16,9 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -307,13 +304,14 @@ fun SettingsGitHubScreen(
     ) { padding ->
         val firstProfile = ui.tokens.firstNotNullOfOrNull { ui.profiles[it.host] }
         val identityDirty = ui.identityName.trim() != ui.savedName || ui.identityEmail.trim() != ui.savedEmail
+        val divider = Modifier.padding(vertical = 4.dp)
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             GitHubHero(
                 profile = firstProfile,
@@ -322,105 +320,100 @@ fun SettingsGitHubScreen(
                 onAddToken = viewModel::openAddToken,
             )
 
-            SettingsSectionCard(
-                icon = XIcons.Person,
-                title = stringResource(R.string.settings_github_identity_title),
-                desc = stringResource(R.string.settings_github_identity_desc),
+            // One card for all settings: sections share a surface and are separated by dividers.
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                OutlinedTextField(
-                    value = ui.identityName,
-                    onValueChange = viewModel::onIdentityName,
-                    label = { Text(stringResource(R.string.git_identity_name)) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = ui.identityEmail,
-                    onValueChange = viewModel::onIdentityEmail,
-                    label = { Text(stringResource(R.string.git_identity_email)) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if ((ui.identityName.isBlank() || ui.identityEmail.isBlank()) && ui.profiles.isNotEmpty()) {
-                        TextButton(onClick = viewModel::autofillFromGitHub) {
-                            Text(stringResource(R.string.settings_github_autofill))
-                        }
-                    }
-                    Spacer(Modifier.weight(1f))
-                    Button(
-                        onClick = viewModel::saveIdentity,
-                        enabled = !ui.savingIdentity && identityDirty &&
-                            ui.identityName.isNotBlank() && ui.identityEmail.isNotBlank(),
-                    ) {
-                        Icon(XIcons.Save, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.action_save))
-                    }
-                }
-            }
-
-            SettingsSectionCard(
-                icon = XIcons.Folder,
-                title = stringResource(R.string.settings_github_default_parent_title),
-                desc = stringResource(R.string.settings_github_default_parent_desc),
-            ) {
-                val pickDefaultParent = rememberFolderPickerLauncher(
-                    onPicked = { path -> viewModel.setDefaultParent(path) },
-                )
-                OutlinedTextField(
-                    value = ui.defaultParent,
-                    onValueChange = viewModel::setDefaultParent,
-                    placeholder = { Text(stringResource(R.string.settings_github_default_parent_placeholder)) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    trailingIcon = {
-                        IconButton(onClick = pickDefaultParent) {
-                            Icon(XIcons.Folder, contentDescription = stringResource(R.string.clone_browse_folder))
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            SettingsSectionCard(
-                icon = XIcons.Key,
-                title = stringResource(R.string.settings_github_tokens_title),
-                desc = stringResource(R.string.settings_github_tokens_desc),
-                action = {
-                    FilledTonalButton(onClick = viewModel::openAddToken, contentPadding = PaddingValues(horizontal = 14.dp)) {
-                        Icon(XIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.git_cred_add))
-                    }
-                },
-            ) {
-                if (ui.tokens.isEmpty()) {
-                    Text(
-                        stringResource(R.string.git_credentials_empty),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SectionHeader(XIcons.Person, stringResource(R.string.settings_github_identity_title), stringResource(R.string.settings_github_identity_desc))
+                    OutlinedTextField(
+                        value = ui.identityName,
+                        onValueChange = viewModel::onIdentityName,
+                        label = { Text(stringResource(R.string.git_identity_name)) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                } else {
-                    ui.tokens.forEachIndexed { index, entry ->
-                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        TokenRow(
-                            entry = entry,
-                            profile = ui.profiles[entry.host],
-                            imageLoader = avatarLoader,
-                            onEdit = { viewModel.openEditToken(entry) },
-                            onDelete = { viewModel.openDeleteToken(entry.host) },
+                    OutlinedTextField(
+                        value = ui.identityEmail,
+                        onValueChange = viewModel::onIdentityEmail,
+                        label = { Text(stringResource(R.string.git_identity_email)) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        if ((ui.identityName.isBlank() || ui.identityEmail.isBlank()) && ui.profiles.isNotEmpty()) {
+                            TextButton(onClick = viewModel::autofillFromGitHub) {
+                                Text(stringResource(R.string.settings_github_autofill))
+                            }
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Button(
+                            onClick = viewModel::saveIdentity,
+                            enabled = !ui.savingIdentity && identityDirty &&
+                                ui.identityName.isNotBlank() && ui.identityEmail.isNotBlank(),
+                        ) {
+                            Icon(XIcons.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.action_save))
+                        }
+                    }
+
+                    HorizontalDivider(divider, color = MaterialTheme.colorScheme.outlineVariant)
+
+                    SectionHeader(XIcons.Folder, stringResource(R.string.settings_github_default_parent_title), stringResource(R.string.settings_github_default_parent_desc))
+                    val pickDefaultParent = rememberFolderPickerLauncher(
+                        onPicked = { path -> viewModel.setDefaultParent(path) },
+                    )
+                    OutlinedTextField(
+                        value = ui.defaultParent,
+                        onValueChange = viewModel::setDefaultParent,
+                        placeholder = { Text(stringResource(R.string.settings_github_default_parent_placeholder)) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        trailingIcon = {
+                            IconButton(onClick = pickDefaultParent) {
+                                Icon(XIcons.Folder, contentDescription = stringResource(R.string.clone_browse_folder))
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    HorizontalDivider(divider, color = MaterialTheme.colorScheme.outlineVariant)
+
+                    SectionHeader(
+                        XIcons.Key,
+                        stringResource(R.string.settings_github_tokens_title),
+                        stringResource(R.string.settings_github_tokens_desc),
+                        action = {
+                            FilledTonalButton(onClick = viewModel::openAddToken, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                                Icon(XIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(stringResource(R.string.git_cred_add))
+                            }
+                        },
+                    )
+                    if (ui.tokens.isEmpty()) {
+                        Text(
+                            stringResource(R.string.git_credentials_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    } else {
+                        ui.tokens.forEach { entry ->
+                            TokenRow(
+                                entry = entry,
+                                profile = ui.profiles[entry.host],
+                                onEdit = { viewModel.openEditToken(entry) },
+                                onDelete = { viewModel.openDeleteToken(entry.host) },
+                            )
+                        }
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
         }
     }
 
@@ -447,7 +440,7 @@ fun SettingsGitHubScreen(
     ui.error?.let { GitErrorDialog(details = it, onDismiss = viewModel::dismissError) }
 }
 
-/** Account summary at the top: the connected GitHub profile, or a prompt to add a token. */
+/** Account summary at the top: avatar, name, handle, email, connected state and all profile stats. */
 @Composable
 private fun GitHubHero(
     profile: GitHubProfile?,
@@ -457,179 +450,149 @@ private fun GitHubHero(
 ) {
     val cs = MaterialTheme.colorScheme
     Surface(shape = RoundedCornerShape(28.dp), color = cs.primaryContainer, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            if (profile != null) {
-                val placeholder = ColorPainter(cs.surfaceVariant)
-                AsyncImage(
-                    model = profile.avatarUrl,
-                    imageLoader = imageLoader,
-                    contentDescription = stringResource(R.string.settings_github_avatar_desc, profile.login),
-                    placeholder = placeholder,
-                    error = placeholder,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(72.dp).clip(CircleShape),
-                )
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        profile.name?.takeIf { it.isNotBlank() } ?: profile.login,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = cs.onPrimaryContainer,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                if (profile != null) {
+                    val placeholder = ColorPainter(cs.surfaceVariant)
+                    AsyncImage(
+                        model = profile.avatarUrl,
+                        imageLoader = imageLoader,
+                        contentDescription = stringResource(R.string.settings_github_avatar_desc, profile.login),
+                        placeholder = placeholder,
+                        error = placeholder,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(64.dp).clip(CircleShape),
                     )
-                    Text(
-                        "@${profile.login}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = cs.onPrimaryContainer.copy(alpha = 0.75f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    StatChip(stringResource(R.string.settings_github_connected), highlight = true)
-                }
-            } else {
-                Box(
-                    modifier = Modifier.size(72.dp).clip(CircleShape).background(cs.onPrimaryContainer.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(XIcons.Code, contentDescription = null, tint = cs.onPrimaryContainer, modifier = Modifier.size(32.dp))
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        stringResource(R.string.settings_github_hero_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = cs.onPrimaryContainer,
-                    )
-                    Text(
-                        stringResource(if (hasToken) R.string.settings_github_hero_token_only else R.string.settings_github_hero_empty),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = cs.onPrimaryContainer.copy(alpha = 0.75f),
-                    )
-                    if (!hasToken) {
-                        TextButton(onClick = onAddToken, contentPadding = PaddingValues(0.dp)) {
-                            Text(stringResource(R.string.git_cred_add))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            profile.name?.takeIf { it.isNotBlank() } ?: profile.login,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = cs.onPrimaryContainer,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            "@${profile.login}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = cs.onPrimaryContainer.copy(alpha = 0.75f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        profile.email?.takeIf { it.isNotBlank() }?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = cs.onPrimaryContainer.copy(alpha = 0.75f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
+                    HeroChip(stringResource(R.string.settings_github_connected))
+                } else {
+                    Box(
+                        modifier = Modifier.size(64.dp).clip(CircleShape).background(cs.onPrimaryContainer.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(XIcons.Code, contentDescription = null, tint = cs.onPrimaryContainer, modifier = Modifier.size(28.dp))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.settings_github_hero_title), style = MaterialTheme.typography.titleLarge, color = cs.onPrimaryContainer)
+                        Text(
+                            stringResource(if (hasToken) R.string.settings_github_hero_token_only else R.string.settings_github_hero_empty),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cs.onPrimaryContainer.copy(alpha = 0.75f),
+                        )
+                    }
+                }
+            }
+            if (profile != null) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(cs.onPrimaryContainer.copy(alpha = 0.10f)).padding(vertical = 10.dp),
+                ) {
+                    HeroStat(profile.publicRepos, stringResource(R.string.settings_github_stat_repos), Modifier.weight(1f))
+                    HeroStat(profile.followers, stringResource(R.string.settings_github_stat_followers), Modifier.weight(1f))
+                    HeroStat(profile.following, stringResource(R.string.settings_github_stat_following), Modifier.weight(1f))
+                }
+            } else if (!hasToken) {
+                FilledTonalButton(onClick = onAddToken, modifier = Modifier.fillMaxWidth()) {
+                    Icon(XIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.git_cred_add))
                 }
             }
         }
     }
 }
 
-/** Titled rounded card: icon badge + title/description (+ optional trailing [action]), then [content]. */
 @Composable
-private fun SettingsSectionCard(
+private fun HeroStat(value: Int, label: String, modifier: Modifier = Modifier) {
+    val color = MaterialTheme.colorScheme.onPrimaryContainer
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value.toString(), style = MaterialTheme.typography.titleMedium, color = color)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = color.copy(alpha = 0.75f), maxLines = 1)
+    }
+}
+
+@Composable
+private fun HeroChip(text: String) {
+    val color = MaterialTheme.colorScheme.onPrimaryContainer
+    Surface(shape = RoundedCornerShape(8.dp), color = color.copy(alpha = 0.14f)) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            maxLines = 1,
+        )
+    }
+}
+
+/** Compact section title: small icon, title, one-line description, optional trailing [action]. */
+@Composable
+private fun SectionHeader(
     icon: ImageVector,
     title: String,
     desc: String,
     action: (@Composable () -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    Surface(shape = RoundedCornerShape(24.dp), color = cs.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(
-                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(cs.secondaryContainer),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(icon, contentDescription = null, tint = cs.onSecondaryContainer)
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium)
-                    Text(desc, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-                }
-                action?.invoke()
-            }
-            content()
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Icon(icon, contentDescription = null, tint = cs.primary, modifier = Modifier.size(22.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(desc, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
         }
+        action?.invoke()
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** One stored token: host + username with Edit / Delete (profile details live in the hero). */
 @Composable
 private fun TokenRow(
     entry: CredentialEntry,
     profile: GitHubProfile?,
-    imageLoader: ImageLoader,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(cs.surfaceContainerHigh).padding(start = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (profile != null) {
-            val placeholder = ColorPainter(cs.surfaceVariant)
-            AsyncImage(
-                model = profile.avatarUrlSmall,
-                imageLoader = imageLoader,
-                contentDescription = stringResource(R.string.settings_github_avatar_desc, profile.login),
-                placeholder = placeholder,
-                error = placeholder,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.size(44.dp).clip(CircleShape),
-            )
-        } else {
-            Box(
-                modifier = Modifier.size(44.dp).clip(CircleShape).background(cs.surfaceContainerHighest),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(XIcons.Key, contentDescription = null, tint = cs.onSurfaceVariant)
-            }
-        }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(entry.host, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                profile?.let { it.name?.takeIf { n -> n.isNotBlank() } ?: it.login } ?: entry.host,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                if (profile != null) "@${profile.login} · ${entry.host}" else entry.username,
+                profile?.let { "@${it.login}" } ?: entry.username,
                 style = MaterialTheme.typography.bodySmall,
                 color = cs.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (profile != null) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    StatChip(stringResource(R.string.settings_github_stat_repos, profile.publicRepos))
-                    StatChip(stringResource(R.string.settings_github_stat_followers, profile.followers))
-                    StatChip(stringResource(R.string.settings_github_stat_following, profile.following))
-                }
-            }
         }
-        Column {
-            IconButton(onClick = onEdit) {
-                Icon(XIcons.Edit, contentDescription = stringResource(R.string.git_cred_edit))
-            }
-            IconButton(onClick = onDelete) {
-                Icon(XIcons.Delete, contentDescription = stringResource(R.string.git_cred_delete), tint = cs.error)
-            }
+        IconButton(onClick = onEdit) { Icon(XIcons.Edit, contentDescription = stringResource(R.string.git_cred_edit)) }
+        IconButton(onClick = onDelete) {
+            Icon(XIcons.Delete, contentDescription = stringResource(R.string.git_cred_delete), tint = cs.error)
         }
-    }
-}
-
-@Composable
-private fun StatChip(text: String, highlight: Boolean = false) {
-    val cs = MaterialTheme.colorScheme
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = if (highlight) cs.onPrimaryContainer.copy(alpha = 0.14f) else cs.surfaceContainerHighest,
-    ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (highlight) cs.onPrimaryContainer else cs.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-            maxLines = 1,
-        )
     }
 }

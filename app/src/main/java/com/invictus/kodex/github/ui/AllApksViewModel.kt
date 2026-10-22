@@ -311,13 +311,16 @@ class AllApksViewModel(
                 val apk = cached ?: run {
                     val repo = repoFactory(row.repo)
                     var last = -1f
+                    var lastUiMs = 0L
                     notifier.updateLive(title, "", 0)
                     val zip = downloader.downloadZip(repo, row.artifact) { bytes ->
                         val size = row.artifact.sizeBytes
                         val p = if (size > 0) (bytes.toFloat() / size).coerceIn(0f, 1f) else null
-                        if (p == null || p - last >= 0.01f) {
+                        val now = System.currentTimeMillis()
+                        val eta = meter.etaSeconds(bytes, size, now) // every chunk: accurate speed
+                        if (p == null || p - last >= 0.01f || now - lastUiMs >= UI_TICK_MS) {
                             last = p ?: last
-                            val eta = meter.etaSeconds(bytes, size)
+                            lastUiMs = now
                             _state.update { st ->
                                 st.transfer?.takeIf { t -> !t.paused }
                                     ?.let { t -> st.copy(transfer = t.copy(downloaded = bytes, total = size, etaSeconds = eta, speedBps = meter.speedBytesPerSec)) }

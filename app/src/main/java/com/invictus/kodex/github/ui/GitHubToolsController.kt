@@ -634,11 +634,14 @@ class GitHubToolsController(
                 }
                 notifier.updateLive(title, str(R.string.gh_notif_download_progress, 0), 0)
                 var last = -1f
+                var lastUiMs = 0L
                 val file = downloader.downloadZip(repo, artifact) { bytes ->
                     val p = if (artifact.sizeBytes > 0) (bytes.toFloat() / artifact.sizeBytes).coerceIn(0f, 1f) else null
-                    if (p == null || p - last >= 0.01f) {
+                    val now = System.currentTimeMillis()
+                    val eta = meter.etaSeconds(bytes, artifact.sizeBytes, now) // every chunk: accurate speed
+                    if (p == null || p - last >= 0.01f || now - lastUiMs >= UI_TICK_MS) {
                         last = p ?: last
-                        val eta = meter.etaSeconds(bytes, artifact.sizeBytes)
+                        lastUiMs = now
                         _state.update { st ->
                             st.transfer?.takeIf { t -> !t.paused }
                                 ?.let { t -> st.copy(transfer = t.copy(progress = p, downloaded = bytes, total = artifact.sizeBytes, etaSeconds = eta, speedBps = meter.speedBytesPerSec)) }
