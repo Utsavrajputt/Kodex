@@ -15,6 +15,9 @@ sealed interface GitEvent {
     data class RequestDiscard(val path: String, val isUntracked: Boolean) : GitEvent
     data object ConfirmDiscard : GitEvent
     data object DismissDiscard : GitEvent
+    /** Pasted `git rm` / `rm` that deletes files: confirm (or cancel) before anything is removed. */
+    data object ConfirmRemove : GitEvent
+    data object DismissRemove : GitEvent
     data class CommitMessageChange(val text: String) : GitEvent
     /** Paste button: plain text is appended; a git add/commit/push snippet runs straight away. */
     data class PasteCommitText(val text: String) : GitEvent

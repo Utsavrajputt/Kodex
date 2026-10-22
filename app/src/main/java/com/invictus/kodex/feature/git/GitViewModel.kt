@@ -29,6 +29,7 @@ import com.invictus.kodex.core.git.model.GitPendingAction
 import com.invictus.kodex.core.git.model.GitRemoteInfo
 import com.invictus.kodex.core.git.model.GitRepoSnapshot
 import com.invictus.kodex.core.git.model.GitResetMode
+import com.invictus.kodex.core.git.model.GitRemovePlan
 import com.invictus.kodex.core.git.model.GitStageState
 import com.invictus.kodex.core.git.model.GitStatusPatch
 import com.invictus.kodex.core.git.model.GitTrackingInfo
@@ -138,6 +139,8 @@ class GitViewModel(
         val conflictPreview: ConflictPreviewState? = null,
         /** Long-press "Discard changes" confirmation, pending [GitEvent.ConfirmDiscard]. */
         val discardConfirm: DiscardConfirmState? = null,
+        /** Pasted `git rm` waiting for the "delete these files?" confirmation. */
+        val removeConfirm: RemoveConfirmState? = null,
         // Reset (soft/mixed/hard)
         val resetSheetOpen: Boolean = false,
         val resetCommits: List<GitCommitSummary> = emptyList(),
@@ -165,6 +168,9 @@ class GitViewModel(
     data class GitOpProgress(@StringRes val titleRes: Int, val done: Int = 0, val total: Int = 0)
 
     data class DiscardConfirmState(val path: String, val isUntracked: Boolean)
+
+    /** [paths] will be deleted from disk; [willCommit] when the pasted snippet also commits. */
+    data class RemoveConfirmState(val paths: List<String>, val willCommit: Boolean)
 
     sealed interface Effect {
         data class Message(val text: UiText) : Effect
@@ -257,6 +263,11 @@ class GitViewModel(
                 _uiState.update { it.copy(discardConfirm = DiscardConfirmState(event.path, event.isUntracked)) }
             GitEvent.ConfirmDiscard -> discard()
             GitEvent.DismissDiscard -> _uiState.update { it.copy(discardConfirm = null) }
+            GitEvent.ConfirmRemove -> confirmRemove()
+            GitEvent.DismissRemove -> {
+                pendingRemove = null
+                _uiState.update { it.copy(removeConfirm = null) }
+            }
             is GitEvent.CommitMessageChange -> onCommitMessageChange(event.text)
             is GitEvent.PasteCommitText -> onPasteCommitText(event.text)
             GitEvent.ToggleAmend -> toggleAmend()
@@ -693,31 +704,90 @@ class GitViewModel(
     private fun onCommitMessageChange(text: String) {
         val old = _uiState.value.commitMessage
         val script = if (text.length - old.length >= PASTE_MIN_CHARS) parseGitScript(text) else null
-        if (script != null) runGitScript(script) else _uiState.update { it.copy(commitMessage = text) }
+        if (script != null) handleScript(script) else _uiState.update { it.copy(commitMessage = text) }
     }
 
     private fun onPasteCommitText(text: String) {
         val script = parseGitScript(text)
-        if (script != null) runGitScript(script) else _uiState.update { it.copy(commitMessage = it.commitMessage + text) }
+        if (script != null) handleScript(script) else _uiState.update { it.copy(commitMessage = it.commitMessage + text) }
     }
 
-    /** Same order as the shell: add -> commit -> push, each step only if the previous one worked. */
-    private fun runGitScript(script: GitCommandScript) {
+    /** Script + resolved removal waiting on the confirm dialog; nothing has been touched yet. */
+    private var pendingRemove: Pair<GitCommandScript, GitRemovePlan>? = null
+
+    /**
+     * A snippet with `git rm` / `rm` is resolved to concrete files first (no side effects).
+     * Anything that deletes from disk waits for the person's confirmation; `--cached` only
+     * untracks, so it runs straight away like add/commit.
+     */
+    private fun handleScript(script: GitCommandScript) {
+        if (script.removals.isEmpty()) {
+            runGitScript(script, null)
+            return
+        }
         if (_uiState.value.committing) return
-        _uiState.update { it.copy(commitMessage = script.message, amend = false, committing = true) }
         viewModelScope.launch(io) {
-            var ok = true
-            if (script.stageAll) {
-                when (val r = withOpProgress(R.string.git_progress_staging) { session.stageAll() }) {
-                    is GitResult.Ok -> applyLocalStageAll()
-                    is GitResult.Err -> {
-                        _uiState.update { it.copy(error = r.error) }
-                        ok = false
+            when (val r = session.planRemove(script.removals)) {
+                is GitResult.Err -> _uiState.update { it.copy(error = r.error) }
+                is GitResult.Ok -> {
+                    val plan = r.value
+                    if (plan.needsConfirm) {
+                        pendingRemove = script to plan
+                        _uiState.update {
+                            it.copy(removeConfirm = RemoveConfirmState(plan.diskDeletes, script.message != null))
+                        }
+                    } else {
+                        runGitScript(script, plan)
                     }
                 }
             }
-            val committed = ok && doCommit(script.message, amend = false)
+        }
+    }
+
+    private fun confirmRemove() {
+        val pending = pendingRemove ?: return
+        pendingRemove = null
+        _uiState.update { it.copy(removeConfirm = null) }
+        runGitScript(pending.first, pending.second)
+    }
+
+    /** Same order as the shell: rm / add (as pasted) -> commit -> push, each step only if the previous one worked. */
+    private fun runGitScript(script: GitCommandScript, plan: GitRemovePlan?) {
+        if (_uiState.value.committing) return
+        _uiState.update {
+            it.copy(commitMessage = script.message ?: it.commitMessage, amend = false, committing = true)
+        }
+        viewModelScope.launch(io) {
+            suspend fun remove(): Boolean {
+                if (plan == null || plan.items.isEmpty()) return true
+                return when (val r = withOpProgress(R.string.git_progress_removing) { session.applyRemove(plan) }) {
+                    is GitResult.Ok -> {
+                        message(R.string.git_msg_removed, plan.items.size)
+                        true
+                    }
+                    is GitResult.Err -> {
+                        _uiState.update { it.copy(error = r.error) }
+                        false
+                    }
+                }
+            }
+            suspend fun stage(): Boolean {
+                if (!script.stageAll) return true
+                return when (val r = withOpProgress(R.string.git_progress_staging) { session.stageAll() }) {
+                    is GitResult.Ok -> {
+                        applyLocalStageAll()
+                        true
+                    }
+                    is GitResult.Err -> {
+                        _uiState.update { it.copy(error = r.error) }
+                        false
+                    }
+                }
+            }
+            val ok = if (script.addFirst) stage() && remove() else remove() && stage()
+            val committed = ok && script.message != null && doCommit(script.message, amend = false)
             _uiState.update { it.copy(committing = false) }
+            if (!committed) refresh()
             if (committed && script.push) push(force = false)
         }
     }

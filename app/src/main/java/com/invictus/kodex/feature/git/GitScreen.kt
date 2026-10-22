@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -71,6 +72,8 @@ import com.invictus.kodex.ui.icons.XIcons
 import com.invictus.kodex.ai.AiGate
 import com.invictus.kodex.ui.navigation.Routes
 import kotlinx.coroutines.launch
+
+private const val REMOVE_PREVIEW_MAX = 15
 
 /**
  * Source Control screen (M6): branch + tracking header, commit box with amend,
@@ -155,6 +158,42 @@ fun GitScreen(
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.onEvent(GitEvent.DismissDiscard) }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+    state.removeConfirm?.let { target ->
+        AlertDialog(
+            onDismissRequest = { viewModel.onEvent(GitEvent.DismissRemove) },
+            title = { Text(stringResource(R.string.git_remove_confirm_title)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.git_remove_confirm_message))
+                    Spacer(Modifier.height(8.dp))
+                    target.paths.take(REMOVE_PREVIEW_MAX).forEach { path ->
+                        Text(path, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (target.paths.size > REMOVE_PREVIEW_MAX) {
+                        Text(
+                            stringResource(R.string.git_remove_confirm_more, target.paths.size - REMOVE_PREVIEW_MAX),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.onEvent(GitEvent.ConfirmRemove) }) {
+                    Text(
+                        stringResource(
+                            if (target.willCommit) R.string.git_remove_confirm_delete_commit else R.string.git_remove_confirm_delete,
+                        ),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.onEvent(GitEvent.DismissRemove) }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },

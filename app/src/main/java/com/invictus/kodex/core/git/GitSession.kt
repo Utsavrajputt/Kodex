@@ -15,6 +15,9 @@ import com.invictus.kodex.core.git.model.GitLogSearchMode
 import com.invictus.kodex.core.git.model.GitPathChange
 import com.invictus.kodex.core.git.model.GitRemoteInfo
 import com.invictus.kodex.core.git.model.GitResetMode
+import com.invictus.kodex.core.git.model.GitRemoveItem
+import com.invictus.kodex.core.git.model.GitRemovePlan
+import com.invictus.kodex.core.git.model.GitRemoveRequest
 import com.invictus.kodex.core.git.model.GitRepoSnapshot
 import com.invictus.kodex.core.git.model.GitStageState
 import com.invictus.kodex.core.git.model.GitStashInfo
@@ -67,6 +70,10 @@ import org.eclipse.jgit.util.FS
 import java.io.File
 import java.io.FileInputStream
 import java.nio.charset.StandardCharsets
+import java.nio.file.FileVisitResult
+import java.nio.file.Files
+import java.nio.file.SimpleFileVisitor
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.concurrent.ConcurrentHashMap
 
 /** Thrown by [GitSession.commit] when no author identity is configured anywhere. */
@@ -413,6 +420,165 @@ class GitSession(
             }
         }
         Unit
+    }
+
+    // ---- remove (git rm / rm) -------------------------------------------------
+
+    /**
+     * Resolves pasted `git rm` / `rm` commands to the exact files they would touch, without
+     * changing anything. Globs, quoting and `-r` are handled here; anything outside the repo,
+     * inside `.git`, or a blanket pattern (`.`, `*`) is refused. Throws (-> [GitResult.Err])
+     * for an unmatched pattern, a directory without `-r`, or a modified file without `-f`.
+     */
+    suspend fun planRemove(requests: List<GitRemoveRequest>): GitResult<GitRemovePlan> = ioOp(TITLE_REMOVE) {
+        timedLock {
+            val tracked = trackedPaths()
+            val trackedSet = tracked.toHashSet()
+            val dirty = lastStatus?.changes.orEmpty()
+                .filter { it.staged != GitStageState.NONE || it.unstaged == GitWorkingState.MODIFIED || it.unstaged == GitWorkingState.CONFLICT }
+                .map { it.repoRelativePath }
+                .toHashSet()
+            var diskFiles: List<String>? = null
+            fun disk(): List<String> = diskFiles ?: walkDiskFiles(workTree).also { diskFiles = it }
+
+            val items = LinkedHashMap<String, GitRemoveItem>()
+            for (req in requests) for (raw in req.patterns) {
+                val p = safeRemovePattern(raw)
+                val matches: Collection<String> = if (p.any { it == '*' || it == '?' || it == '[' }) {
+                    val re = globToRegex(p)
+                    val pool = if (req.cached) tracked else (tracked.asSequence() + disk().asSequence()).distinct().toList()
+                    pool.filter { re.matches(it) }
+                } else {
+                    val under = tracked.filter { it == p || it.startsWith("$p/") }
+                    val file = File(workTree, p)
+                    val isDir = Files.isDirectory(file.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                    if ((isDir || under.any { it != p }) && !req.recursive) {
+                        throw IllegalArgumentException("Not removing '$raw' recursively without -r")
+                    }
+                    if (req.cached) under else (under.asSequence() + diskUnder(file, p).asSequence()).distinct().toList()
+                }
+                if (matches.isEmpty()) {
+                    if (req.ignoreMissing) continue
+                    throw IllegalArgumentException("pathspec '$raw' did not match any files")
+                }
+                for (m in matches) {
+                    val isTracked = m in trackedSet
+                    if (req.viaGit && !req.force && !req.cached && isTracked && m in dirty) {
+                        throw IllegalStateException("'$m' has local modifications or staged changes (use -f to force removal)")
+                    }
+                    ensureInsideWorkTree(File(workTree, m))
+                    val item = GitRemoveItem(
+                        path = m,
+                        deleteDisk = !req.cached,
+                        unstage = isTracked && (req.viaGit || req.cached),
+                    )
+                    items.merge(m, item) { a, b ->
+                        GitRemoveItem(m, a.deleteDisk || b.deleteDisk, a.unstage || b.unstage)
+                    }
+                }
+            }
+            GitRemovePlan(items.values.toList())
+        }
+    }
+
+    /** Carries out a [GitRemovePlan]: index entries first, then the files on disk. */
+    suspend fun applyRemove(plan: GitRemovePlan): GitResult<Unit> = ioOp(TITLE_REMOVE) {
+        timedLock {
+            val unstage = plan.items.filter { it.unstage }.map { it.path }
+            if (unstage.isNotEmpty()) {
+                val cmd = git.rm().setCached(true)
+                unstage.forEach { cmd.addFilepattern(it) }
+                cmd.call()
+            }
+            val root = workTree.canonicalFile
+            for (item in plan.items) {
+                if (!item.deleteDisk) continue
+                val f = File(workTree, item.path)
+                ensureInsideWorkTree(f)
+                Files.deleteIfExists(f.toPath())
+                var dir = f.parentFile
+                while (dir != null && dir.canonicalFile != root && dir.list()?.isEmpty() == true) {
+                    if (!dir.delete()) break
+                    dir = dir.parentFile
+                }
+            }
+        }
+        Unit
+    }
+
+    private fun trackedPaths(): List<String> {
+        val dc = repository.readDirCache()
+        val out = LinkedHashSet<String>()
+        for (i in 0 until dc.entryCount) out += dc.getEntry(i).pathString
+        return out.toList()
+    }
+
+    /** Files at/under [file] (never following symlinks, never entering `.git`), repo-relative. */
+    private fun diskUnder(file: File, rel: String): List<String> {
+        val path = file.toPath()
+        if (!Files.exists(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return emptyList()
+        if (!Files.isDirectory(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return listOf(rel)
+        return walkDiskFiles(file).map { "$rel/$it" }
+    }
+
+    private fun walkDiskFiles(root: File): List<String> {
+        val base = root.toPath()
+        val out = ArrayList<String>()
+        Files.walkFileTree(base, object : SimpleFileVisitor<java.nio.file.Path>() {
+            override fun preVisitDirectory(dir: java.nio.file.Path, attrs: BasicFileAttributes): FileVisitResult =
+                if (dir != base && dir.fileName.toString() == ".git") FileVisitResult.SKIP_SUBTREE else FileVisitResult.CONTINUE
+
+            override fun visitFile(file: java.nio.file.Path, attrs: BasicFileAttributes): FileVisitResult {
+                out += base.relativize(file).toString().normalized()
+                return FileVisitResult.CONTINUE
+            }
+        })
+        return out
+    }
+
+    /** Repo-relative form of a pasted path, or throws if it could reach outside the repo or `.git`. */
+    private fun safeRemovePattern(raw: String): String {
+        var p = raw.trim().normalized()
+        while (p.startsWith("./")) p = p.removePrefix("./")
+        p = p.trimEnd('/')
+        val segments = p.split('/')
+        val bad = p.isEmpty() || p.startsWith("/") || p.startsWith("~") ||
+            segments.any { it == ".." || it == "." || it.isEmpty() } ||
+            segments.first() == ".git" ||
+            p.all { it == '*' || it == '?' || it == '.' }
+        if (bad) throw IllegalArgumentException("Refusing to remove '$raw': path must name files inside the repository")
+        return p
+    }
+
+    private fun ensureInsideWorkTree(file: File) {
+        val root = workTree.canonicalFile
+        val parent = file.absoluteFile.parentFile?.canonicalFile
+        if (parent == null || (parent != root && !parent.path.startsWith(root.path + File.separator))) {
+            throw IllegalArgumentException("Refusing to remove '${file.path}': outside the repository")
+        }
+    }
+
+    private fun globToRegex(glob: String): Regex {
+        val sb = StringBuilder()
+        var i = 0
+        while (i < glob.length) {
+            val c = glob[i]
+            when (c) {
+                '*' -> sb.append(".*")
+                '?' -> sb.append('.')
+                '[' -> {
+                    val end = glob.indexOf(']', i + 2)
+                    if (end < 0) sb.append("\\[") else {
+                        val body = glob.substring(i + 1, end).let { if (it.startsWith("!")) "^" + it.drop(1) else it }
+                        sb.append('[').append(body.replace("\\", "\\\\")).append(']')
+                        i = end
+                    }
+                }
+                else -> sb.append(Regex.escape(c.toString()))
+            }
+            i++
+        }
+        return Regex(sb.toString())
     }
 
     // ---- reset ---------------------------------------------------------------
@@ -2062,6 +2228,7 @@ class GitSession(
 
         private const val TITLE_STATUS = "Git status"
         private const val TITLE_STAGE = "Git stage"
+        private const val TITLE_REMOVE = "Git remove"
         private const val TITLE_COMMIT = "Git commit"
         private const val TITLE_PUSH = "Git push"
         private const val TITLE_PULL = "Git pull"

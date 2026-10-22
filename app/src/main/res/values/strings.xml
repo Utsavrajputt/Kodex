@@ -667,6 +667,13 @@
     <string name="sheet_browse_settings">Browse settings</string>
     <string name="sheet_browse_add">Add</string>
     <string name="sheet_browse_add_hint">Add folder path (/storage/…)</string>
+    <string name="git_progress_removing">Removing files…</string>
+    <string name="git_msg_removed">Removed %1$d file(s)</string>
+    <string name="git_remove_confirm_title">Delete files?</string>
+    <string name="git_remove_confirm_message">These files will be permanently deleted from disk. This can\'t be undone.</string>
+    <string name="git_remove_confirm_more">…and %1$d more</string>
+    <string name="git_remove_confirm_delete">Delete</string>
+    <string name="git_remove_confirm_delete_commit">Delete &amp; commit</string>
     <string name="sheet_browse_invalid_path">Folder not found</string>
     <string name="git_progress_resolving">Resolving conflicts…</string>
     <string name="git_progress_committing">Committing…</string>
