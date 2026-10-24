@@ -102,6 +102,9 @@ data class GitCommitFile(
     val path: String,
     val oldPath: String?,
     val change: GitCommitFileChange,
+    /** Lines added / removed in this file (0 for binary files). */
+    val added: Int = 0,
+    val removed: Int = 0,
 )
 
 /** What went wrong, decided from the exception *type* (release builds rename classes, so names can't be matched). */

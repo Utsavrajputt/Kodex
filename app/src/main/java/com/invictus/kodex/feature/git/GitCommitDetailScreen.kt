@@ -83,7 +83,15 @@ fun GitCommitDetailScreen(
                         Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
-                actions = { aiExplain?.invoke() },   // M20
+                actions = {
+                    // Open file -> that file's +/-, otherwise the whole commit's. Hidden while loading.
+                    val added = selectedFile?.added ?: files.sumOf { it.added }
+                    val removed = selectedFile?.removed ?: files.sumOf { it.removed }
+                    if (selectedFile != null || (!filesLoading && files.isNotEmpty())) {
+                        LineStats(added, removed)
+                    }
+                    aiExplain?.invoke()   // M20
+                },
             )
         },
         bottomBar = {
@@ -153,6 +161,31 @@ fun GitCommitDetailScreen(
                 }
             }
         }
+    }
+}
+
+private val AddedGreen = Color(0xFF3FB950)
+
+/** "+120 −45" chip shown in the top bar, left of the AI button. */
+@Composable
+private fun LineStats(added: Int, removed: Int) {
+    Row(
+        Modifier.padding(end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            "+$added",
+            color = AddedGreen,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelLarge.copy(fontFamily = FontFamily.Monospace),
+        )
+        Text(
+            "−$removed",
+            color = MaterialTheme.colorScheme.error,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelLarge.copy(fontFamily = FontFamily.Monospace),
+        )
     }
 }
 

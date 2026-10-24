@@ -1224,12 +1224,10 @@ class GitSession(
     suspend fun commitFiles(commitId: String): GitResult<List<GitCommitFile>> = ioOp(TITLE_DIFF) {
         readOnly {
             withCommitTrees(commitId) { oldIt, newIt ->
-                git.diff()
-                    .setOldTree(oldIt)
-                    .setNewTree(newIt)
-                    .setShowNameAndStatusOnly(true)
-                    .call()
-                    .map { e ->
+                // Scan + per-entry edit list gives the +/- line counts in the same pass.
+                org.eclipse.jgit.diff.DiffFormatter(org.eclipse.jgit.util.io.DisabledOutputStream.INSTANCE).use { fmt ->
+                    fmt.setRepository(repository)
+                    fmt.scan(oldIt, newIt).map { e ->
                         val change = when (e.changeType) {
                             org.eclipse.jgit.diff.DiffEntry.ChangeType.ADD -> GitCommitFileChange.ADDED
                             org.eclipse.jgit.diff.DiffEntry.ChangeType.DELETE -> GitCommitFileChange.DELETED
@@ -1239,9 +1237,17 @@ class GitSession(
                         }
                         val path = if (change == GitCommitFileChange.DELETED) e.oldPath else e.newPath
                         val old = if (change == GitCommitFileChange.RENAMED || change == GitCommitFileChange.COPIED) e.oldPath else null
-                        GitCommitFile(path, old, change)
+                        // Binary / unreadable entries just count as 0/0.
+                        var added = 0
+                        var removed = 0
+                        runCatching { fmt.toFileHeader(e).toEditList() }.getOrNull()?.forEach { ed ->
+                            removed += ed.endA - ed.beginA
+                            added += ed.endB - ed.beginB
+                        }
+                        GitCommitFile(path, old, change, added, removed)
                     }
                     .sortedBy { it.path }
+                }
             }
         }
     }

@@ -19,6 +19,8 @@ import android.widget.PopupWindow
 import android.widget.TextView
 import com.invictus.kodex.R
 import io.github.rosemoe.sora.event.ScrollEvent
+import io.github.rosemoe.sora.event.ContentChangeEvent
+import io.github.rosemoe.sora.event.LongPressEvent
 import io.github.rosemoe.sora.event.SelectionChangeEvent
 import io.github.rosemoe.sora.widget.CodeEditor
 import io.github.rosemoe.sora.widget.component.EditorTextActionWindow
@@ -39,6 +41,14 @@ internal fun installSelectionPopup(editor: CodeEditor, explainProvider: () -> ((
     popups[editor] = popup
     editor.subscribeEvent(SelectionChangeEvent::class.java) { _, _ -> popup.onSelectionChanged() }
     editor.subscribeEvent(ScrollEvent::class.java) { _, _ -> popup.onScrolled() }
+    // Long-press with nothing to select (e.g. an empty file): Sora's own popup is off, so offer Paste ourselves.
+    editor.subscribeEvent(LongPressEvent::class.java) { _, _ -> popup.onLongPress() }
+    editor.subscribeEvent(ContentChangeEvent::class.java) { _, _ -> popup.dismiss() }
+    // Any new touch (tap, drag start) closes the popup; we never consume the event.
+    editor.setOnTouchListener { _, ev ->
+        if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) popup.dismiss()
+        false
+    }
     editor.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
         override fun onViewAttachedToWindow(v: View) = Unit
         override fun onViewDetachedFromWindow(v: View) = popup.dismiss()
@@ -61,13 +71,20 @@ private class SelectionPopup(
 ) {
     private val handler = Handler(Looper.getMainLooper())
     private val showRunnable = Runnable { showNow() }
+    private val caretRunnable = Runnable { showNow(caretOnly = true) }
     private var window: PopupWindow? = null
     private var suppressUntil = 0L
+
+    fun onLongPress() {
+        handler.removeCallbacks(caretRunnable)
+        handler.postDelayed(caretRunnable, SETTLE_DELAY_MS)
+    }
 
     fun onSelectionChanged() {
         handler.removeCallbacks(showRunnable)
         dismiss()
         if (!isSelected()) return
+        handler.removeCallbacks(caretRunnable) // a real selection gets the full popup instead
         handler.postDelayed(showRunnable, SETTLE_DELAY_MS)
     }
 
@@ -81,6 +98,7 @@ private class SelectionPopup(
     fun suppress() {
         suppressUntil = SystemClock.uptimeMillis() + SUPPRESS_MS
         handler.removeCallbacks(showRunnable)
+        handler.removeCallbacks(caretRunnable)
         dismiss()
     }
 
@@ -91,12 +109,14 @@ private class SelectionPopup(
 
     private fun isSelected(): Boolean = runCatching { editor.cursor.isSelected }.getOrDefault(false)
 
-    private fun showNow() {
+    private fun showNow(caretOnly: Boolean = false) {
         if (SystemClock.uptimeMillis() < suppressUntil) return
-        if (!editor.isAttachedToWindow || !isSelected()) return
+        if (!editor.isAttachedToWindow) return
+        if (caretOnly == isSelected()) return // caret popup only without a selection, full popup only with one
         dismiss()
 
-        val content = buildContent()
+        val content = buildContent(caretOnly)
+        if (content.childCount == 0) return // nothing useful to offer
         content.measure(
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
@@ -106,7 +126,7 @@ private class SelectionPopup(
         val density = editor.resources.displayMetrics.density
         val gap = (8 * density).toInt()
 
-        val (anchorX, top, bottom) = anchor()
+        val (anchorX, top, bottom) = if (caretOnly) caretAnchor() else anchor()
         val loc = IntArray(2)
         editor.getLocationInWindow(loc)
 
@@ -143,12 +163,22 @@ private class SelectionPopup(
         return Triple(editor.width / 2f, fallbackTop, fallbackTop)
     }
 
+    /** Caret popup position: Sora's insert handle if available, else the middle of the editor. */
+    private fun caretAnchor(): Triple<Float, Int, Int> {
+        val r = handleRect("getInsertHandleDescriptor")
+        if (r != null && (r.height() > 0f || r.top > 0f)) {
+            return Triple(r.centerX(), (r.top - editor.rowHeight * 2).toInt(), r.bottom.toInt())
+        }
+        val mid = (editor.height / 3)
+        return Triple(editor.width / 2f, mid, mid)
+    }
+
     private fun handleRect(getter: String): RectF? = runCatching {
         val descriptor = editor.javaClass.getMethod(getter).invoke(editor) ?: return@runCatching null
         descriptor.javaClass.getField("position").get(descriptor) as? RectF
     }.getOrNull()
 
-    private fun buildContent(): View {
+    private fun buildContent(caretOnly: Boolean = false): LinearLayout {
         val ctx = editor.context
         val density = ctx.resources.displayMetrics.density
         val scheme = editor.colorScheme
@@ -214,6 +244,11 @@ private class SelectionPopup(
 
         val editable = editor.isEditable
         val hasClip = (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.hasPrimaryClip() == true
+        if (caretOnly) {
+            if (editable && hasClip) add(R.string.qa_paste) { editor.pasteText() }
+            if (editor.text.length > 0) add(R.string.qa_select_all) { editor.selectAll() }
+            return row
+        }
         add(R.string.qa_select_all) { editor.selectAll() }
         if (editable) add(R.string.qa_cut) { editor.cutText() }
         add(R.string.qa_copy) { editor.copyText() }
