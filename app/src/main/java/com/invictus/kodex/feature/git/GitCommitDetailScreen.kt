@@ -38,6 +38,7 @@ import com.invictus.kodex.R
 import com.invictus.kodex.core.git.model.GitCommitFile
 import com.invictus.kodex.core.git.model.GitCommitFileChange
 import com.invictus.kodex.core.git.model.GitCommitSummary
+import com.invictus.kodex.core.git.model.GitDiffLineType
 import com.invictus.kodex.core.git.model.GitFileDiffResult
 import com.invictus.kodex.ui.icons.XIcons
 import java.text.SimpleDateFormat
@@ -60,6 +61,8 @@ fun GitCommitDetailScreen(
     selectedFile: GitCommitFile?,
     fileDiff: GitFileDiffResult?,
     diffLoading: Boolean,
+    totalAdded: Int? = null,
+    totalRemoved: Int? = null,
     picking: Boolean,
     onOpenFile: (GitCommitFile) -> Unit,
     onCloseFile: () -> Unit,
@@ -83,7 +86,20 @@ fun GitCommitDetailScreen(
                         Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back))
                     }
                 },
-                actions = { aiExplain?.invoke() },   // M20
+                actions = {
+                    // Open file -> that file's +/- (from its diff rows), otherwise the whole commit's.
+                    if (selectedFile != null) {
+                        fileDiff?.let { d ->
+                            LineStats(
+                                added = d.rows.count { it.rightType == GitDiffLineType.ADDED },
+                                removed = d.rows.count { it.leftType == GitDiffLineType.REMOVED },
+                            )
+                        }
+                    } else if (totalAdded != null && totalRemoved != null) {
+                        LineStats(totalAdded, totalRemoved)
+                    }
+                    aiExplain?.invoke()   // M20
+                },
             )
         },
         bottomBar = {
@@ -153,6 +169,31 @@ fun GitCommitDetailScreen(
                 }
             }
         }
+    }
+}
+
+private val AddedGreen = Color(0xFF3FB950)
+
+/** "+120 −45" chip shown in the top bar, left of the AI button. */
+@Composable
+private fun LineStats(added: Int, removed: Int) {
+    Row(
+        Modifier.padding(end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            "+$added",
+            color = AddedGreen,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelLarge.copy(fontFamily = FontFamily.Monospace),
+        )
+        Text(
+            "−$removed",
+            color = MaterialTheme.colorScheme.error,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelLarge.copy(fontFamily = FontFamily.Monospace),
+        )
     }
 }
 

@@ -1246,6 +1246,27 @@ class GitSession(
         }
     }
 
+    /** Total lines (added, removed) of [commitId] versus its first parent. Separate from [commitFiles] on purpose. */
+    suspend fun commitLineStats(commitId: String): GitResult<Pair<Int, Int>> = ioOp(TITLE_DIFF) {
+        readOnly {
+            withCommitTrees(commitId) { oldIt, newIt ->
+                org.eclipse.jgit.diff.DiffFormatter(org.eclipse.jgit.util.io.DisabledOutputStream.INSTANCE).use { fmt ->
+                    fmt.setRepository(repository)
+                    var added = 0
+                    var removed = 0
+                    fmt.scan(oldIt, newIt).forEach { e ->
+                        // Binary / unreadable entries count as 0.
+                        runCatching { fmt.toFileHeader(e).toEditList() }.getOrNull()?.forEach { ed ->
+                            removed += ed.endA - ed.beginA
+                            added += ed.endB - ed.beginB
+                        }
+                    }
+                    added to removed
+                }
+            }
+        }
+    }
+
     /** Parsed diff of a single [path] inside [commitId] (parent -> commit). */
     suspend fun commitFileDiff(commitId: String, path: String): GitResult<GitFileDiffResult> =
         ioOp(TITLE_DIFF) {

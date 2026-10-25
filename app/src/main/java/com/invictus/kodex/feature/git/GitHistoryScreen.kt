@@ -120,6 +120,9 @@ class GitHistoryViewModel(
         val selectedFile: GitCommitFile? = null,
         val fileDiff: GitFileDiffResult? = null,
         val diffLoading: Boolean = false,
+        /** Whole-commit +/- line totals; null until computed. */
+        val totalAdded: Int? = null,
+        val totalRemoved: Int? = null,
         // "Change author"
         val authorTarget: GitCommitSummary? = null,
         val rewriting: Boolean = false,
@@ -194,7 +197,16 @@ class GitHistoryViewModel(
             it.copy(
                 detail = c, files = emptyList(), filesLoading = true,
                 selectedFile = null, fileDiff = null, diffLoading = false,
+                totalAdded = null, totalRemoved = null,
             )
+        }
+        viewModelScope.launch(io + GitTrigger("commit-stats")) {
+            // Best effort: a failure just means no +/- chip.
+            (session.commitLineStats(c.id) as? GitResult.Ok)?.let { r ->
+                _ui.update {
+                    if (it.detail?.id == c.id) it.copy(totalAdded = r.value.first, totalRemoved = r.value.second) else it
+                }
+            }
         }
         viewModelScope.launch(io + GitTrigger("commit-files")) {
             when (val r = session.commitFiles(c.id)) {
@@ -207,7 +219,7 @@ class GitHistoryViewModel(
     }
 
     fun dismissDetail() = _ui.update {
-        it.copy(detail = null, files = emptyList(), selectedFile = null, fileDiff = null, diffLoading = false)
+        it.copy(detail = null, files = emptyList(), selectedFile = null, fileDiff = null, diffLoading = false, totalAdded = null, totalRemoved = null)
     }
 
     fun openFile(f: GitCommitFile) {
@@ -555,6 +567,8 @@ fun GitHistoryScreen(projectPath: String, filePath: String? = null, onBack: () -
             selectedFile = ui.selectedFile,
             fileDiff = ui.fileDiff,
             diffLoading = ui.diffLoading,
+            totalAdded = ui.totalAdded,
+            totalRemoved = ui.totalRemoved,
             picking = ui.picking,
             onOpenFile = vm::openFile,
             onCloseFile = vm::closeFile,

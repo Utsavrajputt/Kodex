@@ -660,9 +660,18 @@
     <string name="settings_github_hero_title">GitHub</string>
     <string name="settings_github_hero_empty">Add an access token to clone and sync private repositories.</string>
     <string name="settings_github_hero_token_only">Token saved. Profile details load when GitHub is reachable.</string>
-    <string name="settings_github_stat_repos">%1$d repos</string>
-    <string name="settings_github_stat_followers">%1$d followers</string>
-    <string name="settings_github_stat_following">%1$d following</string>
+    <string name="settings_github_stat_repos">repos</string>
+    <string name="settings_github_stat_followers">followers</string>
+    <string name="settings_github_stat_following">following</string>
+    <string name="settings_github_token_saved">Token saved \u00b7\u00b7\u00b7\u00b7%1$s</string>
+    <string name="settings_github_no_token_saved">No token saved for %1$s</string>
+    <string name="settings_github_replace_token">Replace token</string>
+    <string name="settings_github_paste_token">Paste access token</string>
+    <string name="settings_github_save_token">Save token</string>
+    <string name="settings_github_remove">Remove</string>
+    <string name="settings_github_show_token">Show token</string>
+    <string name="settings_github_hide_token">Hide token</string>
+    <string name="settings_github_add_host">Add another host</string>
 
     <string name="editor_paged_opened">Large file opened in %1$d pages</string>
     <string name="editor_page_indicator">Page %1$d / %2$d</string>
