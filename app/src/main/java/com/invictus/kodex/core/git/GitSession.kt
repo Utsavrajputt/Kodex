@@ -1701,8 +1701,16 @@ class GitSession(
     suspend fun mergeMessage(): GitResult<String?> = ioOp(TITLE_MERGE) {
         timedLock {
             val f = File(repository.directory, "MERGE_MSG")
-            if (f.isFile) f.readText().trim().ifBlank { null } else null
+            if (f.isFile) cleanMergeMessage(f.readText()) else null
         }
+    }
+
+    /** JGit appends a "Conflicts:" file list to MERGE_MSG; drop it (and `#` comment lines) so only the merge line stays. */
+    private fun cleanMergeMessage(raw: String): String? {
+        val lines = raw.replace("\r\n", "\n").lines()
+        val end = lines.indexOfFirst { it.trim().equals("Conflicts:", ignoreCase = true) }
+        val kept = (if (end >= 0) lines.subList(0, end) else lines).filterNot { it.trimStart().startsWith("#") }
+        return kept.joinToString("\n").trim().ifBlank { null }
     }
 
     /** Plan-solved abort: drop the merge state files, then hard-reset the tree. */

@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -229,9 +230,8 @@ internal fun BuildingCard(live: LiveBuild, onOpen: () -> Unit, onCancel: () -> U
                         style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
                         color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
-                    val started = (run.startedAt ?: run.createdAt)?.let {
-                        DateUtils.getRelativeTimeSpanString(it.toEpochMilli(), System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
-                    }
+                    val now = rememberNowMs()
+                    val started = runAgo(run, now)
                     Text(
                         listOfNotNull("#${run.runNumber}", started?.let { stringResource(R.string.gh_build_started, it) }).joinToString(" \u2022 "),
                         style = MaterialTheme.typography.bodySmall, color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -249,4 +249,25 @@ internal fun BuildingCard(live: LiveBuild, onOpen: () -> Unit, onCancel: () -> U
             ProgressBlock(live.progress, p, maxJobRows = 4)
         }
     }
+}
+
+
+/** One "how long ago" text for a run, shared by the building card, the runs list and the run details so they never disagree. */
+internal fun runAgo(run: com.invictus.kodex.github.api.GhRun, nowMs: Long): String? =
+    (run.createdAt ?: run.startedAt)?.let {
+        val t = it.toEpochMilli()
+        DateUtils.getRelativeTimeSpanString(t, maxOf(nowMs, t), DateUtils.MINUTE_IN_MILLIS).toString()
+    }
+
+/** Wall-clock that ticks every 15 s so relative texts ("6 minutes ago") keep moving while the screen stays open. */
+@Composable
+internal fun rememberNowMs(): Long {
+    var now by androidx.compose.runtime.remember { androidx.compose.runtime.mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(15_000)
+            now = System.currentTimeMillis()
+        }
+    }
+    return now
 }

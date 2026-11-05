@@ -86,6 +86,8 @@ class GitHubManagerViewModel(
         startLive()
         if (!resumed) { resumed = true; return }
         if (_state.value.gate != GitHubGate.Resolving) load()
+        // Coming back (e.g. from a notification): pull the newest runs right now instead of waiting for the next poll.
+        if (_state.value.gate == GitHubGate.Ready && repository != null) loadRuns(reset = true)
     }
 
     /** The screen left the foreground: stop polling GitHub (the completion watcher keeps running on its own). */
@@ -229,6 +231,7 @@ class GitHubManagerViewModel(
      * and, when nothing is running, look for a new run now and then so a build started elsewhere shows up.
      */
     private suspend fun liveLoop() {
+        var idleChecked = false
         while (true) {
             val repo = repository
             val s = _state.value
@@ -258,7 +261,9 @@ class GitHubManagerViewModel(
                     }
                 } else {
                     if (s.live != null) _state.update { it.copy(live = null) }
-                    delay(LIVE_IDLE_MS)
+                    // First pass after the screen opens checks straight away; later passes wait.
+                    if (idleChecked) delay(LIVE_IDLE_MS)
+                    idleChecked = true
                     val page = repo.runs(1, RunStatusFilter.All, null)
                     val newest = page.items.firstOrNull()?.id
                     if (page.items.any { it.isActive } || newest != _state.value.runs.firstOrNull()?.id) loadRuns(reset = true)

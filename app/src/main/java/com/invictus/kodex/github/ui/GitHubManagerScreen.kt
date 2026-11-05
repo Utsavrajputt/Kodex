@@ -589,7 +589,7 @@ internal fun RunRow(
                         Icon(XIcons.Branch, contentDescription = null, tint = pal.onCardMuted, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(5.dp))
                         Text(
-                            runSubtitle(run), style = MaterialTheme.typography.bodySmall,
+                            runSubtitle(run, rememberNowMs()), style = MaterialTheme.typography.bodySmall,
                             color = pal.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                     }
@@ -676,11 +676,9 @@ private fun StatusBadge(status: RunDisplayStatus, icon: ImageVector, tint: Color
     }
 }
 
-private fun runSubtitle(run: GhRun): String {
+private fun runSubtitle(run: GhRun, nowMs: Long): String {
     val parts = mutableListOf(run.branch)
-    (run.createdAt ?: run.startedAt)?.let {
-        parts += DateUtils.getRelativeTimeSpanString(it.toEpochMilli(), System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
-    }
+    runAgo(run, nowMs)?.let { parts += it }
     run.durationMs?.let { parts += formatDuration(it) }
     return parts.filter { it.isNotBlank() }.joinToString(" • ")
 }

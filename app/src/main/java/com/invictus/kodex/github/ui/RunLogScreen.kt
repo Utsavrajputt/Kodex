@@ -223,7 +223,7 @@ private fun RunHeader(run: GhRun, workflowName: String, p: GhPalette) {
                 Icon(XIcons.Branch, contentDescription = null, tint = p.onCardMuted, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(5.dp))
                 Text(
-                    runMeta(run), style = MaterialTheme.typography.bodySmall,
+                    runMeta(run, rememberNowMs()), style = MaterialTheme.typography.bodySmall,
                     color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
@@ -238,11 +238,9 @@ private fun RunHeader(run: GhRun, workflowName: String, p: GhPalette) {
     }
 }
 
-private fun runMeta(run: GhRun): String {
+private fun runMeta(run: GhRun, nowMs: Long): String {
     val parts = mutableListOf(run.branch, run.shortSha, run.event.replace('_', ' '))
-    (run.startedAt ?: run.createdAt)?.let {
-        parts += DateUtils.getRelativeTimeSpanString(it.toEpochMilli(), System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
-    }
+    runAgo(run, nowMs)?.let { parts += it }
     run.durationMs?.let { parts += formatDuration(it) }
     return parts.filter { it.isNotBlank() }.joinToString(" \u2022 ")
 }
