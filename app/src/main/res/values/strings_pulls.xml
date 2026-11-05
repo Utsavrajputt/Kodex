@@ -84,4 +84,22 @@
     <string name="ai_pr_use">Use title and description</string>
     <string name="ai_pr_fills_form_only">Fills the form only — creating the pull request stays your action.</string>
     <string name="pr_err_not_found_repo">Couldn\'t read %1$s (GitHub says: %2$s).\n\nThe token can\'t access this repo or its pull requests. Fine-grained tokens need this repo selected with \"Pull requests: Read\"; classic tokens need the \"repo\" scope (private) or \"public_repo\".</string>
+    <string name="pr_disabled_title">Pull requests are turned off</string>
+    <string name="pr_disabled_body">The owner of %1$s disabled pull requests for this repository, so there is nothing to show here. To use them, enable it on GitHub: Settings \u2192 General \u2192 Features \u2192 Pull requests.</string>
+    <string name="pr_base_disabled">Pull requests are turned off on %1$s, so you can\'t open one there.</string>
+    <string name="pr_compare_intro">Choose where your changes should go and which branch has them. Nothing is created yet.</string>
+    <string name="pr_merge_into">Merge into</string>
+    <string name="pr_changes_from">Changes from</string>
+    <string name="pr_label_repo">Repository</string>
+    <string name="pr_label_branch">Branch</string>
+    <string name="pr_compare">Compare</string>
+    <string name="pr_compare_pick_head">Choose the branch that has your changes.</string>
+    <string name="pr_compare_loading">Comparing branches\u2026</string>
+    <string name="pr_compare_empty">Nothing to compare: these branches have the same changes.</string>
+    <string name="pr_compare_same">Pick two different branches.</string>
+    <string name="pr_compare_summary">%1$d commits \u2022 %2$d files changed</string>
+    <string name="pr_details_title">Open a pull request</string>
+    <string name="pr_commits_header">Commits (%1$d)</string>
+    <string name="pr_files_header">Files changed (%1$d)</string>
+    <string name="pr_more_items">+ %1$d more</string>
 </resources>

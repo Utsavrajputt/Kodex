@@ -195,9 +195,12 @@ fun PullRequestsScreen(
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                item(key = "create") { CreatePullCard(onCreate, p) }
-                item(key = "filters") { PullFilters(state.filter, vm::setFilter, p) }
+                if (!state.disabled) {
+                    item(key = "create") { CreatePullCard(onCreate, p) }
+                    item(key = "filters") { PullFilters(state.filter, vm::setFilter, p) }
+                }
                 when {
+                    state.disabled -> item(key = "disabled") { PullsDisabledBlock(state.repoName, p) }
                     state.loading -> item(key = "loading") { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp), color = p.accent) }
                     state.error != null && state.items.isEmpty() -> item(key = "error") {
                         ErrorBlock(state.error?.resolve(context).orEmpty(), vm::retry, p)
@@ -221,6 +224,20 @@ fun PullRequestsScreen(
                 }
             }
         }
+    }
+}
+
+/** Shown instead of the list when the repo owner switched pull requests off on GitHub. */
+@Composable
+private fun PullsDisabledBlock(repoName: String, p: GhPalette) {
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        Modifier.fillMaxWidth().padding(top = 8.dp).clip(shape).background(p.runCard).border(1.dp, p.cardBorder, shape).padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(XIcons.Info, contentDescription = null, tint = p.accent, modifier = Modifier.size(28.dp))
+        Text(stringResource(R.string.pr_disabled_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = p.onCard)
+        Text(stringResource(R.string.pr_disabled_body, repoName), style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted)
     }
 }
 
@@ -704,7 +721,7 @@ private fun PatchView(patch: String, p: GhPalette) {
 }
 
 // =================================================================================================
-// Create
+// Create: step 1 "Compare" (repo + branch pickers), step 2 "Details" (title, description, file changes)
 // =================================================================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -721,6 +738,7 @@ fun CreatePullRequestScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     val p = ghPalette()
     val context = LocalContext.current
+    val details = state.step == CreateStep.Details
 
     LaunchedEffect(vm) { vm.created.collect { onCreated(it) } }
     LaunchedEffect(vm) {
@@ -729,17 +747,25 @@ fun CreatePullRequestScreen(
             onBack()
         }
     }
+    androidx.activity.compose.BackHandler(enabled = details) { vm.backToCompare() }
 
     Scaffold(
         modifier = Modifier.background(p.screen),
         containerColor = Color.Transparent,
-        topBar = { PullTopBar(stringResource(R.string.pr_create_screen_title), onBack, p) },
+        topBar = {
+            PullTopBar(
+                stringResource(if (details) R.string.pr_details_title else R.string.pr_create_screen_title),
+                { if (details) vm.backToCompare() else onBack() },
+                p,
+            )
+        },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when {
                 state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center), color = p.accent)
                 state.error != null -> ErrorBlock(state.error?.resolve(context).orEmpty(), vm::retry, p)
-                else -> CreateForm(state, vm, p)
+                details -> DetailsStep(state, vm, p)
+                else -> CompareStep(state, vm, p)
             }
         }
     }
@@ -775,27 +801,119 @@ fun CreatePullRequestScreen(
     }
 }
 
+// ---- step 1: compare -------------------------------------------------------------------------
+
 @Composable
-private fun CreateForm(state: CreatePullState, vm: CreatePullViewModel, p: GhPalette) {
+private fun CompareStep(state: CreatePullState, vm: CreatePullViewModel, p: GhPalette) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(stringResource(R.string.pr_compare_intro), style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted)
+        SelectorGroup(stringResource(R.string.pr_merge_into), p) {
+            SelectorRow(XIcons.GitHub, stringResource(R.string.pr_label_repo), state.baseRepoName, p,
+                onClick = if (state.upstreamName != null) ({ vm.openPicker(BranchPickerTarget.Repo) }) else null)
+            SelectorDivider(p)
+            SelectorRow(XIcons.Branch, stringResource(R.string.pr_label_branch), state.base, p) { vm.openPicker(BranchPickerTarget.Base) }
+        }
+        Icon(
+            XIcons.ArrowDownward, contentDescription = null, tint = p.onCardMuted,
+            modifier = Modifier.align(Alignment.CenterHorizontally).size(22.dp),
+        )
+        SelectorGroup(stringResource(R.string.pr_changes_from), p) {
+            SelectorRow(XIcons.GitHub, stringResource(R.string.pr_label_repo), state.repoName, p, onClick = null)
+            SelectorDivider(p)
+            SelectorRow(XIcons.Branch, stringResource(R.string.pr_label_branch), state.head.ifEmpty { stringResource(R.string.pr_pick_head) }, p) {
+                vm.openPicker(BranchPickerTarget.Head)
+            }
+        }
+        CompareResult(state, p)
+        Button(
+            onClick = vm::goDetails, enabled = state.canCompare,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) { Text(stringResource(R.string.pr_compare), style = MaterialTheme.typography.titleMedium) }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+/** One line under the pickers: what the chosen branches would contain, or why Compare is not possible. */
+@Composable
+private fun CompareResult(state: CreatePullState, p: GhPalette) {
+    val context = LocalContext.current
+    val cmp = state.cmp
+    when {
+        !state.basePullsEnabled -> ResultText(stringResource(R.string.pr_base_disabled, state.baseRepoName), p.danger)
+        state.head.isEmpty() -> ResultText(stringResource(R.string.pr_compare_pick_head), p.onCardMuted)
+        state.sameBranch -> ResultText(stringResource(R.string.pr_compare_same), p.danger)
+        state.cmpLoading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(horizontal = 4.dp)) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = p.accent)
+            Text(stringResource(R.string.pr_compare_loading), style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted)
+        }
+        state.cmpError != null -> ResultText(state.cmpError.resolve(context), p.danger)
+        cmp != null && cmp.isEmpty -> ResultText(stringResource(R.string.pr_compare_empty), p.onCardMuted)
+        cmp != null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(horizontal = 4.dp)) {
+            Text(stringResource(R.string.pr_compare_summary, cmp.totalCommits, cmp.files.size), style = MaterialTheme.typography.bodyMedium, color = p.onCard, modifier = Modifier.weight(1f, fill = false))
+            Text("+${cmp.files.sumOf { it.additions }}", style = MaterialTheme.typography.labelLarge, color = p.success, fontWeight = FontWeight.SemiBold)
+            Text("\u2212${cmp.files.sumOf { it.deletions }}", style = MaterialTheme.typography.labelLarge, color = p.danger, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun ResultText(text: String, color: Color) {
+    Text(text, style = MaterialTheme.typography.bodyMedium, color = color, modifier = Modifier.padding(horizontal = 4.dp))
+}
+
+@Composable
+private fun SelectorGroup(title: String, p: GhPalette, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.labelLarge, color = p.accent, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 4.dp))
+        Column(Modifier.fillMaxWidth().clip(shape).background(p.runCard).border(1.dp, p.pickerBorder, shape), content = content)
+    }
+}
+
+@Composable
+private fun SelectorDivider(p: GhPalette) {
+    Box(Modifier.fillMaxWidth().height(1.dp).background(p.cardBorder))
+}
+
+/** [onClick] null = fixed value (no chevron, not tappable). */
+@Composable
+private fun SelectorRow(icon: ImageVector, label: String, value: String, p: GhPalette, onClick: (() -> Unit)?) {
+    Row(
+        Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = p.accent, modifier = Modifier.size(20.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = p.onCardMuted)
+            Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (onClick != null) Icon(XIcons.KeyboardArrowDown, contentDescription = null, tint = p.onCardMuted)
+    }
+}
+
+// ---- step 2: details (title, description, then the file changes like GitHub) ---------------------
+
+@Composable
+private fun DetailsStep(state: CreatePullState, vm: CreatePullViewModel, p: GhPalette) {
     val context = LocalContext.current
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = p.accent, unfocusedBorderColor = p.pickerBorder,
         focusedTextColor = p.onCard, unfocusedTextColor = p.onCard,
         focusedLabelColor = p.accent, unfocusedLabelColor = p.onCardMuted, cursorColor = p.accent,
     )
+    val cmp = state.cmp
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(state.repoName, style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted)
-        if (state.upstreamName != null) {
-            BranchField(stringResource(R.string.pr_base_repo), state.baseRepoName, p) { vm.openPicker(BranchPickerTarget.Repo) }
-        }
-        BranchField(stringResource(R.string.pr_base_branch), state.base, p) { vm.openPicker(BranchPickerTarget.Base) }
-        BranchField(stringResource(R.string.pr_head_branch), state.head.ifEmpty { stringResource(R.string.pr_pick_head) }, p) { vm.openPicker(BranchPickerTarget.Head) }
-        if (state.head.isNotEmpty() && state.base.isNotEmpty()) {
-            Text(stringResource(R.string.pr_merge_summary, state.head, if (state.useUpstream) "${state.baseRepoName}:${state.base}" else state.base), style = MaterialTheme.typography.bodySmall, color = p.onCardMuted)
-        }
+        Text(
+            stringResource(R.string.pr_merge_summary, state.head, if (state.useUpstream) "${state.baseRepoName}:${state.base}" else state.base),
+            style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = p.onCard,
+        )
         OutlinedTextField(
             value = state.title, onValueChange = vm::setTitle,
             label = { Text(stringResource(R.string.pr_field_title)) },
@@ -839,23 +957,42 @@ private fun CreateForm(state: CreatePullState, vm: CreatePullViewModel, p: GhPal
             if (state.creating) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
             else Text(stringResource(R.string.pr_create), style = MaterialTheme.typography.titleMedium)
         }
+
+        if (cmp != null) {
+            if (cmp.commits.isNotEmpty()) {
+                SectionHeader(stringResource(R.string.pr_commits_header, cmp.totalCommits), null, null, p)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    cmp.commits.take(MAX_COMPARE_COMMITS).forEach { msg ->
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(XIcons.Commit, contentDescription = null, tint = p.accent, modifier = Modifier.size(16.dp))
+                            Text(msg.lineSequence().firstOrNull().orEmpty(), style = MaterialTheme.typography.bodyMedium, color = p.onCard, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    if (cmp.totalCommits > MAX_COMPARE_COMMITS) {
+                        Text(stringResource(R.string.pr_more_items, cmp.totalCommits - MAX_COMPARE_COMMITS), style = MaterialTheme.typography.bodySmall, color = p.onCardMuted)
+                    }
+                }
+            }
+            if (cmp.files.isNotEmpty()) {
+                SectionHeader(stringResource(R.string.pr_files_header, cmp.files.size), cmp.files.sumOf { it.additions }, cmp.files.sumOf { it.deletions }, p)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    cmp.files.forEach { FileCard(it, p) }
+                }
+            }
+        }
         Spacer(Modifier.height(16.dp))
     }
 }
 
+private const val MAX_COMPARE_COMMITS = 20
+
 @Composable
-private fun BranchField(label: String, value: String, p: GhPalette, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(14.dp)
-    Row(
-        Modifier.fillMaxWidth().clip(shape).background(p.runCard).border(1.dp, p.pickerBorder, shape).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(XIcons.Branch, contentDescription = null, tint = p.accent, modifier = Modifier.size(20.dp))
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = p.onCardMuted)
-            Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun SectionHeader(title: String, added: Int?, removed: Int?, p: GhPalette) {
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = p.onCard, modifier = Modifier.weight(1f))
+        if (added != null && removed != null) {
+            Text("+$added", style = MaterialTheme.typography.labelLarge, color = p.success, fontWeight = FontWeight.SemiBold)
+            Text("\u2212$removed", style = MaterialTheme.typography.labelLarge, color = p.danger, fontWeight = FontWeight.SemiBold)
         }
-        Icon(XIcons.KeyboardArrowDown, contentDescription = null, tint = p.onCardMuted)
     }
 }

@@ -19,7 +19,7 @@ class GitHubApi(private val http: GitHubHttp, private val repo: GhRepoRef) {
             val name = pj.str("name")
             if (owner != null && name != null) GhRepoRef(owner, name, pj.str("default_branch")) else null
         }
-        return repo.copy(defaultBranch = j.str("default_branch"), parent = parent)
+        return repo.copy(defaultBranch = j.str("default_branch"), parent = parent, pullsEnabled = j.optBoolean("has_pull_requests", true))
     }
 
     /** `GET /repos/{o}/{r}/actions/workflows` (first 100). */

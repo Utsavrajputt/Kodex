@@ -14,6 +14,7 @@ import com.invictus.kodex.core.git.model.GitCommitSummary
 import com.invictus.kodex.core.git.model.GitFileDiffResult
 import com.invictus.kodex.core.github.GitHubProfileRepository
 import com.invictus.kodex.github.api.GhCommitDetail
+import com.invictus.kodex.github.api.GhCompare
 import com.invictus.kodex.github.api.GhPull
 import com.invictus.kodex.github.api.GhPullCommit
 import com.invictus.kodex.github.api.GhPullFile
@@ -78,6 +79,8 @@ data class PullListState(
     val refreshing: Boolean = false,
     val hasMore: Boolean = false,
     val error: GhText? = null,
+    /** The repo owner turned pull requests off (GitHub setting), so there is nothing to list or create. */
+    val disabled: Boolean = false,
 )
 
 class PullListViewModel(
@@ -139,6 +142,17 @@ class PullListViewModel(
                 if (filter == PullFilter.Mine && login == null) {
                     login = profiles.cached(GitHubTokenProvider.HOST)?.login
                         ?: tokens.token()?.let { profiles.fetch(GitHubTokenProvider.HOST, it)?.login }
+                }
+                if (reset) {
+                    // GitHub answers 404 for the pulls of a repo with pull requests switched off: ask the repo itself first.
+                    val info = try { repo.repoInfo() } catch (e: GitHubError) { null }
+                    if (info != null && !info.pullsEnabled) {
+                        _state.update {
+                            it.copy(loading = false, loadingMore = false, refreshing = false, items = emptyList(), hasMore = false, error = null, disabled = true)
+                        }
+                        return@launch
+                    }
+                    if (_state.value.disabled) _state.update { it.copy(disabled = false) }
                 }
                 val result = repo.pulls(if (reset) 1 else nextPage, filter, login)
                 nextPage = result.page + 1
@@ -461,6 +475,9 @@ class PullDetailViewModel(
 
 enum class BranchPickerTarget { Repo, Base, Head }
 
+/** Compare = choose repo + branches; Details = title, description and the file changes. */
+enum class CreateStep { Compare, Details }
+
 data class CreatePullState(
     val loading: Boolean = true,
     val error: GhText? = null,
@@ -484,7 +501,21 @@ data class CreatePullState(
     val picker: BranchPickerTarget? = null,
     /** Inline validation / API message shown above the button. */
     val formError: GhText? = null,
+    val step: CreateStep = CreateStep.Compare,
+    /** Commits + files between the chosen base and compare branch; null until both are chosen. */
+    val cmp: GhCompare? = null,
+    val cmpLoading: Boolean = false,
+    val cmpError: GhText? = null,
+    val ownPullsEnabled: Boolean = true,
+    val upstreamPullsEnabled: Boolean = true,
 ) {
+    val basePullsEnabled: Boolean get() = if (useUpstream) upstreamPullsEnabled else ownPullsEnabled
+    val sameBranch: Boolean get() = !useUpstream && head.isNotEmpty() && head == base
+
+    /** The Compare button may continue: both branches chosen, they differ, and there is something to open a PR for. */
+    val canCompare: Boolean get() = head.isNotEmpty() && base.isNotEmpty() && !sameBranch && basePullsEnabled &&
+        !cmpLoading && cmp != null && !cmp.isEmpty
+
     val baseBranches: List<String> get() = if (useUpstream) upstreamBranches else branches
     val baseRepoName: String get() = if (useUpstream && upstreamName != null) upstreamName else repoName
 }
@@ -527,6 +558,9 @@ class CreatePullViewModel(
                 val upstreamBranches = parent?.let {
                     try { repoFactory(it).allBranches() } catch (e: GitHubError) { null } // best effort: fork-only mode
                 }.orEmpty()
+                val upstreamPulls = parent?.let {
+                    try { repoFactory(it).repoInfo().pullsEnabled } catch (e: GitHubError) { true } // unknown = let GitHub decide
+                } ?: true
                 upstreamRef = parent?.takeIf { upstreamBranches.isNotEmpty() }
                 val upstreamBase = parent?.defaultBranch?.takeIf { it in upstreamBranches } ?: upstreamBranches.firstOrNull().orEmpty()
                 // Default compare branch: the branch checked out in the project, when GitHub has it.
@@ -535,9 +569,13 @@ class CreatePullViewModel(
                     it.copy(loading = false, repoName = holder.ref?.fullName.orEmpty(), branches = branches, base = base, head = head,
                         upstreamName = upstreamRef?.fullName, upstreamBranches = upstreamBranches,
                         ownDefaultBase = base, upstreamDefaultBase = upstreamBase,
-                    )
+                        ownPullsEnabled = info.pullsEnabled, upstreamPullsEnabled = upstreamPulls,
+                        // Own PRs are off but the fork's upstream accepts them: start on the upstream.
+                        useUpstream = !info.pullsEnabled && upstreamRef != null && upstreamPulls,
+                    ).let { st -> if (st.useUpstream) st.copy(base = upstreamBase) else st }
                 }
                 if (head.isNotEmpty()) autoFillTitle(head)
+                runCompare()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
@@ -571,7 +609,41 @@ class CreatePullViewModel(
             }
         }
         if (target == BranchPickerTarget.Head && !titleEdited) autoFillTitle(name)
+        runCompare()
     }
+
+    private var cmpJob: Job? = null
+
+    /** Loads what a pull request between the chosen branches would contain (same call the AI uses). */
+    private fun runCompare() {
+        cmpJob?.cancel()
+        val s = _state.value
+        if (s.head.isEmpty() || s.base.isEmpty() || s.sameBranch) {
+            _state.update { it.copy(cmp = null, cmpLoading = false, cmpError = null) }
+            return
+        }
+        _state.update { it.copy(cmp = null, cmpLoading = true, cmpError = null) }
+        cmpJob = viewModelScope.launch {
+            try {
+                val own = holder.get() ?: return@launch
+                val upstream = if (s.useUpstream) upstreamRef else null
+                val result = if (upstream != null) {
+                    repoFactory(upstream).compare(s.base, "${holder.ref?.owner.orEmpty()}:${s.head}")
+                } else own.compare(s.base, s.head)
+                _state.update { it.copy(cmp = result, cmpLoading = false) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: GitHubError) {
+                _state.update { it.copy(cmpLoading = false, cmpError = describeFor(s.baseRepoName, e)) }
+            }
+        }
+    }
+
+    fun goDetails() {
+        if (_state.value.canCompare) _state.update { it.copy(step = CreateStep.Details, formError = null) }
+    }
+
+    fun backToCompare() = _state.update { it.copy(step = CreateStep.Compare, formError = null) }
 
     /** AI result: replaces title + description and keeps the commit-message auto-fill from overriding it. */
     fun applyAiText(title: String, body: String) {
@@ -619,6 +691,7 @@ class CreatePullViewModel(
         val s = _state.value
         if (s.creating) return
         val problem = when {
+            !s.basePullsEnabled -> GhText.Res(R.string.pr_base_disabled, listOf(s.baseRepoName))
             s.head.isEmpty() -> GhText.Res(R.string.pr_err_no_head)
             !s.useUpstream && s.head == s.base -> GhText.Res(R.string.pr_err_same_branch)
             s.title.isBlank() -> GhText.Res(R.string.pr_err_no_title)

@@ -5,7 +5,14 @@ import java.time.Instant
 
 /** `owner/repo` bound to a project's GitHub remote. */
 /** [parent] is the upstream repository when this repo is a fork (null otherwise). */
-data class GhRepoRef(val owner: String, val name: String, val defaultBranch: String? = null, val parent: GhRepoRef? = null) {
+data class GhRepoRef(
+    val owner: String,
+    val name: String,
+    val defaultBranch: String? = null,
+    val parent: GhRepoRef? = null,
+    /** `has_pull_requests` from `GET /repos/{o}/{r}`: false = the owner switched pull requests off. */
+    val pullsEnabled: Boolean = true,
+) {
     val fullName: String get() = "$owner/$name"
 }
 
