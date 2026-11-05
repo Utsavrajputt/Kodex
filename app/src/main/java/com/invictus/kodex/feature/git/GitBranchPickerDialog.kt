@@ -36,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -62,6 +63,8 @@ internal fun BranchPickerDialog(
     dismissible: Boolean,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
+    /** Branch to mark with a check + highlight (null = no selection state, e.g. Merge / Rebase). */
+    selected: String? = null,
 ) {
     Dialog(
         onDismissRequest = { if (dismissible) onDismiss() },
@@ -122,7 +125,7 @@ internal fun BranchPickerDialog(
                         Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        branches.forEach { branch -> BranchRow(branch) { onPick(branch) } }
+                        branches.forEach { branch -> BranchRow(branch, selected = branch == selected) { onPick(branch) } }
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -136,10 +139,10 @@ internal fun BranchPickerDialog(
 }
 
 @Composable
-private fun BranchRow(branch: String, onClick: () -> Unit) {
+private fun BranchRow(branch: String, selected: Boolean, onClick: () -> Unit) {
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
     ) {
         Row(
@@ -158,7 +161,18 @@ private fun BranchRow(branch: String, onClick: () -> Unit) {
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                fontWeight = if (selected) FontWeight.SemiBold else null,
+                modifier = Modifier.weight(1f),
             )
+            if (selected) {
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    XIcons.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }

@@ -83,6 +83,8 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.invictus.kodex.R
+import com.invictus.kodex.feature.git.BranchPickerDialog
+import com.invictus.kodex.feature.git.BranchPickerPhase
 import com.invictus.kodex.ai.ui.chat.MarkdownContent
 import com.invictus.kodex.github.api.GhPull
 import com.invictus.kodex.github.api.GhPullCommit
@@ -700,6 +702,12 @@ fun CreatePullRequestScreen(
     val context = LocalContext.current
 
     LaunchedEffect(vm) { vm.created.collect { onCreated(it) } }
+    LaunchedEffect(vm) {
+        vm.createdUpstream.collect { url ->
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            onBack()
+        }
+    }
 
     Scaffold(
         modifier = Modifier.background(p.screen),
@@ -716,10 +724,30 @@ fun CreatePullRequestScreen(
     }
 
     state.picker?.let { target ->
+        val items = when (target) {
+            BranchPickerTarget.Repo -> listOfNotNull(state.repoName, state.upstreamName)
+            BranchPickerTarget.Base -> state.baseBranches
+            BranchPickerTarget.Head -> state.branches
+        }
         BranchPickerDialog(
-            title = stringResource(if (target == BranchPickerTarget.Base) R.string.pr_base_branch else R.string.pr_head_branch),
-            branches = state.branches,
-            selected = if (target == BranchPickerTarget.Base) state.base else state.head,
+            title = stringResource(
+                when (target) {
+                    BranchPickerTarget.Repo -> R.string.pr_base_repo
+                    BranchPickerTarget.Base -> R.string.pr_base_branch
+                    BranchPickerTarget.Head -> R.string.pr_head_branch
+                },
+            ),
+            description = null,
+            phase = if (items.isEmpty()) BranchPickerPhase.EMPTY else BranchPickerPhase.LIST,
+            branches = items,
+            busyText = "",
+            emptyText = stringResource(R.string.pr_no_branches),
+            dismissible = true,
+            selected = when (target) {
+                BranchPickerTarget.Repo -> state.baseRepoName
+                BranchPickerTarget.Base -> state.base
+                BranchPickerTarget.Head -> state.head
+            },
             onPick = vm::pickBranch,
             onDismiss = vm::dismissPicker,
         )
@@ -739,10 +767,13 @@ private fun CreateForm(state: CreatePullState, vm: CreatePullViewModel, p: GhPal
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(state.repoName, style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted)
+        if (state.upstreamName != null) {
+            BranchField(stringResource(R.string.pr_base_repo), state.baseRepoName, p) { vm.openPicker(BranchPickerTarget.Repo) }
+        }
         BranchField(stringResource(R.string.pr_base_branch), state.base, p) { vm.openPicker(BranchPickerTarget.Base) }
         BranchField(stringResource(R.string.pr_head_branch), state.head.ifEmpty { stringResource(R.string.pr_pick_head) }, p) { vm.openPicker(BranchPickerTarget.Head) }
         if (state.head.isNotEmpty() && state.base.isNotEmpty()) {
-            Text(stringResource(R.string.pr_merge_summary, state.head, state.base), style = MaterialTheme.typography.bodySmall, color = p.onCardMuted)
+            Text(stringResource(R.string.pr_merge_summary, state.head, if (state.useUpstream) "${state.baseRepoName}:${state.base}" else state.base), style = MaterialTheme.typography.bodySmall, color = p.onCardMuted)
         }
         OutlinedTextField(
             value = state.title, onValueChange = vm::setTitle,
@@ -794,52 +825,4 @@ private fun BranchField(label: String, value: String, p: GhPalette, onClick: () 
         }
         Icon(XIcons.KeyboardArrowDown, contentDescription = null, tint = p.onCardMuted)
     }
-}
-
-@Composable
-private fun BranchPickerDialog(title: String, branches: List<String>, selected: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    var query by remember { mutableStateOf("") }
-    val shown = remember(branches, query) {
-        val q = query.trim()
-        // main / master first, then the rest alphabetically as GitHub returns them.
-        branches.filter { q.isEmpty() || it.contains(q, ignoreCase = true) }
-            .sortedBy { if (it == "main" || it == "master") 0 else 1 }
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = query, onValueChange = { query = it },
-                    placeholder = { Text(stringResource(R.string.pr_search_branch)) },
-                    leadingIcon = { Icon(XIcons.Search, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(8.dp))
-                if (shown.isEmpty()) {
-                    Text(stringResource(R.string.pr_no_branches), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 12.dp))
-                } else {
-                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
-                        items(shown, key = { it }) { name ->
-                            Row(
-                                Modifier.fillMaxWidth().clickable { onPick(name) }.padding(vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                Text(
-                                    name, style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = if (name == selected) FontWeight.Bold else FontWeight.Normal,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                                )
-                                if (name == selected) Icon(XIcons.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
-    )
 }

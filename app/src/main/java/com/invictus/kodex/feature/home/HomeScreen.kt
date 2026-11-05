@@ -312,6 +312,8 @@ fun HomeScreen(
                         onDelete = { projectsViewModel.onEvent(ProjectsEvent.StartDelete(item.file)) },
                         onInfo = { projectsViewModel.onEvent(ProjectsEvent.ShowInfo(item.file)) },
                         onCopyPath = { copyPath(item.file) },
+                        onBackup = { projectsViewModel.onEvent(ProjectsEvent.Backup(item.file)) },
+                        isBackingUp = item.file.path in projectsState.backingUp,
                     )
                 }
             }

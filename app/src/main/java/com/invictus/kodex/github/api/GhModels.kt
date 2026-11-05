@@ -4,7 +4,8 @@ import org.json.JSONObject
 import java.time.Instant
 
 /** `owner/repo` bound to a project's GitHub remote. */
-data class GhRepoRef(val owner: String, val name: String, val defaultBranch: String? = null) {
+/** [parent] is the upstream repository when this repo is a fork (null otherwise). */
+data class GhRepoRef(val owner: String, val name: String, val defaultBranch: String? = null, val parent: GhRepoRef? = null) {
     val fullName: String get() = "$owner/$name"
 }
 

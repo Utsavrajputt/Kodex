@@ -71,7 +71,7 @@
     <string name="pr_draft_toggle">Create as draft</string>
     <string name="pr_draft_toggle_hint">Draft pull requests can\'t be merged until they are marked ready</string>
     <string name="pr_pick_title">Choose branch</string>
-    <string name="pr_search_branch">Search branches</string>
+    <string name="pr_base_repo">Base repository</string>
     <string name="pr_no_branches">No branches found</string>
     <string name="pr_err_no_head">Choose the branch to compare</string>
     <string name="pr_err_same_branch">Base and compare branch must be different</string>

@@ -14,7 +14,12 @@ class GitHubApi(private val http: GitHubHttp, private val repo: GhRepoRef) {
     /** `GET /repos/{o}/{r}`: default branch etc. */
     suspend fun getRepo(): GhRepoRef {
         val j = JSONObject(http.getJson(base))
-        return repo.copy(defaultBranch = j.str("default_branch"))
+        val parent = j.optJSONObject("parent")?.let { pj ->
+            val owner = pj.optJSONObject("owner")?.str("login")
+            val name = pj.str("name")
+            if (owner != null && name != null) GhRepoRef(owner, name, pj.str("default_branch")) else null
+        }
+        return repo.copy(defaultBranch = j.str("default_branch"), parent = parent)
     }
 
     /** `GET /repos/{o}/{r}/actions/workflows` (first 100). */

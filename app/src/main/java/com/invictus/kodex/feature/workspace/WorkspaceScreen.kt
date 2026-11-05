@@ -211,7 +211,6 @@ fun WorkspaceScreen(
                 state = state,
                 onEvent = viewModel::onEvent,
                 onOpenProjectSheet = { showProjectSheet = true },
-                onBackup = { projectsViewModel.onEvent(ProjectsEvent.Backup(state.root)) },
                 onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
                 onOpenCodeSearch = { onOpenCodeSearch(state.root) },
                 onOpenGitHub = { onOpenGitHub(state.root) },
@@ -308,7 +307,6 @@ private fun WorkspaceTopBar(
     state: FileTreeUiState,
     onEvent: (FileTreeEvent) -> Unit,
     onOpenProjectSheet: () -> Unit,
-    onBackup: () -> Unit,
     onOpenGit: (() -> Unit)? = null,
     onOpenCodeSearch: () -> Unit = {},
     onOpenGitHub: () -> Unit = {},
@@ -377,16 +375,6 @@ private fun WorkspaceTopBar(
                         },
                         onClick = { onEvent(FileTreeEvent.SetShowHidden(!state.showHidden)) },
                     )
-                    if (state.rootName != null) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.menu_backup_project)) },
-                            leadingIcon = { Icon(XIcons.CloudUpload, contentDescription = null) },
-                            onClick = {
-                                menuOpen = false
-                                onBackup()
-                            },
-                        )
-                    }
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.menu_collapse_all)) },
                         leadingIcon = { Icon(XIcons.CollapseAll, contentDescription = null) },

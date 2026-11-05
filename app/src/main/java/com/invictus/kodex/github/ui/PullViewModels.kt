@@ -353,13 +353,21 @@ class PullDetailViewModel(
 
 // ---- create --------------------------------------------------------------------------------
 
-enum class BranchPickerTarget { Base, Head }
+enum class BranchPickerTarget { Repo, Base, Head }
 
 data class CreatePullState(
     val loading: Boolean = true,
     val error: GhText? = null,
     val repoName: String = "",
+    /** Branches of this (possibly forked) repository: always the compare/head side. */
     val branches: List<String> = emptyList(),
+    /** Upstream (parent) repo `owner/name` when this repo is a fork with readable branches; else null. */
+    val upstreamName: String? = null,
+    val upstreamBranches: List<String> = emptyList(),
+    /** True = the pull request is opened against [upstreamName] instead of this repo. */
+    val useUpstream: Boolean = false,
+    val ownDefaultBase: String = "",
+    val upstreamDefaultBase: String = "",
     val base: String = "",
     val head: String = "",
     val title: String = "",
@@ -370,12 +378,15 @@ data class CreatePullState(
     val picker: BranchPickerTarget? = null,
     /** Inline validation / API message shown above the button. */
     val formError: GhText? = null,
-)
+) {
+    val baseBranches: List<String> get() = if (useUpstream) upstreamBranches else branches
+    val baseRepoName: String get() = if (useUpstream && upstreamName != null) upstreamName else repoName
+}
 
 class CreatePullViewModel(
     private val projectPath: String,
     resolver: GitHubProjectResolver,
-    repoFactory: (GhRepoRef) -> GitHubRepository,
+    private val repoFactory: (GhRepoRef) -> GitHubRepository,
 ) : ViewModel() {
 
     private val holder = RepoHolder(projectPath, resolver, repoFactory)
@@ -386,6 +397,11 @@ class CreatePullViewModel(
     private val _created = MutableSharedFlow<Int>(extraBufferCapacity = 1)
     val created: SharedFlow<Int> = _created.asSharedFlow()
 
+    /** Emits the web URL of a pull request opened in the upstream repo (the app can't browse it as a fork PR). */
+    private val _createdUpstream = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val createdUpstream: SharedFlow<String> = _createdUpstream.asSharedFlow()
+
+    private var upstreamRef: GhRepoRef? = null
     private var titleEdited = false
     private var fillJob: Job? = null
 
@@ -401,10 +417,19 @@ class CreatePullViewModel(
                 val info = repo.repoInfo()
                 val branches = repo.allBranches()
                 val base = info.defaultBranch?.takeIf { it in branches } ?: branches.firstOrNull().orEmpty()
+                val parent = info.parent
+                val upstreamBranches = parent?.let {
+                    try { repoFactory(it).allBranches() } catch (e: GitHubError) { null } // best effort: fork-only mode
+                }.orEmpty()
+                upstreamRef = parent?.takeIf { upstreamBranches.isNotEmpty() }
+                val upstreamBase = parent?.defaultBranch?.takeIf { it in upstreamBranches } ?: upstreamBranches.firstOrNull().orEmpty()
                 // Default compare branch: the branch checked out in the project, when GitHub has it.
                 val head = localBranch()?.takeIf { it in branches && it != base }.orEmpty()
                 _state.update {
-                    it.copy(loading = false, repoName = holder.ref?.fullName.orEmpty(), branches = branches, base = base, head = head)
+                    it.copy(loading = false, repoName = holder.ref?.fullName.orEmpty(), branches = branches, base = base, head = head,
+                        upstreamName = upstreamRef?.fullName, upstreamBranches = upstreamBranches,
+                        ownDefaultBase = base, upstreamDefaultBase = upstreamBase,
+                    )
                 }
                 if (head.isNotEmpty()) autoFillTitle(head)
             } catch (e: CancellationException) {
@@ -427,6 +452,14 @@ class CreatePullViewModel(
         val target = _state.value.picker ?: return
         _state.update {
             when (target) {
+                BranchPickerTarget.Repo -> {
+                    val up = name == it.upstreamName
+                    if (up == it.useUpstream) it.copy(picker = null)
+                    else it.copy(
+                        useUpstream = up, base = if (up) it.upstreamDefaultBase else it.ownDefaultBase,
+                        picker = null, formError = null,
+                    )
+                }
                 BranchPickerTarget.Base -> it.copy(base = name, picker = null, formError = null)
                 BranchPickerTarget.Head -> it.copy(head = name, picker = null, formError = null)
             }
@@ -460,7 +493,7 @@ class CreatePullViewModel(
         if (s.creating) return
         val problem = when {
             s.head.isEmpty() -> GhText.Res(R.string.pr_err_no_head)
-            s.head == s.base -> GhText.Res(R.string.pr_err_same_branch)
+            !s.useUpstream && s.head == s.base -> GhText.Res(R.string.pr_err_same_branch)
             s.title.isBlank() -> GhText.Res(R.string.pr_err_no_title)
             else -> null
         }
@@ -469,9 +502,18 @@ class CreatePullViewModel(
         viewModelScope.launch {
             try {
                 val repo = holder.get() ?: return@launch
-                val pull = repo.createPull(s.title.trim(), s.body.trim(), s.head, s.base, s.draft)
-                _state.update { it.copy(creating = false) }
-                _created.tryEmit(pull.number)
+                val upstream = if (s.useUpstream) upstreamRef else null
+                if (upstream != null) {
+                    // Cross-repo PR: head is "forkOwner:branch", the PR lives in the upstream repo.
+                    val headRef = "${holder.ref?.owner.orEmpty()}:${s.head}"
+                    val pull = repoFactory(upstream).createPull(s.title.trim(), s.body.trim(), headRef, s.base, s.draft)
+                    _state.update { it.copy(creating = false) }
+                    _createdUpstream.tryEmit(pull.htmlUrl)
+                } else {
+                    val pull = repo.createPull(s.title.trim(), s.body.trim(), s.head, s.base, s.draft)
+                    _state.update { it.copy(creating = false) }
+                    _created.tryEmit(pull.number)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {

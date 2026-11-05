@@ -123,7 +123,7 @@ internal fun rememberCopyPath(snackbarHostState: SnackbarHostState): (File) -> U
 
 /**
  * Card row for one recent project: colored folder tile, name, path and an actions menu
- * (pin, info, copy path, rename, delete, remove from recents).
+ * (pin, info, copy path, back up, rename, delete, remove from recents).
  */
 @Composable
 internal fun ProjectCardRow(
@@ -135,6 +135,8 @@ internal fun ProjectCardRow(
     onDelete: () -> Unit,
     onInfo: () -> Unit,
     onCopyPath: () -> Unit,
+    onBackup: () -> Unit,
+    isBackingUp: Boolean,
     modifier: Modifier = Modifier,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -220,6 +222,12 @@ internal fun ProjectCardRow(
                     )
                     if (canModify) {
                         ProjectMenuItem(
+                            label = stringResource(R.string.recent_menu_backup),
+                            icon = XIcons.CloudUpload,
+                            enabled = !isBackingUp,
+                            onClick = { close(); onBackup() },
+                        )
+                        ProjectMenuItem(
                             label = stringResource(R.string.tree_menu_rename),
                             icon = XIcons.Edit,
                             onClick = { close(); onRename() },
@@ -255,6 +263,7 @@ private fun ProjectMenuItem(
     icon: ImageVector,
     onClick: () -> Unit,
     danger: Boolean = false,
+    enabled: Boolean = true,
 ) {
     val tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
     DropdownMenuItem(
@@ -267,6 +276,7 @@ private fun ProjectMenuItem(
         },
         leadingIcon = { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp)) },
         onClick = onClick,
+        enabled = enabled,
         contentPadding = PaddingValues(horizontal = 14.dp),
         modifier = Modifier.height(44.dp),
     )

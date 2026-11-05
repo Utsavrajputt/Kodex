@@ -94,7 +94,7 @@
 
     <!-- strings_m2_part2.xml -->
     <string name="menu_open_project">Open project</string>
-    <string name="menu_backup_project">Back up as ZIP</string>
+    <string name="menu_backup_project">Backup</string>
     <string name="sheet_title">Open project</string>
     <string name="sheet_subtitle">Choose a folder or search for a path.</string>
     <string name="sheet_search_hint">Search, or type a path (/storage/…)</string>
@@ -105,7 +105,7 @@
     <string name="sheet_no_subfolders">No subfolders</string>
     <string name="sheet_current">Open now</string>
     <string name="sheet_folder_missing">Folder missing · %1$s</string>
-    <string name="recent_menu_backup">Back up as ZIP</string>
+    <string name="recent_menu_backup">Backup</string>
     <string name="recent_menu_remove">Remove</string>
     <string name="recent_menu_info">Project info</string>
     <string name="msg_project_deleted">Deleted "%1$s"</string>
