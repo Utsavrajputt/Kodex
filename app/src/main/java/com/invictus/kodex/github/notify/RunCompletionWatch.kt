@@ -30,6 +30,10 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object RunCompletionWatch {
     private const val POLL_MS = 10_000L
+
+    /** Used once the run is nearly done (90%+ / finishing), so the "complete" notification lands within seconds. */
+    private const val FAST_POLL_MS = 3_000L
+    private const val FAST_FROM_PERCENT = 90
     private const val MAX_WATCH_MS = 45L * 60 * 1000
     private const val MAX_POLL_FAILURES = 8
 
@@ -58,8 +62,9 @@ object RunCompletionWatch {
                 val repo = (app as KodexApp).container.gitHubRepository(repoRef)
                 val deadline = SystemClock.elapsedRealtime() + MAX_WATCH_MS
                 var failures = 0
+                var nextPollMs = POLL_MS
                 while (isActive && SystemClock.elapsedRealtime() < deadline) {
-                    delay(POLL_MS)
+                    delay(nextPollMs)
                     val latest = try {
                         repo.run(run.id).also { failures = 0 }
                     } catch (e: CancellationException) {
@@ -79,10 +84,16 @@ object RunCompletionWatch {
                         if (progress != null && progress.hasSteps) {
                             val step = progress.steps.firstOrNull { it.state == StepState.Current }?.name
                                 ?: progress.steps.firstOrNull { it.state == StepState.Pending }?.name
+                            // Every counted step is done but the run is not completed yet (post steps, artifact upload):
+                            // say so instead of showing a full bar with no text.
+                            val finishing = step == null || progress.percent >= 100
+                            val label = if (finishing) app.getString(R.string.gh_notif_run_finishing) else step
                             notifier.updateLive(
-                                title, listOfNotNull(repoRef.name, step).joinToString(" \u2022 "),
+                                title,
+                                listOfNotNull(repoRef.name, label, "${progress.percent}%").joinToString(" \u2022 "),
                                 progress.percent, projectPath, run.id, stoppable = true, startedAtMs = startedMs(latest),
                             )
+                            nextPollMs = if (finishing || progress.percent >= FAST_FROM_PERCENT) FAST_POLL_MS else POLL_MS
                         }
                         continue
                     }

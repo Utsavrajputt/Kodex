@@ -76,4 +76,11 @@
     <string name="pr_err_no_head">Choose the branch to compare</string>
     <string name="pr_err_same_branch">Base and compare branch must be different</string>
     <string name="pr_err_no_title">A title is required</string>
+    <string name="ai_pr_generate">Write title and description</string>
+    <string name="ai_pr_generate_hint">Write pull request title and description with AI (long press for options)</string>
+    <string name="ai_pr_settings">AI pull request settings</string>
+    <string name="ai_pr_title_editable">Title (editable)</string>
+    <string name="ai_pr_body_editable">Description (editable)</string>
+    <string name="ai_pr_use">Use title and description</string>
+    <string name="ai_pr_fills_form_only">Fills the form only — creating the pull request stays your action.</string>
 </resources>

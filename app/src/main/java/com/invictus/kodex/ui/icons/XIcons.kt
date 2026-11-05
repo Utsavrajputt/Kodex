@@ -3,6 +3,8 @@ package com.invictus.kodex.ui.icons
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
@@ -141,9 +143,34 @@ object XIcons {
                 "m8.25 -.75 a.75 .75 0 1 0 0 1.5 .75 .75 0 0 0 0 -1.5 Z M4.25 12 a.75 .75 0 1 0 0 1.5 .75 .75 0 0 0 0 -1.5 Z",
         )
     }
-    /** Pull request glyph (octicon git-pull-request, 16px grid): two nodes joined by a line, a third with an arrow. */
+    /**
+     * Pull request glyph, drawn as a light 1.8-wide outline on the 24 grid: a branch line with two nodes, a third
+     * node bottom-right and a curved arrow into the base. Lighter and smaller than the old filled octicon.
+     */
     val PullRequest: ImageVector by lazy {
-        icon16("PullRequest", "M 1.5 3.25 a 2.25 2.25 0 1 1 3 2.122 v 5.256 a 2.251 2.251 0 1 1 -1.5 0 V 5.372 A 2.25 2.25 0 0 1 1.5 3.25 Z m 5.677 -.177 L 9.573 .677 A .25 .25 0 0 1 10 .854 V 2.5 h 1 A 2.5 2.5 0 0 1 13.5 5 v 5.628 a 2.251 2.251 0 1 1 -1.5 0 V 5 a 1 1 0 0 0 -1 -1 h -1 v 1.646 a .25 .25 0 0 1 -.427 .177 L 7.177 3.427 a .25 .25 0 0 1 0 -.354 Z M 3.75 2.5 a .75 .75 0 1 0 0 1.5 .75 .75 0 0 0 0 -1.5 Z m 0 9.5 a .75 .75 0 1 0 0 1.5 .75 .75 0 0 0 0 -1.5 Z m 8.25 .75 a .75 .75 0 1 0 1.5 0 .75 .75 0 0 0 -1.5 0 Z")
+        ImageVector.Builder(
+            name = "PullRequest",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        )
+            .addPath(
+                pathData = PathParser().parsePathString(
+                    "M8.25,6a2.25,2.25 0 1,0 -4.5,0a2.25,2.25 0 1,0 4.5,0" +
+                        "M8.25,18a2.25,2.25 0 1,0 -4.5,0a2.25,2.25 0 1,0 4.5,0" +
+                        "M20.25,18a2.25,2.25 0 1,0 -4.5,0a2.25,2.25 0 1,0 4.5,0" +
+                        "M6,8.25V15.75" +
+                        "M18,15.75V10a3,3 0 0,0 -3,-3H11" +
+                        "M13.5,4.5L11,7l2.5,2.5",
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .build()
     }
     /** Material "delete_sweep": bin with sweep lines, for Clean up (close to the old trash, clearly different). */
     val DeleteSweep: ImageVector by lazy {
@@ -313,6 +340,13 @@ object XIcons {
         icon(
             "Merge",
             "M6.41,21L5,19.59l4.83,-4.83c0.75,-0.75 1.17,-1.77 1.17,-2.83V8.83L9.41,10.41L8,9l4,-4 4,4 -1.42,1.41L13,8.83v3.09c0,1.06 0.42,2.08 1.17,2.83L19,19.59 17.59,21 12,15.41 6.41,21z",
+        )
+    }
+    /** [Merge] mirrored top-to-bottom: two branches come in from the top and merge into one pointing down. */
+    val MergeDown: ImageVector by lazy {
+        icon(
+            "MergeDown",
+            "M6.41,3L5,4.41l4.83,4.83c0.75,0.75 1.17,1.77 1.17,2.83V15.17L9.41,13.59L8,15l4,4 4,-4 -1.42,-1.41L13,15.17v-3.09c0,-1.06 0.42,-2.08 1.17,-2.83L19,4.41 17.59,3 12,8.59 6.41,3z",
         )
     }
     val Archive: ImageVector by lazy {

@@ -144,7 +144,7 @@ fun GitHubManagerScreen(
                 actions = {
                     if (state.gate == GitHubGate.Ready) {
                         IconButton(onClick = onOpenPulls) {
-                            Icon(XIcons.PullRequest, contentDescription = stringResource(R.string.pr_title))
+                            Icon(XIcons.PullRequest, contentDescription = stringResource(R.string.pr_title), modifier = Modifier.size(22.dp))
                         }
                         IconButton(onClick = { viewModel.tools.openCleanup() }) {
                             Icon(XIcons.DeleteSweep, contentDescription = stringResource(R.string.gh_cleanup_title))

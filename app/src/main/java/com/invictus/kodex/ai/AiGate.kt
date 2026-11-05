@@ -36,6 +36,15 @@ interface AiGateImpl {
     @Composable
     fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -> Unit, app: android.app.Application)
 
+    /** Write a pull request title + description from the branch diff (New pull request). Fills the form only; never creates the PR. */
+    @Composable
+    fun PullRequestAi(
+        canGenerate: Boolean,
+        loadChanges: suspend (excludeGlobs: String) -> String,
+        onFill: (title: String, body: String) -> Unit,
+        app: android.app.Application,
+    )
+
     /** Explain a commit's diff (commit detail screen). */
     @Composable
     fun ExplainDiffAi(projectPath: String, commitId: String, filePaths: List<String>, app: android.app.Application)

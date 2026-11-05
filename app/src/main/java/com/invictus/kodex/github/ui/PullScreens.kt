@@ -83,6 +83,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.invictus.kodex.R
+import com.invictus.kodex.ai.AiGate
 import com.invictus.kodex.feature.git.BranchPickerDialog
 import com.invictus.kodex.feature.git.BranchPickerPhase
 import com.invictus.kodex.ai.ui.chat.MarkdownContent
@@ -103,7 +104,7 @@ private class PullVisual(val icon: ImageVector, val label: Int, val color: Color
 private fun pullVisual(d: PullDisplay, p: GhPalette): PullVisual = when (d) {
     PullDisplay.Open -> PullVisual(XIcons.PullRequest, R.string.pr_status_open, p.success)
     PullDisplay.Draft -> PullVisual(XIcons.PullRequest, R.string.pr_status_draft, p.onCardMuted)
-    PullDisplay.Merged -> PullVisual(XIcons.Merge, R.string.pr_status_merged, MergedPurple)
+    PullDisplay.Merged -> PullVisual(XIcons.MergeDown, R.string.pr_status_merged, MergedPurple)
     PullDisplay.Closed -> PullVisual(XIcons.PullRequest, R.string.pr_status_closed, p.danger)
 }
 
@@ -464,7 +465,7 @@ private fun PullActionBar(pull: GhPull, acting: Boolean, vm: PullDetailViewModel
                     onClick = vm::openMergeDialog, enabled = canMerge && !acting,
                     modifier = Modifier.weight(1f).height(48.dp),
                 ) {
-                    Icon(XIcons.Merge, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(XIcons.MergeDown, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.pr_merge))
                 }
@@ -779,7 +780,19 @@ private fun CreateForm(state: CreatePullState, vm: CreatePullViewModel, p: GhPal
             value = state.title, onValueChange = vm::setTitle,
             label = { Text(stringResource(R.string.pr_field_title)) },
             singleLine = true,
-            trailingIcon = { if (state.autoFilling) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = p.accent) },
+            trailingIcon = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (state.autoFilling) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = p.accent)
+                    AiGate?.let { g ->
+                        g.PullRequestAi(
+                            canGenerate = state.head.isNotEmpty() && !state.creating,
+                            loadChanges = vm::aiChanges,
+                            onFill = vm::applyAiText,
+                            app = context.applicationContext as android.app.Application,
+                        )
+                    }
+                }
+            },
             colors = fieldColors,
             modifier = Modifier.fillMaxWidth(),
         )

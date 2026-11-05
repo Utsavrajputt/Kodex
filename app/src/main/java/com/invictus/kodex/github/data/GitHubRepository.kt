@@ -1,6 +1,7 @@
 package com.invictus.kodex.github.data
 
 import com.invictus.kodex.github.api.GhArtifact
+import com.invictus.kodex.github.api.GhCompare
 import com.invictus.kodex.github.api.GhDeployment
 import com.invictus.kodex.github.api.GhJob
 import com.invictus.kodex.github.api.GhPull
@@ -134,6 +135,8 @@ class GitHubRepository(
     suspend fun pull(number: Int): GhPull = api.getPull(number)
 
     suspend fun pullCommits(number: Int): List<GhPullCommit> = collectPages(3) { api.listPullCommits(number, it) }
+
+    suspend fun compare(baseBranch: String, head: String): GhCompare = api.compare(baseBranch, head)
 
     suspend fun pullFiles(number: Int): List<GhPullFile> = collectPages(3) { api.listPullFiles(number, it) }
 

@@ -467,6 +467,27 @@ class CreatePullViewModel(
         if (target == BranchPickerTarget.Head && !titleEdited) autoFillTitle(name)
     }
 
+    /** AI result: replaces title + description and keeps the commit-message auto-fill from overriding it. */
+    fun applyAiText(title: String, body: String) {
+        titleEdited = true
+        fillJob?.cancel()
+        _state.update { it.copy(title = title, body = body, autoFilling = false, formError = null) }
+    }
+
+    /** Commits + diff the new pull request would contain, as AI prompt text (paths in [excludeGlobs] are left out). */
+    suspend fun aiChanges(excludeGlobs: String): String {
+        val s = _state.value
+        val own = holder.get() ?: throw IllegalStateException("GitHub is not ready")
+        val upstream = if (s.useUpstream) upstreamRef else null
+        val cmp = if (upstream != null) {
+            repoFactory(upstream).compare(s.base, "${holder.ref?.owner.orEmpty()}:${s.head}")
+        } else {
+            own.compare(s.base, s.head)
+        }
+        if (cmp.isEmpty) return ""
+        return cmp.toPromptText(skip = { com.invictus.kodex.ai.Redactor.isExcluded(it, excludeGlobs) })
+    }
+
     fun setTitle(v: String) { titleEdited = true; _state.update { it.copy(title = v, formError = null) } }
     fun setBody(v: String) = _state.update { it.copy(body = v) }
     fun setDraft(v: Boolean) = _state.update { it.copy(draft = v) }

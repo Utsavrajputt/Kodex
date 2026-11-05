@@ -62,6 +62,14 @@ class RealAiGate(private val app: Application) : AiGateImpl {
         com.invictus.kodex.ai.ui.CommitMessageAi(projectPath, hasChanges, onFill, app)
 
     @Composable
+    override fun PullRequestAi(
+        canGenerate: Boolean,
+        loadChanges: suspend (excludeGlobs: String) -> String,
+        onFill: (title: String, body: String) -> Unit,
+        app: Application,
+    ) = com.invictus.kodex.ai.ui.PullRequestAi(canGenerate, loadChanges, onFill, app)
+
+    @Composable
     override fun ExplainDiffAi(projectPath: String, commitId: String, filePaths: List<String>, app: Application) =
         com.invictus.kodex.ai.ui.ExplainDiffAi(projectPath, commitId, filePaths, app)
 

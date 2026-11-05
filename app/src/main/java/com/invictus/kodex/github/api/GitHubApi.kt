@@ -181,6 +181,23 @@ class GitHubApi(private val http: GitHubHttp, private val repo: GhRepoRef) {
         return GhPull.fromJson(JSONObject(http.sendJson("POST", "$base/pulls", json)))
     }
 
+    /**
+     * `GET /repos/{o}/{r}/compare/{base}...{head}`: commits + files (first 100 of each) of a would-be pull
+     * request. [head] may be `owner:branch` for a fork. One request, so the AI gets its context fast.
+     */
+    suspend fun compare(baseBranch: String, head: String): GhCompare {
+        val j = JSONObject(http.getJson("$base/compare/${enc(baseBranch)}...${enc(head)}", mapOf("per_page" to "100")))
+        val commitsArr = j.optJSONArray("commits")
+        val commits = buildList {
+            if (commitsArr != null) for (i in 0 until commitsArr.length()) {
+                add(commitsArr.getJSONObject(i).optJSONObject("commit")?.optString("message").orEmpty())
+            }
+        }
+        val filesArr = j.optJSONArray("files")
+        val files = buildList { if (filesArr != null) for (i in 0 until filesArr.length()) add(GhPullFile.fromJson(filesArr.getJSONObject(i))) }
+        return GhCompare(j.optInt("total_commits", commits.size), commits, files)
+    }
+
     suspend fun mergePull(number: Int, method: PullMergeMethod) {
         http.send("PUT", "$base/pulls/$number/merge", JSONObject().put("merge_method", method.api))
     }

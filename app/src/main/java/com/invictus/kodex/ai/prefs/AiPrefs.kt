@@ -24,6 +24,7 @@ class AiPrefs(private val context: Context) {
         val CONSENT = booleanPreferencesKey("ai.consent_granted")
         val GLOBS = stringPreferencesKey("ai.exclude_globs")
         val COMMIT_STYLE = stringPreferencesKey("ai.commit_style")
+        val PR_STYLE = stringPreferencesKey("ai.pr_style")
         val AUTO_APPLY = booleanPreferencesKey("ai.auto_apply")
         val GLOBAL_INSTRUCTIONS = stringPreferencesKey("ai.global_instructions")
         val MEMORY_ENABLED = booleanPreferencesKey("ai.memory_enabled")
@@ -72,6 +73,10 @@ class AiPrefs(private val context: Context) {
     /** Name of the last commit-message style picked in the Git screen's AI sheet (tap on the AI button reuses it). */
     val commitStyle: Flow<String> = context.aiPrefsStore.data.map { it[K.COMMIT_STYLE] ?: "" }
     suspend fun setCommitStyle(v: String) { context.aiPrefsStore.edit { it[K.COMMIT_STYLE] = v } }
+
+    /** Name of the last pull-request text style picked in the New pull request AI sheet. */
+    val prStyle: Flow<String> = context.aiPrefsStore.data.map { it[K.PR_STYLE] ?: "" }
+    suspend fun setPrStyle(v: String) { context.aiPrefsStore.edit { it[K.PR_STYLE] = v } }
 
     /** On = the chat agent writes its edits straight to the files (with Undo) instead of staging them for review. */
     val autoApply: Flow<Boolean> = context.aiPrefsStore.data.map { it[K.AUTO_APPLY] ?: false }

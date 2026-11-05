@@ -134,3 +134,44 @@ data class GhPullFile(
         )
     }
 }
+
+/** Result of `GET /compare/{base}...{head}`: what a new pull request would contain. */
+data class GhCompare(
+    val totalCommits: Int,
+    /** Full commit messages, oldest first. */
+    val commits: List<String>,
+    val files: List<GhPullFile>,
+) {
+    val isEmpty: Boolean get() = commits.isEmpty() && files.isEmpty()
+
+    /**
+     * Compact text for the AI: commit subjects (+ a few body lines), the file list, then as many patches as fit
+     * in [maxChars]. Lockfiles/minified assets are skipped, each patch is clipped, and [skip] drops paths the
+     * user excluded from AI (their names too).
+     */
+    fun toPromptText(maxChars: Int = 40_000, skip: (String) -> Boolean = { false }): String {
+        val sb = StringBuilder()
+        sb.append("Commits (").append(totalCommits).append("):\n")
+        commits.take(40).forEach { m ->
+            val lines = m.trim().lines()
+            sb.append("- ").append(lines.first().take(200)).append('\n')
+            lines.drop(1).filter { it.isNotBlank() }.take(3).forEach { sb.append("    ").append(it.take(200)).append('\n') }
+        }
+        if (totalCommits > 40) sb.append("- … and ").append(totalCommits - 40).append(" more\n")
+        val shown = files.filterNot { skip(it.filename) }
+        sb.append("\nFiles changed (").append(shown.size).append("):\n")
+        shown.take(150).forEach { sb.append("- ${it.filename} (${it.status}, +${it.additions} -${it.deletions})\n") }
+        sb.append("\nDiffs:\n")
+        for (f in shown) {
+            if (sb.length >= maxChars) break
+            val patch = f.patch ?: continue
+            if (NOISY.containsMatchIn(f.filename)) continue
+            sb.append("### ").append(f.filename).append('\n').append(patch.take(3000)).append('\n')
+        }
+        return sb.toString().take(maxChars + 3000)
+    }
+
+    private companion object {
+        val NOISY = Regex("""(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|[^/]*\.lock|[^/]*\.lockfile|[^/]*\.min\.(js|css)|[^/]*\.map)$""")
+    }
+}
