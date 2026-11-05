@@ -162,14 +162,19 @@ private fun ErrorBlock(text: String, onRetry: () -> Unit, p: GhPalette) {
 fun PullRequestsScreen(
     projectPath: String,
     onBack: () -> Unit,
-    onCreate: () -> Unit,
     onOpenPull: (Int) -> Unit,
     vm: PullListViewModel = viewModel(
         key = "gh_pulls_$projectPath",
         factory = PullListViewModel.factory(projectPath),
     ),
+    /** The "new pull request" section lives on this screen, so it shares this screen's lifetime. */
+    createVm: CreatePullViewModel = viewModel(
+        key = "gh_pull_create_$projectPath",
+        factory = CreatePullViewModel.factory(projectPath),
+    ),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val create by createVm.state.collectAsStateWithLifecycle()
     val p = ghPalette()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
@@ -178,27 +183,36 @@ fun PullRequestsScreen(
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume() }
     LaunchedEffect(vm) { vm.events.collect { handleEvent(it, context, snackbar, scope) } }
+    LaunchedEffect(createVm) { createVm.created.collect { createVm.reset(); onOpenPull(it) } }
+    LaunchedEffect(createVm) {
+        createVm.createdUpstream.collect { url ->
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            createVm.reset()
+        }
+    }
+    val refreshAll = { vm.refresh(); createVm.retry() }
 
     Scaffold(
         modifier = Modifier.background(p.screen),
         containerColor = Color.Transparent,
         topBar = {
             PullTopBar(stringResource(R.string.pr_title), onBack, p) {
-                IconButton(onClick = vm::refresh) { Icon(XIcons.Refresh, contentDescription = stringResource(R.string.action_refresh)) }
+                IconButton(onClick = refreshAll) { Icon(XIcons.Refresh, contentDescription = stringResource(R.string.action_refresh)) }
             }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm::refresh, modifier = Modifier.padding(padding).fillMaxSize()) {
+        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = refreshAll, modifier = Modifier.padding(padding).fillMaxSize()) {
             LazyColumn(
                 Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (!state.disabled) {
-                    item(key = "create") { CreatePullCard(onCreate, p) }
-                    item(key = "filters") { PullFilters(state.filter, vm::setFilter, p) }
-                }
+                // Hidden while loading or when the repo can't be read: the list below shows that error itself.
+                // With pull requests off on this repo, creating still works for a fork whose upstream accepts them.
+                val canCreate = !state.disabled || (create.upstreamName != null && create.upstreamPullsEnabled)
+                if (canCreate && !create.loading && create.error == null) item(key = "create") { NewPullPanel(create, createVm, p) }
+                if (!state.disabled) item(key = "filters") { PullFilters(state.filter, vm::setFilter, p) }
                 when {
                     state.disabled -> item(key = "disabled") { PullsDisabledBlock(state.repoName, p) }
                     state.loading -> item(key = "loading") { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp), color = p.accent) }
@@ -225,45 +239,99 @@ fun PullRequestsScreen(
             }
         }
     }
+
+    // Step 2 of "new pull request" (title, description, file changes) covers the list, like a detail screen.
+    if (create.step == CreateStep.Details) {
+        androidx.activity.compose.BackHandler { createVm.backToCompare() }
+        Box(Modifier.fillMaxSize().background(p.screen)) {
+            Scaffold(
+                containerColor = Color.Transparent,
+                topBar = { PullTopBar(stringResource(R.string.pr_details_title), { createVm.backToCompare() }, p) },
+            ) { padding ->
+                Box(Modifier.padding(padding).fillMaxSize()) { DetailsStep(create, createVm, p) }
+            }
+        }
+    }
+    CreatePickerDialog(create, createVm)
 }
 
-/** Shown instead of the list when the repo owner switched pull requests off on GitHub. */
+/** Slim notice shown instead of the list when the repo owner switched pull requests off on GitHub. */
 @Composable
 private fun PullsDisabledBlock(repoName: String, p: GhPalette) {
-    val shape = RoundedCornerShape(18.dp)
-    Column(
-        Modifier.fillMaxWidth().padding(top = 8.dp).clip(shape).background(p.runCard).border(1.dp, p.cardBorder, shape).padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        Modifier.fillMaxWidth().clip(shape).background(p.runCard).border(1.dp, p.cardBorder, shape).padding(12.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(XIcons.Info, contentDescription = null, tint = p.accent, modifier = Modifier.size(28.dp))
-        Text(stringResource(R.string.pr_disabled_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = p.onCard)
-        Text(stringResource(R.string.pr_disabled_body, repoName), style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted)
+        Icon(XIcons.Info, contentDescription = null, tint = p.accent, modifier = Modifier.size(20.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(stringResource(R.string.pr_disabled_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = p.onCard)
+            Text(stringResource(R.string.pr_disabled_body, repoName), style = MaterialTheme.typography.bodySmall, color = p.onCardMuted)
+        }
     }
 }
 
-/** The first thing on the screen: start a new pull request. */
+/**
+ * The "new pull request" section at the top of the list: where the changes go (base) and which branch has them
+ * (compare) in one compact card. Compare opens step 2 (title, description, file changes).
+ */
 @Composable
-private fun CreatePullCard(onClick: () -> Unit, p: GhPalette) {
+private fun NewPullPanel(state: CreatePullState, vm: CreatePullViewModel, p: GhPalette) {
     val shape = RoundedCornerShape(18.dp)
-    Row(
+    Column(
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(p.accent.copy(alpha = 0.18f))
-            .border(1.dp, p.accent.copy(alpha = 0.6f), shape)
-            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+            .background(p.accent.copy(alpha = 0.12f))
+            .border(1.dp, p.accent.copy(alpha = 0.5f), shape)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(Modifier.size(40.dp).clip(CircleShape).background(p.accent), contentAlignment = Alignment.Center) {
-            Icon(XIcons.Add, contentDescription = null, tint = p.onInstall, modifier = Modifier.size(24.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(p.accent), contentAlignment = Alignment.Center) {
+                Icon(XIcons.Add, contentDescription = null, tint = p.onInstall, modifier = Modifier.size(18.dp))
+            }
+            Text(
+                stringResource(R.string.pr_create), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                color = p.onCard, modifier = Modifier.weight(1f),
+            )
+            Button(
+                onClick = vm::goDetails, enabled = state.canCompare,
+                contentPadding = PaddingValues(horizontal = 18.dp), modifier = Modifier.height(36.dp),
+            ) { Text(stringResource(R.string.pr_compare)) }
         }
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(R.string.pr_create), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = p.onCard)
-            Text(stringResource(R.string.pr_create_hint), style = MaterialTheme.typography.bodySmall, color = p.onCardMuted)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BranchChip(stringResource(R.string.pr_merge_into), state.base, p, Modifier.weight(1f)) { vm.openPicker(BranchPickerTarget.Base) }
+            Icon(XIcons.ArrowBack, contentDescription = null, tint = p.onCardMuted, modifier = Modifier.size(18.dp))
+            BranchChip(stringResource(R.string.pr_changes_from), state.head.ifEmpty { stringResource(R.string.pr_pick_head) }, p, Modifier.weight(1f)) {
+                vm.openPicker(BranchPickerTarget.Head)
+            }
         }
-        Icon(XIcons.ChevronRight, contentDescription = null, tint = p.onCardMuted)
+        // Only a fork can merge into another repository; otherwise this is just a caption.
+        val repoClick = if (state.upstreamName != null) Modifier.clickable { vm.openPicker(BranchPickerTarget.Repo) } else Modifier
+        Row(repoClick, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(XIcons.GitHub, contentDescription = null, tint = p.onCardMuted, modifier = Modifier.size(14.dp))
+            Text(state.baseRepoName, style = MaterialTheme.typography.labelMedium, color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            if (state.upstreamName != null) Icon(XIcons.KeyboardArrowDown, contentDescription = null, tint = p.onCardMuted, modifier = Modifier.size(16.dp))
+        }
+        CompareResult(state, p)
+    }
+}
+
+@Composable
+private fun BranchChip(label: String, value: String, p: GhPalette, modifier: Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        modifier.clip(shape).background(p.runCard).border(1.dp, p.pickerBorder, shape).clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = p.onCardMuted)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(XIcons.Branch, contentDescription = null, tint = p.accent, modifier = Modifier.size(16.dp))
+            Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Icon(XIcons.KeyboardArrowDown, contentDescription = null, tint = p.onCardMuted, modifier = Modifier.size(18.dp))
+        }
     }
 }
 
@@ -721,119 +789,39 @@ private fun PatchView(patch: String, p: GhPalette) {
 }
 
 // =================================================================================================
-// Create: step 1 "Compare" (repo + branch pickers), step 2 "Details" (title, description, file changes)
+// Create: the compact "new pull request" panel on the list, then step 2 "Details" (title, description, file changes)
 // =================================================================================================
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreatePullRequestScreen(
-    projectPath: String,
-    onBack: () -> Unit,
-    onCreated: (Int) -> Unit,
-    vm: CreatePullViewModel = viewModel(
-        key = "gh_pull_create_$projectPath",
-        factory = CreatePullViewModel.factory(projectPath),
-    ),
-) {
-    val state by vm.state.collectAsStateWithLifecycle()
-    val p = ghPalette()
-    val context = LocalContext.current
-    val details = state.step == CreateStep.Details
-
-    LaunchedEffect(vm) { vm.created.collect { onCreated(it) } }
-    LaunchedEffect(vm) {
-        vm.createdUpstream.collect { url ->
-            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            onBack()
-        }
+private fun CreatePickerDialog(state: CreatePullState, vm: CreatePullViewModel) {
+    val target = state.picker ?: return
+    val items = when (target) {
+        BranchPickerTarget.Repo -> listOfNotNull(state.repoName, state.upstreamName)
+        BranchPickerTarget.Base -> state.baseBranches
+        BranchPickerTarget.Head -> state.branches
     }
-    androidx.activity.compose.BackHandler(enabled = details) { vm.backToCompare() }
-
-    Scaffold(
-        modifier = Modifier.background(p.screen),
-        containerColor = Color.Transparent,
-        topBar = {
-            PullTopBar(
-                stringResource(if (details) R.string.pr_details_title else R.string.pr_create_screen_title),
-                { if (details) vm.backToCompare() else onBack() },
-                p,
-            )
-        },
-    ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
-            when {
-                state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center), color = p.accent)
-                state.error != null -> ErrorBlock(state.error?.resolve(context).orEmpty(), vm::retry, p)
-                details -> DetailsStep(state, vm, p)
-                else -> CompareStep(state, vm, p)
-            }
-        }
-    }
-
-    state.picker?.let { target ->
-        val items = when (target) {
-            BranchPickerTarget.Repo -> listOfNotNull(state.repoName, state.upstreamName)
-            BranchPickerTarget.Base -> state.baseBranches
-            BranchPickerTarget.Head -> state.branches
-        }
-        BranchPickerDialog(
-            title = stringResource(
-                when (target) {
-                    BranchPickerTarget.Repo -> R.string.pr_base_repo
-                    BranchPickerTarget.Base -> R.string.pr_base_branch
-                    BranchPickerTarget.Head -> R.string.pr_head_branch
-                },
-            ),
-            description = null,
-            phase = if (items.isEmpty()) BranchPickerPhase.EMPTY else BranchPickerPhase.LIST,
-            branches = items,
-            busyText = "",
-            emptyText = stringResource(R.string.pr_no_branches),
-            dismissible = true,
-            selected = when (target) {
-                BranchPickerTarget.Repo -> state.baseRepoName
-                BranchPickerTarget.Base -> state.base
-                BranchPickerTarget.Head -> state.head
+    BranchPickerDialog(
+        title = stringResource(
+            when (target) {
+                BranchPickerTarget.Repo -> R.string.pr_base_repo
+                BranchPickerTarget.Base -> R.string.pr_base_branch
+                BranchPickerTarget.Head -> R.string.pr_head_branch
             },
-            onPick = vm::pickBranch,
-            onDismiss = vm::dismissPicker,
-        )
-    }
-}
-
-// ---- step 1: compare -------------------------------------------------------------------------
-
-@Composable
-private fun CompareStep(state: CreatePullState, vm: CreatePullViewModel, p: GhPalette) {
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(stringResource(R.string.pr_compare_intro), style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted)
-        SelectorGroup(stringResource(R.string.pr_merge_into), p) {
-            SelectorRow(XIcons.GitHub, stringResource(R.string.pr_label_repo), state.baseRepoName, p,
-                onClick = if (state.upstreamName != null) ({ vm.openPicker(BranchPickerTarget.Repo) }) else null)
-            SelectorDivider(p)
-            SelectorRow(XIcons.Branch, stringResource(R.string.pr_label_branch), state.base, p) { vm.openPicker(BranchPickerTarget.Base) }
-        }
-        Icon(
-            XIcons.ArrowDownward, contentDescription = null, tint = p.onCardMuted,
-            modifier = Modifier.align(Alignment.CenterHorizontally).size(22.dp),
-        )
-        SelectorGroup(stringResource(R.string.pr_changes_from), p) {
-            SelectorRow(XIcons.GitHub, stringResource(R.string.pr_label_repo), state.repoName, p, onClick = null)
-            SelectorDivider(p)
-            SelectorRow(XIcons.Branch, stringResource(R.string.pr_label_branch), state.head.ifEmpty { stringResource(R.string.pr_pick_head) }, p) {
-                vm.openPicker(BranchPickerTarget.Head)
-            }
-        }
-        CompareResult(state, p)
-        Button(
-            onClick = vm::goDetails, enabled = state.canCompare,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text(stringResource(R.string.pr_compare), style = MaterialTheme.typography.titleMedium) }
-        Spacer(Modifier.height(16.dp))
-    }
+        ),
+        description = null,
+        phase = if (items.isEmpty()) BranchPickerPhase.EMPTY else BranchPickerPhase.LIST,
+        branches = items,
+        busyText = "",
+        emptyText = stringResource(R.string.pr_no_branches),
+        dismissible = true,
+        selected = when (target) {
+            BranchPickerTarget.Repo -> state.baseRepoName
+            BranchPickerTarget.Base -> state.base
+            BranchPickerTarget.Head -> state.head
+        },
+        onPick = vm::pickBranch,
+        onDismiss = vm::dismissPicker,
+    )
 }
 
 /** One line under the pickers: what the chosen branches would contain, or why Compare is not possible. */
@@ -845,14 +833,14 @@ private fun CompareResult(state: CreatePullState, p: GhPalette) {
         !state.basePullsEnabled -> ResultText(stringResource(R.string.pr_base_disabled, state.baseRepoName), p.danger)
         state.head.isEmpty() -> ResultText(stringResource(R.string.pr_compare_pick_head), p.onCardMuted)
         state.sameBranch -> ResultText(stringResource(R.string.pr_compare_same), p.danger)
-        state.cmpLoading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(horizontal = 4.dp)) {
+        state.cmpLoading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier) {
             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = p.accent)
-            Text(stringResource(R.string.pr_compare_loading), style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted)
+            Text(stringResource(R.string.pr_compare_loading), style = MaterialTheme.typography.bodySmall, color = p.onCardMuted)
         }
         state.cmpError != null -> ResultText(state.cmpError.resolve(context), p.danger)
         cmp != null && cmp.isEmpty -> ResultText(stringResource(R.string.pr_compare_empty), p.onCardMuted)
-        cmp != null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(horizontal = 4.dp)) {
-            Text(stringResource(R.string.pr_compare_summary, cmp.totalCommits, cmp.files.size), style = MaterialTheme.typography.bodyMedium, color = p.onCard, modifier = Modifier.weight(1f, fill = false))
+        cmp != null -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier) {
+            Text(stringResource(R.string.pr_compare_summary, cmp.totalCommits, cmp.files.size), style = MaterialTheme.typography.bodySmall, color = p.onCard, modifier = Modifier.weight(1f, fill = false))
             Text("+${cmp.files.sumOf { it.additions }}", style = MaterialTheme.typography.labelLarge, color = p.success, fontWeight = FontWeight.SemiBold)
             Text("\u2212${cmp.files.sumOf { it.deletions }}", style = MaterialTheme.typography.labelLarge, color = p.danger, fontWeight = FontWeight.SemiBold)
         }
@@ -861,38 +849,7 @@ private fun CompareResult(state: CreatePullState, p: GhPalette) {
 
 @Composable
 private fun ResultText(text: String, color: Color) {
-    Text(text, style = MaterialTheme.typography.bodyMedium, color = color, modifier = Modifier.padding(horizontal = 4.dp))
-}
-
-@Composable
-private fun SelectorGroup(title: String, p: GhPalette, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, style = MaterialTheme.typography.labelLarge, color = p.accent, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 4.dp))
-        Column(Modifier.fillMaxWidth().clip(shape).background(p.runCard).border(1.dp, p.pickerBorder, shape), content = content)
-    }
-}
-
-@Composable
-private fun SelectorDivider(p: GhPalette) {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(p.cardBorder))
-}
-
-/** [onClick] null = fixed value (no chevron, not tappable). */
-@Composable
-private fun SelectorRow(icon: ImageVector, label: String, value: String, p: GhPalette, onClick: (() -> Unit)?) {
-    Row(
-        Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(icon, contentDescription = null, tint = p.accent, modifier = Modifier.size(20.dp))
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.labelMedium, color = p.onCardMuted)
-            Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        if (onClick != null) Icon(XIcons.KeyboardArrowDown, contentDescription = null, tint = p.onCardMuted)
-    }
+    Text(text, style = MaterialTheme.typography.bodySmall, color = color)
 }
 
 // ---- step 2: details (title, description, then the file changes like GitHub) ---------------------

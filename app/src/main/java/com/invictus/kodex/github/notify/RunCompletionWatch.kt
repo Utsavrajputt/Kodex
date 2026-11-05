@@ -90,7 +90,7 @@ object RunCompletionWatch {
                             val label = if (finishing) app.getString(R.string.gh_notif_run_finishing) else step
                             notifier.updateLive(
                                 title,
-                                listOfNotNull(repoRef.name, label, "${progress.percent}%").joinToString(" \u2022 "),
+                                listOfNotNull(repoRef.name, label).joinToString(" \u2022 "),
                                 progress.percent, projectPath, run.id, stoppable = true, startedAtMs = startedMs(latest),
                             )
                             nextPollMs = if (finishing || progress.percent >= FAST_FROM_PERCENT) FAST_POLL_MS else POLL_MS

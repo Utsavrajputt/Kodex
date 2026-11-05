@@ -28,7 +28,6 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.invictus.kodex.github.ui.AllApksScreen
 import com.invictus.kodex.github.ui.GitHubManagerScreen
-import com.invictus.kodex.github.ui.CreatePullRequestScreen
 import com.invictus.kodex.github.ui.GitHubRunsScreen
 import com.invictus.kodex.github.ui.PullDetailScreen
 import com.invictus.kodex.github.ui.PullRequestsScreen
@@ -378,7 +377,6 @@ fun KodexNavHost(
                 PullRequestsScreen(
                     projectPath = path,
                     onBack = { navController.popBackStack() },
-                    onCreate = { navController.navigate(Routes.githubPullCreate(path)) },
                     onOpenPull = { number -> navController.navigate(Routes.githubPull(path, number)) },
                 )
             }
@@ -391,21 +389,6 @@ fun KodexNavHost(
             val number = entry.arguments?.getInt("number")
             if (path != null && number != null) {
                 PullDetailScreen(projectPath = path, number = number, onBack = { navController.popBackStack() })
-            }
-        }
-        composable(Routes.GITHUB_PULL_CREATE) { entry ->
-            val path = entry.arguments?.getString("projectPath")
-            if (path != null) {
-                CreatePullRequestScreen(
-                    projectPath = path,
-                    onBack = { navController.popBackStack() },
-                    // Replace the form with the new pull request so Back lands on the list.
-                    onCreated = { number ->
-                        navController.navigate(Routes.githubPull(path, number)) {
-                            popUpTo(Routes.GITHUB_PULL_CREATE) { inclusive = true }
-                        }
-                    },
-                )
             }
         }
         composable(Routes.CODE_SEARCH) { entry ->

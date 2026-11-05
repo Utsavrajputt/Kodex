@@ -85,7 +85,7 @@
     <string name="ai_pr_fills_form_only">Fills the form only — creating the pull request stays your action.</string>
     <string name="pr_err_not_found_repo">Couldn\'t read %1$s (GitHub says: %2$s).\n\nThe token can\'t access this repo or its pull requests. Fine-grained tokens need this repo selected with \"Pull requests: Read\"; classic tokens need the \"repo\" scope (private) or \"public_repo\".</string>
     <string name="pr_disabled_title">Pull requests are turned off</string>
-    <string name="pr_disabled_body">The owner of %1$s disabled pull requests for this repository, so there is nothing to show here. To use them, enable it on GitHub: Settings \u2192 General \u2192 Features \u2192 Pull requests.</string>
+    <string name="pr_disabled_body">%1$s has pull requests switched off, so there is no list. Turn them on in GitHub: Settings \u2192 General \u2192 Features.</string>
     <string name="pr_base_disabled">Pull requests are turned off on %1$s, so you can\'t open one there.</string>
     <string name="pr_compare_intro">Choose where your changes should go and which branch has them. Nothing is created yet.</string>
     <string name="pr_merge_into">Merge into</string>

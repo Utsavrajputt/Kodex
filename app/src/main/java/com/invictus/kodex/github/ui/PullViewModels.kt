@@ -645,6 +645,17 @@ class CreatePullViewModel(
 
     fun backToCompare() = _state.update { it.copy(step = CreateStep.Compare, formError = null) }
 
+    /** After a pull request was created: back to an empty compare panel. */
+    fun reset() {
+        titleEdited = false
+        fillJob?.cancel()
+        cmpJob?.cancel()
+        _state.update {
+            it.copy(step = CreateStep.Compare, title = "", body = "", draft = false, creating = false, formError = null,
+                head = "", cmp = null, cmpLoading = false, cmpError = null, autoFilling = false)
+        }
+    }
+
     /** AI result: replaces title + description and keeps the commit-message auto-fill from overriding it. */
     fun applyAiText(title: String, body: String) {
         titleEdited = true
