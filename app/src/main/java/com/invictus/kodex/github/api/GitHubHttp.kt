@@ -126,6 +126,25 @@ class GitHubHttp(
         }
     }
 
+    /** Like [send] but returns the response body (create calls: the new object). */
+    suspend fun sendJson(method: String, path: String, body: JSONObject): String = withContext(Dispatchers.IO) {
+        val req = request(buildUrl(path, emptyMap()))
+            .header("Accept", ACCEPT_JSON)
+            .method(method, body.toString().toRequestBody(JSON))
+            .build()
+        try {
+            api.newCall(req).execute().use { res ->
+                capture(res)
+                if (!res.isSuccessful) throw toError(res)
+                res.body?.string().orEmpty()
+            }
+        } catch (e: GitHubError) {
+            throw e
+        } catch (e: IOException) {
+            throw GitHubError.Offline()
+        }
+    }
+
     /**
      * Downloads a plain-text endpoint (job logs) into [dest]. The API answers 302 to a short-lived
      * URL; that second hop is made WITHOUT credentials. Returns true when [maxBytes] cut it short.
@@ -315,7 +334,18 @@ class GitHubHttp(
     }
 
     private fun toError(res: Response): GitHubError {
-        val msg = runCatching { JSONObject(res.body?.string().orEmpty()).optString("message") }.getOrNull()
+        val json = runCatching { JSONObject(res.body?.string().orEmpty()) }.getOrNull()
+        var msg = json?.optString("message")
+        if (res.code == 422 && json != null) {
+            // "Validation Failed" alone says nothing; the useful text ("A pull request already exists...") is in errors[].
+            val errs = json.optJSONArray("errors")
+            val detail = errs?.let { a ->
+                (0 until a.length()).firstNotNullOfOrNull { i ->
+                    (a.optJSONObject(i)?.optString("message") ?: a.optString(i)).takeIf { !it.isNullOrBlank() }
+                }
+            }
+            if (!detail.isNullOrBlank()) msg = detail
+        }
         return GitHubError.from(
             code = res.code,
             apiMessage = msg,

@@ -98,6 +98,7 @@ fun GitHubManagerScreen(
     onOpenRemotes: () -> Unit,
     onGitSetup: () -> Unit,
     onOpenGitHubSettings: () -> Unit,
+    onOpenPulls: () -> Unit,
     viewModel: GitHubManagerViewModel = viewModel(
         key = "gh_manager_$projectPath",
         factory = GitHubManagerViewModel.factory(projectPath),
@@ -142,6 +143,9 @@ fun GitHubManagerScreen(
                 },
                 actions = {
                     if (state.gate == GitHubGate.Ready) {
+                        IconButton(onClick = onOpenPulls) {
+                            Icon(XIcons.PullRequest, contentDescription = stringResource(R.string.pr_title))
+                        }
                         IconButton(onClick = { viewModel.tools.openCleanup() }) {
                             Icon(XIcons.DeleteSweep, contentDescription = stringResource(R.string.gh_cleanup_title))
                         }
@@ -485,7 +489,7 @@ internal fun RunFilters(state: GitHubManagerState, vm: GitHubManagerViewModel) {
 
 /** Pill filter: optional coloured status dot + label; selected = accent tint fill and border, else dark fill and dim border. */
 @Composable
-private fun RunFilterChip(
+internal fun RunFilterChip(
     label: String,
     dot: Color?,
     selected: Boolean,

@@ -63,7 +63,7 @@ sealed class GitHubError(message: String) : IOException(message) {
                     else -> MissingPermission(msg.ifEmpty { "Resource not accessible by token" })
                 }
                 404 -> NotFound(msg.ifEmpty { "Not found" })
-                409 -> Conflict(msg.ifEmpty { "Conflict" })
+                405, 409 -> Conflict(msg.ifEmpty { "Conflict" })
                 410 -> Gone(msg.ifEmpty { "Gone" })
                 422 -> Validation(msg.ifEmpty { "Validation failed" })
                 else -> Http(code, msg.ifEmpty { "HTTP $code" })

@@ -141,6 +141,60 @@ class GitHubApi(private val http: GitHubHttp, private val repo: GhRepoRef) {
 
     suspend fun deleteDeployment(id: Long) { http.send("DELETE", "$base/deployments/$id") }
 
+    // ---- pull requests -------------------------------------------------------------------
+
+    /** `GET /repos/{o}/{r}/pulls` newest first. [state] = open | closed | all. */
+    suspend fun listPulls(page: Int, state: String, perPage: Int = 30): Page<GhPull> {
+        val arr = JSONArray(
+            http.getJson(
+                "$base/pulls",
+                mapOf("state" to state, "sort" to "created", "direction" to "desc", "per_page" to perPage.toString(), "page" to page.toString()),
+            ),
+        )
+        val items = buildList { for (i in 0 until arr.length()) add(GhPull.fromJson(arr.getJSONObject(i))) }
+        return Page(items, page, hasMore = items.size == perPage, total = items.size)
+    }
+
+    /** Detail: unlike the list it has body counts, `mergeable` and `mergeable_state`. */
+    suspend fun getPull(number: Int): GhPull = GhPull.fromJson(JSONObject(http.getJson("$base/pulls/$number")))
+
+    suspend fun listPullCommits(number: Int, page: Int): Page<GhPullCommit> {
+        val arr = JSONArray(http.getJson("$base/pulls/$number/commits", mapOf("per_page" to "100", "page" to page.toString())))
+        val items = buildList { for (i in 0 until arr.length()) add(GhPullCommit.fromJson(arr.getJSONObject(i))) }
+        return Page(items, page, hasMore = items.size == 100, total = items.size)
+    }
+
+    suspend fun listPullFiles(number: Int, page: Int): Page<GhPullFile> {
+        val arr = JSONArray(http.getJson("$base/pulls/$number/files", mapOf("per_page" to "100", "page" to page.toString())))
+        val items = buildList { for (i in 0 until arr.length()) add(GhPullFile.fromJson(arr.getJSONObject(i))) }
+        return Page(items, page, hasMore = items.size == 100, total = items.size)
+    }
+
+    suspend fun createPull(title: String, body: String, head: String, baseBranch: String, draft: Boolean): GhPull {
+        val json = JSONObject().put("title", title).put("head", head).put("base", baseBranch).put("draft", draft)
+        if (body.isNotBlank()) json.put("body", body)
+        return GhPull.fromJson(JSONObject(http.sendJson("POST", "$base/pulls", json)))
+    }
+
+    suspend fun mergePull(number: Int, method: PullMergeMethod) {
+        http.send("PUT", "$base/pulls/$number/merge", JSONObject().put("merge_method", method.api))
+    }
+
+    /** Close (`closed`) or reopen (`open`). */
+    suspend fun setPullState(number: Int, state: String) {
+        http.send("PATCH", "$base/pulls/$number", JSONObject().put("state", state))
+    }
+
+    suspend fun deleteBranch(branch: String) { http.send("DELETE", "$base/git/refs/heads/${enc(branch)}") }
+
+    /** Message of the newest commit on [ref] (branch name): feeds the "auto-fill title" of a new pull request. */
+    suspend fun tipCommitMessage(ref: String): String {
+        val j = JSONObject(http.getJson("$base/commits/${enc(ref)}"))
+        return j.optJSONObject("commit")?.optString("message").orEmpty()
+    }
+
+    private fun enc(ref: String): String = java.net.URLEncoder.encode(ref, "UTF-8").replace("+", "%20").replace("%2F", "/")
+
     companion object {
         const val RAW_ACCEPT = "application/vnd.github.raw+json"
     }

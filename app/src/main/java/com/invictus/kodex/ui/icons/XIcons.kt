@@ -141,6 +141,10 @@ object XIcons {
                 "m8.25 -.75 a.75 .75 0 1 0 0 1.5 .75 .75 0 0 0 0 -1.5 Z M4.25 12 a.75 .75 0 1 0 0 1.5 .75 .75 0 0 0 0 -1.5 Z",
         )
     }
+    /** Pull request glyph (octicon git-pull-request, 16px grid): two nodes joined by a line, a third with an arrow. */
+    val PullRequest: ImageVector by lazy {
+        icon16("PullRequest", "M 1.5 3.25 a 2.25 2.25 0 1 1 3 2.122 v 5.256 a 2.251 2.251 0 1 1 -1.5 0 V 5.372 A 2.25 2.25 0 0 1 1.5 3.25 Z m 5.677 -.177 L 9.573 .677 A .25 .25 0 0 1 10 .854 V 2.5 h 1 A 2.5 2.5 0 0 1 13.5 5 v 5.628 a 2.251 2.251 0 1 1 -1.5 0 V 5 a 1 1 0 0 0 -1 -1 h -1 v 1.646 a .25 .25 0 0 1 -.427 .177 L 7.177 3.427 a .25 .25 0 0 1 0 -.354 Z M 3.75 2.5 a .75 .75 0 1 0 0 1.5 .75 .75 0 0 0 0 -1.5 Z m 0 9.5 a .75 .75 0 1 0 0 1.5 .75 .75 0 0 0 0 -1.5 Z m 8.25 .75 a .75 .75 0 1 0 1.5 0 .75 .75 0 0 0 -1.5 0 Z")
+    }
     /** Material "delete_sweep": bin with sweep lines, for Clean up (close to the old trash, clearly different). */
     val DeleteSweep: ImageVector by lazy {
         icon(

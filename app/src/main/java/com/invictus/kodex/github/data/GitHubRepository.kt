@@ -3,7 +3,12 @@ package com.invictus.kodex.github.data
 import com.invictus.kodex.github.api.GhArtifact
 import com.invictus.kodex.github.api.GhDeployment
 import com.invictus.kodex.github.api.GhJob
+import com.invictus.kodex.github.api.GhPull
+import com.invictus.kodex.github.api.GhPullCommit
+import com.invictus.kodex.github.api.GhPullFile
 import com.invictus.kodex.github.api.GhRepoRef
+import com.invictus.kodex.github.api.PullFilter
+import com.invictus.kodex.github.api.PullMergeMethod
 import com.invictus.kodex.github.api.GhRun
 import com.invictus.kodex.github.api.GhWorkflow
 import com.invictus.kodex.github.api.GitHubApi
@@ -104,6 +109,48 @@ class GitHubRepository(
         }
     }
 
+    // ---- pull requests ---------------------------------------------------------------
+
+    /**
+     * One list load. Filters the API cannot do itself (merged / draft / mine) are applied here, so a raw page can
+     * come back mostly empty: keep fetching (bounded) until there is a useful batch. [Page.page] is the last raw page read.
+     */
+    suspend fun pulls(startPage: Int, filter: PullFilter, login: String?): Page<GhPull> {
+        val out = ArrayList<GhPull>()
+        var page = startPage
+        var fetched = 0
+        var more: Boolean
+        while (true) {
+            val raw = api.listPulls(page, filter.apiState)
+            out += raw.items.filter { filter.matches(it, login) }
+            fetched++
+            more = raw.hasMore
+            if (!more || out.size >= PULL_MIN_BATCH || fetched >= PULL_MAX_RAW_PAGES) break
+            page++
+        }
+        return Page(out, page, more, out.size)
+    }
+
+    suspend fun pull(number: Int): GhPull = api.getPull(number)
+
+    suspend fun pullCommits(number: Int): List<GhPullCommit> = collectPages(3) { api.listPullCommits(number, it) }
+
+    suspend fun pullFiles(number: Int): List<GhPullFile> = collectPages(3) { api.listPullFiles(number, it) }
+
+    suspend fun createPull(title: String, body: String, head: String, base: String, draft: Boolean): GhPull =
+        api.createPull(title, body, head, base, draft)
+
+    suspend fun mergePull(number: Int, method: PullMergeMethod) = api.mergePull(number, method)
+    suspend fun closePull(number: Int) = api.setPullState(number, "closed")
+    suspend fun reopenPull(number: Int) = api.setPullState(number, "open")
+    suspend fun deleteBranch(branch: String) = api.deleteBranch(branch)
+    suspend fun tipCommitMessage(ref: String): String = api.tipCommitMessage(ref)
+
+    /** Every branch name (100 per page, bounded). */
+    suspend fun allBranches(maxPages: Int = 5): List<String> = collectPages(maxPages) { api.listBranches(it) }
+
+    private suspend fun <T> collectPages(maxPages: Int, fetch: suspend (Int) -> Page<T>): List<T> = scan(maxPages, fetch)
+
     // ---- M16: cleanup scans (plan 8.6: 100 per page, bounded) ----------------------------
 
     suspend fun scanCompletedRuns(maxPages: Int = SCAN_MAX_PAGES): List<GhRun> =
@@ -151,5 +198,7 @@ class GitHubRepository(
         /** Artifact zips above this are refused (an APK is capped lower after extraction). */
         const val MAX_ARTIFACT_BYTES = 320L * 1024 * 1024
         private const val SCAN_MAX_PAGES = 10
+        private const val PULL_MIN_BATCH = 10
+        private const val PULL_MAX_RAW_PAGES = 5
     }
 }
