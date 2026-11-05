@@ -88,6 +88,7 @@ import com.invictus.kodex.feature.git.BranchPickerDialog
 import com.invictus.kodex.feature.git.BranchPickerPhase
 import com.invictus.kodex.ai.ui.chat.MarkdownContent
 import com.invictus.kodex.github.api.GhPull
+import com.invictus.kodex.feature.git.GitCommitDetailScreen
 import com.invictus.kodex.github.api.GhPullCommit
 import com.invictus.kodex.github.api.GhPullFile
 import com.invictus.kodex.github.api.PullDisplay
@@ -395,12 +396,31 @@ fun PullDetailScreen(
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         when (state.tab) {
                             PullTab.Overview -> OverviewTab(pull, now, p)
-                            PullTab.Commits -> CommitsTab(state.commits, state.commitsLoading, state.commitsError?.resolve(context), vm::retryTab, now, p)
+                            PullTab.Commits -> CommitsTab(state.commits, state.commitsLoading, state.commitsError?.resolve(context), vm::retryTab, vm::openCommit, now, p)
                             PullTab.Files -> FilesTab(state.files, state.filesLoading, state.filesError?.resolve(context), vm::retryTab, p)
                         }
                     }
                 }
             }
+        }
+    }
+
+    state.commitView?.let { cv ->
+        androidx.activity.compose.BackHandler { if (cv.selected != null) vm.closeCommitFile() else vm.closeCommit() }
+        Box(Modifier.fillMaxSize()) {
+            GitCommitDetailScreen(
+                commit = cv.summary,
+                files = cv.files,
+                filesLoading = cv.loading,
+                selectedFile = cv.selected,
+                fileDiff = cv.diff,
+                diffLoading = cv.diffLoading,
+                totalAdded = cv.added,
+                totalRemoved = cv.removed,
+                onOpenFile = vm::openCommitFile,
+                onCloseFile = vm::closeCommitFile,
+                onCancel = vm::closeCommit,
+            )
         }
     }
 
@@ -565,7 +585,7 @@ private fun StatChip(text: String, color: Color, p: GhPalette) {
 }
 
 @Composable
-private fun CommitsTab(commits: List<GhPullCommit>?, loading: Boolean, error: String?, onRetry: () -> Unit, nowMs: Long, p: GhPalette) {
+private fun CommitsTab(commits: List<GhPullCommit>?, loading: Boolean, error: String?, onRetry: () -> Unit, onOpen: (GhPullCommit) -> Unit, nowMs: Long, p: GhPalette) {
     when {
         error != null && commits == null -> ErrorBlock(error, onRetry, p)
         commits == null || loading -> LinearProgressIndicator(Modifier.fillMaxWidth(), color = p.accent)
@@ -574,7 +594,7 @@ private fun CommitsTab(commits: List<GhPullCommit>?, loading: Boolean, error: St
             items(commits, key = { it.sha }) { c ->
                 val shape = RoundedCornerShape(14.dp)
                 Row(
-                    Modifier.fillMaxWidth().clip(shape).background(p.runCard).border(1.dp, p.cardBorder, shape).padding(12.dp),
+                    Modifier.fillMaxWidth().clip(shape).background(p.runCard).border(1.dp, p.cardBorder, shape).clickable { onOpen(c) }.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {

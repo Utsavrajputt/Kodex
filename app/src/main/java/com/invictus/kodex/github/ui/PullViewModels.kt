@@ -7,7 +7,13 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.invictus.kodex.KodexApp
 import com.invictus.kodex.R
+import com.invictus.kodex.core.git.DiffParser
+import com.invictus.kodex.core.git.model.GitCommitFile
+import com.invictus.kodex.core.git.model.GitCommitFileChange
+import com.invictus.kodex.core.git.model.GitCommitSummary
+import com.invictus.kodex.core.git.model.GitFileDiffResult
 import com.invictus.kodex.core.github.GitHubProfileRepository
+import com.invictus.kodex.github.api.GhCommitDetail
 import com.invictus.kodex.github.api.GhPull
 import com.invictus.kodex.github.api.GhPullCommit
 import com.invictus.kodex.github.api.GhPullFile
@@ -20,6 +26,7 @@ import com.invictus.kodex.github.data.GitHubProjectResolver
 import com.invictus.kodex.github.data.GitHubRepository
 import com.invictus.kodex.github.data.GitHubResolution
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -30,6 +37,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /** Resolves the project's GitHub repo once and keeps the repository object; shared by the three pull request screens. */
@@ -52,6 +60,12 @@ private class RepoHolder(
         }
     }
 }
+
+/** Like [describe], but a 404 names the repo and GitHub's own message so the cause can be pinned down. */
+private fun describeFor(repo: String?, e: GitHubError): GhText =
+    if (e is GitHubError.NotFound && !repo.isNullOrBlank()) {
+        GhText.Res(R.string.pr_err_not_found_repo, listOf(repo, e.message.orEmpty().ifBlank { "Not Found" }))
+    } else describe(e)
 
 // ---- list ----------------------------------------------------------------------------------
 
@@ -140,9 +154,9 @@ class PullListViewModel(
             } catch (e: GitHubError) {
                 if (_state.value.items.isNotEmpty()) {
                     _state.update { it.copy(loading = false, loadingMore = false, refreshing = false) }
-                    _events.tryEmit(GhEvent.Snack(describe(e)))
+                    _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e)))
                 } else {
-                    fail(describe(e))
+                    fail(describeFor(holder.ref?.fullName, e))
                 }
             }
         }
@@ -181,6 +195,37 @@ data class PullDetailState(
     val closeDialog: Boolean = false,
     val mergeMethod: PullMergeMethod = PullMergeMethod.Merge,
     val deleteBranch: Boolean = false,
+    /** Commit opened from the Commits tab (same detail screen as git history); null = list. */
+    val commitView: PullCommitView? = null,
+)
+
+/** Remote twin of the git-history commit detail state: header, changed files, and the open file's diff. */
+data class PullCommitView(
+    val summary: GitCommitSummary,
+    val loading: Boolean = true,
+    val files: List<GitCommitFile> = emptyList(),
+    val patches: Map<String, GhPullFile> = emptyMap(),
+    val added: Int? = null,
+    val removed: Int? = null,
+    val selected: GitCommitFile? = null,
+    val diff: GitFileDiffResult? = null,
+    val diffLoading: Boolean = false,
+)
+
+private fun GhPullFile.toCommitFile() = GitCommitFile(
+    path = filename,
+    oldPath = previousFilename,
+    change = when (status) {
+        "added" -> GitCommitFileChange.ADDED
+        "removed" -> GitCommitFileChange.DELETED
+        "renamed" -> GitCommitFileChange.RENAMED
+        "copied" -> GitCommitFileChange.COPIED
+        else -> GitCommitFileChange.MODIFIED
+    },
+)
+
+private fun GhCommitDetail.toSummary() = GitCommitSummary(
+    id = sha, shortId = sha.take(7), message = message, author = author, timeMs = dateMs, authorEmail = authorEmail,
 )
 
 class PullDetailViewModel(
@@ -223,7 +268,7 @@ class PullDetailViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
-                if (silent && _state.value.pull != null) _events.tryEmit(GhEvent.Snack(describe(e))) else fail(describe(e))
+                if (silent && _state.value.pull != null) _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e))) else fail(describeFor(holder.ref?.fullName, e))
             }
         }
     }
@@ -260,7 +305,7 @@ class PullDetailViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
-                _state.update { it.copy(commitsLoading = false, commitsError = describe(e)) }
+                _state.update { it.copy(commitsLoading = false, commitsError = describeFor(holder.ref?.fullName, e)) }
             }
         }
     }
@@ -275,10 +320,71 @@ class PullDetailViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
-                _state.update { it.copy(filesLoading = false, filesError = describe(e)) }
+                _state.update { it.copy(filesLoading = false, filesError = describeFor(holder.ref?.fullName, e)) }
             }
         }
     }
+
+    // ---- commit detail (tap a commit in the Commits tab) ----
+
+    fun openCommit(c: GhPullCommit) {
+        _state.update {
+            it.copy(
+                commitView = PullCommitView(
+                    GitCommitSummary(c.sha, c.shortSha, c.message, c.author, c.date?.toEpochMilli() ?: 0L),
+                ),
+            )
+        }
+        viewModelScope.launch {
+            try {
+                val repo = holder.get() ?: run {
+                    _state.update { it.copy(commitView = null) }
+                    _events.tryEmit(GhEvent.Snack(GhText.Res(R.string.gh_err_not_ready)))
+                    return@launch
+                }
+                val d = repo.commit(c.sha)
+                _state.update { st ->
+                    val cur = st.commitView
+                    if (cur == null || cur.summary.id != c.sha) st
+                    else st.copy(
+                        commitView = cur.copy(
+                            summary = d.toSummary(),
+                            loading = false,
+                            files = d.files.map { f -> f.toCommitFile() },
+                            patches = d.files.associateBy { f -> f.filename },
+                            added = d.additions,
+                            removed = d.deletions,
+                        ),
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: GitHubError) {
+                _state.update { it.copy(commitView = null) }
+                _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e)))
+            }
+        }
+    }
+
+    fun openCommitFile(f: GitCommitFile) {
+        val v = _state.value.commitView ?: return
+        _state.update { it.copy(commitView = v.copy(selected = f, diff = null, diffLoading = true)) }
+        viewModelScope.launch {
+            val patch = v.patches[f.path]?.patch
+            val diff = withContext(Dispatchers.Default) {
+                // No patch = binary or too large for GitHub to inline: the viewer shows its binary notice.
+                DiffParser.parse(patch ?: "Binary files differ\n", f.path, "").copy(workFilePath = null)
+            }
+            _state.update { st ->
+                val cur = st.commitView
+                if (cur == null || cur.selected != f) st else st.copy(commitView = cur.copy(diff = diff, diffLoading = false))
+            }
+        }
+    }
+
+    fun closeCommitFile() = _state.update { st -> st.copy(commitView = st.commitView?.copy(selected = null, diff = null, diffLoading = false)) }
+
+    fun closeCommit() = _state.update { it.copy(commitView = null) }
 
     // ---- merge / close / reopen ----
 
@@ -314,7 +420,7 @@ class PullDetailViewModel(
                 throw e
             } catch (e: GitHubError) {
                 _state.update { it.copy(acting = false) }
-                _events.tryEmit(GhEvent.Snack(describe(e)))
+                _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e)))
             }
         }
     }
@@ -336,7 +442,7 @@ class PullDetailViewModel(
                 throw e
             } catch (e: GitHubError) {
                 _state.update { it.copy(acting = false) }
-                _events.tryEmit(GhEvent.Snack(describe(e)))
+                _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e)))
             }
         }
     }
@@ -435,7 +541,7 @@ class CreatePullViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
-                _state.update { it.copy(loading = false, error = describe(e)) }
+                _state.update { it.copy(loading = false, error = describeFor(holder.ref?.fullName, e)) }
             }
         }
     }
@@ -538,7 +644,7 @@ class CreatePullViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
-                _state.update { it.copy(creating = false, formError = describe(e)) }
+                _state.update { it.copy(creating = false, formError = describeFor(holder.ref?.fullName, e)) }
             }
         }
     }

@@ -83,4 +83,5 @@
     <string name="ai_pr_body_editable">Description (editable)</string>
     <string name="ai_pr_use">Use title and description</string>
     <string name="ai_pr_fills_form_only">Fills the form only — creating the pull request stays your action.</string>
+    <string name="pr_err_not_found_repo">Couldn\'t read %1$s (GitHub says: %2$s).\n\nThe token can\'t access this repo or its pull requests. Fine-grained tokens need this repo selected with \"Pull requests: Read\"; classic tokens need the \"repo\" scope (private) or \"public_repo\".</string>
 </resources>

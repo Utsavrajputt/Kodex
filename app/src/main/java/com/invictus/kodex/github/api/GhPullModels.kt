@@ -123,6 +123,8 @@ data class GhPullFile(
     val deletions: Int,
     /** Unified diff hunks; null for binary files and diffs GitHub considers too large. */
     val patch: String?,
+    /** Set for renames (`previous_filename`). */
+    val previousFilename: String? = null,
 ) {
     companion object {
         fun fromJson(j: JSONObject) = GhPullFile(
@@ -131,7 +133,40 @@ data class GhPullFile(
             additions = j.optInt("additions"),
             deletions = j.optInt("deletions"),
             patch = j.str("patch"),
+            previousFilename = j.str("previous_filename"),
         )
+    }
+}
+
+/** `GET /repos/{o}/{r}/commits/{sha}`: one commit with its changed files (patches included, up to 300 files). */
+data class GhCommitDetail(
+    val sha: String,
+    val message: String,
+    val author: String,
+    val authorEmail: String,
+    val dateMs: Long,
+    val files: List<GhPullFile>,
+    val additions: Int,
+    val deletions: Int,
+) {
+    companion object {
+        fun fromJson(j: JSONObject): GhCommitDetail {
+            val c = j.optJSONObject("commit")
+            val a = c?.optJSONObject("author")
+            val arr = j.optJSONArray("files")
+            val files = buildList { if (arr != null) for (i in 0 until arr.length()) add(GhPullFile.fromJson(arr.getJSONObject(i))) }
+            val stats = j.optJSONObject("stats")
+            return GhCommitDetail(
+                sha = j.optString("sha"),
+                message = c?.optString("message").orEmpty(),
+                author = j.optJSONObject("author")?.str("login") ?: a?.str("name").orEmpty(),
+                authorEmail = a?.str("email").orEmpty(),
+                dateMs = parseInstant(a?.str("date"))?.toEpochMilli() ?: 0L,
+                files = files,
+                additions = stats?.optInt("additions") ?: files.sumOf { it.additions },
+                deletions = stats?.optInt("deletions") ?: files.sumOf { it.deletions },
+            )
+        }
     }
 }
 

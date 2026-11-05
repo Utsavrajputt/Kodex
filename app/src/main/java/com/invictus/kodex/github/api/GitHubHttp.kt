@@ -81,6 +81,11 @@ class GitHubHttp(
                 throw e
             } catch (e: GitHubError.Http) {
                 if (e.code < 500 || attempt >= backoffMs.size) throw e
+            } catch (e: GitHubError.NotFound) {
+                // A token that cannot see a repo (fine-grained token limited to other repos, org policy, ...) gets a
+                // 404 even for PUBLIC repos. Public data needs no credentials, so retry once without them.
+                if (path.startsWith("/repos/")) anonymousGet(url, accept)?.let { return@withContext it }
+                throw e
             } catch (e: GitHubError) {
                 throw e
             } catch (e: IOException) {
@@ -91,6 +96,18 @@ class GitHubHttp(
         }
         @Suppress("UNREACHABLE_CODE")
         error("unreachable")
+    }
+
+    /** One credential-less GET for public data; null on any failure (the caller then reports the original 404). */
+    private fun anonymousGet(url: String, accept: String): String? = try {
+        val req = Request.Builder().url(url)
+            .header("Accept", accept)
+            .header("X-GitHub-Api-Version", API_VERSION)
+            .header("User-Agent", UA)
+            .build()
+        api.newCall(req).execute().use { res -> if (res.isSuccessful) res.body?.string() else null }
+    } catch (e: IOException) {
+        null
     }
 
     private fun getJsonOnce(url: String, accept: String): String {

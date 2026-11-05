@@ -175,6 +175,9 @@ class GitHubApi(private val http: GitHubHttp, private val repo: GhRepoRef) {
         return Page(items, page, hasMore = items.size == 100, total = items.size)
     }
 
+    /** One commit with files + patches (for the commit detail screen opened from a pull request). */
+    suspend fun getCommit(sha: String): GhCommitDetail = GhCommitDetail.fromJson(JSONObject(http.getJson("$base/commits/${enc(sha)}")))
+
     suspend fun createPull(title: String, body: String, head: String, baseBranch: String, draft: Boolean): GhPull {
         val json = JSONObject().put("title", title).put("head", head).put("base", baseBranch).put("draft", draft)
         if (body.isNotBlank()) json.put("body", body)

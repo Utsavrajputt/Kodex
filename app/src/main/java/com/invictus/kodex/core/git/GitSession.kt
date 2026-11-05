@@ -2279,7 +2279,7 @@ class GitSession(
 
 
 /** Unified-diff text -> [GitFileDiffResult]. Pure string work, no JGit; unit-testable. */
-private object DiffParser {
+internal object DiffParser {
     private val HUNK_RE = Regex("""@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@""")
     private val IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "webp", "gif", "bmp")
     private const val MAX_ROWS = 4000

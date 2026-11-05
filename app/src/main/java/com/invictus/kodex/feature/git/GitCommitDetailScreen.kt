@@ -63,11 +63,12 @@ fun GitCommitDetailScreen(
     diffLoading: Boolean,
     totalAdded: Int? = null,
     totalRemoved: Int? = null,
-    picking: Boolean,
+    picking: Boolean = false,
     onOpenFile: (GitCommitFile) -> Unit,
     onCloseFile: () -> Unit,
-    onCherryPick: () -> Unit,
-    onReset: () -> Unit,
+    /** Null (with [onReset] null) = remote commit from a pull request: no local actions, just Close. */
+    onCherryPick: (() -> Unit)? = null,
+    onReset: (() -> Unit)? = null,
     onCancel: () -> Unit,
     aiExplain: (@Composable () -> Unit)? = null,   // M20
 ) {
@@ -110,17 +111,21 @@ fun GitCommitDetailScreen(
                         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        TextButton(onClick = onCherryPick, enabled = !picking) {
-                            Text(stringResource(R.string.git_cherry_pick))
+                        if (onCherryPick != null) {
+                            TextButton(onClick = onCherryPick, enabled = !picking) {
+                                Text(stringResource(R.string.git_cherry_pick))
+                            }
                         }
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = onCancel) {
-                            Text(stringResource(R.string.action_cancel))
+                            Text(stringResource(if (onReset == null) R.string.action_close_dialog else R.string.action_cancel))
                         }
-                        TextButton(onClick = onReset) {
-                            Icon(XIcons.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.git_reset_here))
+                        if (onReset != null) {
+                            TextButton(onClick = onReset) {
+                                Icon(XIcons.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(stringResource(R.string.git_reset_here))
+                            }
                         }
                     }
                 }
