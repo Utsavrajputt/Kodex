@@ -36,11 +36,13 @@ class GitNewRepoViewModel(private val container: AppContainer) : ViewModel() {
     data class UiState(
         val name: String = "",
         val description: String = "",
-        val isPrivate: Boolean = true,
+        val isPrivate: Boolean = false,
         val readme: Boolean = true,
         val cloneAfter: Boolean = true,
         val signing: Boolean = true,
-        val alias: String = "key0",
+        /** Follows the repository name until the person types their own alias. */
+        val alias: String = "",
+        val aliasEdited: Boolean = false,
         val commonName: String = "",
         val orgUnit: String = "",
         val org: String = "",
@@ -91,7 +93,7 @@ class GitNewRepoViewModel(private val container: AppContainer) : ViewModel() {
             try {
                 val repo = created ?: run {
                     _state.update { it.copy(step = NewRepoStep.Creating) }
-                    container.gitHubAccountApi().createRepo(s.name.trim(), s.description.trim(), s.isPrivate, s.readme || s.cloneAfter)
+                    container.gitHubAccountApi().createRepo(s.name.trim(), s.description.trim(), s.isPrivate, s.readme)
                 }.also {
                     created = it
                     _state.update { st -> st.copy(repoCreated = true) }
@@ -110,6 +112,7 @@ class GitNewRepoViewModel(private val container: AppContainer) : ViewModel() {
     private fun validate(s: UiState): Int? = when {
         !NAME.matches(s.name.trim()) || s.name.trim().all { it == '.' } -> R.string.new_repo_err_name
         s.signing && s.alias.isBlank() -> R.string.new_repo_err_alias
+        s.signing && s.password.length < 6 -> R.string.new_repo_err_password
         s.signing && s.commonName.isBlank() -> R.string.new_repo_err_cn
         s.signing && s.country.isNotBlank() && s.country.trim().length != 2 -> R.string.new_repo_err_country
         else -> null

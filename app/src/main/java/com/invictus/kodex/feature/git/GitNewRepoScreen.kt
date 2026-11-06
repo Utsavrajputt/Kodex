@@ -137,11 +137,14 @@ fun GitNewRepoScreen(
             GhCard(p.card, p.cardBorder) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     CardTitle(R.string.new_repo_card_repo)
-                    CloneInput(state.name, { viewModel.update { copy(name = it) } }, R.string.new_repo_name_hint, XIcons.Edit, !state.locked)
+                    CloneInput(state.name, { viewModel.update { copy(name = it, alias = if (aliasEdited) alias else it.trim()) } }, R.string.new_repo_name_hint, XIcons.Edit, !state.locked)
                     CloneInput(state.description, { viewModel.update { copy(description = it) } }, R.string.new_repo_desc_hint, XIcons.Comment, !state.locked)
                     ToggleRow(R.string.new_repo_private, R.string.new_repo_private_hint, state.isPrivate, !state.locked) { viewModel.update { copy(isPrivate = it) } }
-                    ToggleRow(R.string.new_repo_readme, R.string.new_repo_readme_hint, state.readme || state.cloneAfter, !state.locked && !state.cloneAfter) {
+                    ToggleRow(R.string.new_repo_readme, R.string.new_repo_readme_hint, state.readme, !state.locked) {
                         viewModel.update { copy(readme = it) }
+                    }
+                    if (!state.readme && state.cloneAfter) {
+                        Text(stringResource(R.string.new_repo_empty_clone_hint), style = MaterialTheme.typography.bodySmall, color = p.onCardMuted)
                     }
                     ToggleRow(R.string.new_repo_clone_after, R.string.new_repo_clone_after_hint, state.cloneAfter, !state.locked) { viewModel.update { copy(cloneAfter = it) } }
                 }
@@ -152,12 +155,12 @@ fun GitNewRepoScreen(
                     CardTitle(R.string.new_repo_card_signing)
                     ToggleRow(R.string.new_repo_signing, R.string.new_repo_signing_hint, state.signing, !state.locked) { viewModel.update { copy(signing = it) } }
                     if (state.signing) {
-                        CloneInput(state.alias, { viewModel.update { copy(alias = it) } }, R.string.new_repo_alias_hint, XIcons.Key, !state.locked)
+                        CloneInput(state.alias, { viewModel.update { copy(alias = it, aliasEdited = true) } }, R.string.new_repo_alias_hint, XIcons.Key, !state.locked)
                         CloneInput(state.commonName, { viewModel.update { copy(commonName = it) } }, R.string.new_repo_cn_hint, XIcons.Person, !state.locked)
                         CloneInput(state.org, { viewModel.update { copy(org = it) } }, R.string.new_repo_org_hint, XIcons.Folder, !state.locked)
                         CloneInput(state.country, { viewModel.update { copy(country = it.take(2).uppercase()) } }, R.string.new_repo_country_hint, XIcons.Info, !state.locked)
                         CloneInput(
-                            value = state.password, onChange = {}, hint = R.string.new_repo_password_hint, leading = XIcons.Key, enabled = false,
+                            value = state.password, onChange = { viewModel.update { copy(password = it) } }, hint = R.string.new_repo_password_hint, leading = XIcons.Key, enabled = !state.locked,
                             trailing = {
                                 IconButton(onClick = {
                                     ClipboardHelper.copy(context, "keystore password", state.password)

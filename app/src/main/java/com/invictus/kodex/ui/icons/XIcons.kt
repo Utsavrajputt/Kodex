@@ -180,10 +180,10 @@ object XIcons {
         )
     }
 
-    /** Clean up: a broom drawn as a light 1.8 outline on the 24 grid (handle, flared head, bristle lines), matching [PullRequest]. */
-    val Broom: ImageVector by lazy {
+    /** Clean up: a bin with a sparkle inside (fresh, emptied), a light 1.8 outline on the 24 grid like [PullRequest]. */
+    val CleanBin: ImageVector by lazy {
         ImageVector.Builder(
-            name = "Broom",
+            name = "CleanBin",
             defaultWidth = 24.dp,
             defaultHeight = 24.dp,
             viewportWidth = 24f,
@@ -191,12 +191,12 @@ object XIcons {
         )
             .addPath(
                 pathData = PathParser().parsePathString(
-                    "M12,2.5V10" +
-                        "M8,10H16L19,21H5Z" +
-                        "M6.5,15.5H17.5" +
-                        "M9.6,15.5L9.1,21" +
-                        "M12,15.5V21" +
-                        "M14.4,15.5L14.9,21",
+                    // lid, handle, body
+                    "M4,7H20" +
+                        "M9,7V5.5A1.5,1.5 0 0 1 10.5,4h3A1.5,1.5 0 0 1 15,5.5V7" +
+                        "M6,7l0.8,12A2,2 0 0 0 8.8,21h6.4a2,2 0 0 0 2,-2L18,7" +
+                        // four-point sparkle
+                        "M12,10.5C12,12.6 12.9,13.5 15,14C12.9,14.5 12,15.4 12,17.5C12,15.4 11.1,14.5 9,14C11.1,13.5 12,12.6 12,10.5Z",
                 ).toNodes(),
                 fill = null,
                 stroke = SolidColor(Color.Black),

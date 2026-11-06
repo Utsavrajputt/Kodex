@@ -161,7 +161,9 @@
     <string name="new_repo_private">Private</string>
     <string name="new_repo_private_hint">Only you can see it</string>
     <string name="new_repo_readme">Add a README</string>
-    <string name="new_repo_readme_hint">Needed to clone right away</string>
+    <string name="new_repo_readme_hint">Creates the first commit</string>
+    <string name="new_repo_empty_clone_hint">Without a README the repository starts empty, so the clone has no files yet.</string>
+    <string name="new_repo_err_password">Password needs at least 6 characters</string>
     <string name="new_repo_clone_after">Clone after creating</string>
     <string name="new_repo_clone_after_hint">Opens Clone and starts it for you</string>
     <string name="new_repo_signing">Generate signing keystore</string>
