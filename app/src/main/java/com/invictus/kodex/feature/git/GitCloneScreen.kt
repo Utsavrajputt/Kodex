@@ -80,6 +80,7 @@ import kotlin.math.roundToInt
 fun GitCloneScreen(
     onBack: () -> Unit,
     onOpenGitHubSettings: () -> Unit = {},
+    onNewRepo: () -> Unit = {},
     viewModel: GitCloneViewModel = viewModel(factory = GitCloneViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -131,7 +132,7 @@ fun GitCloneScreen(
                     Text(
                         stringResource(R.string.clone_title),
                         maxLines = 1,
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                     )
                 },
@@ -142,6 +143,11 @@ fun GitCloneScreen(
                     }
                 },
                 actions = {
+                    if (!state.cloning && !state.completed) {
+                        IconButton(onClick = onNewRepo) {
+                            Icon(XIcons.Add, contentDescription = stringResource(R.string.new_repo_title))
+                        }
+                    }
                     when {
                         state.completed -> ActionPill(
                             text = stringResource(R.string.clone_finish_button),
@@ -190,7 +196,7 @@ fun GitCloneScreen(
 
 /** Compact pill in the top bar: Clone / Cancel / Done. */
 @Composable
-private fun ActionPill(
+internal fun ActionPill(
     text: String,
     icon: ImageVector,
     brush: Brush,
@@ -222,7 +228,7 @@ private fun ActionPill(
 }
 
 @Composable
-private fun CardTitle(@StringRes title: Int, modifier: Modifier = Modifier) {
+internal fun CardTitle(@StringRes title: Int, modifier: Modifier = Modifier) {
     Text(
         text = stringResource(title),
         style = MaterialTheme.typography.titleMedium,
@@ -296,7 +302,7 @@ private fun DestinationCard(state: GitCloneViewModel.UiState, locked: Boolean, o
 
 /** Slim 44dp field in the same tile style as the GitHub workflow pickers. */
 @Composable
-private fun CloneInput(
+internal fun CloneInput(
     value: String,
     onChange: (String) -> Unit,
     @StringRes hint: Int,

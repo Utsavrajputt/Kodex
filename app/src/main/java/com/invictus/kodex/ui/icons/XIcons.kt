@@ -180,14 +180,31 @@ object XIcons {
         )
     }
 
-    /** Material "cleaning_services": a broom, for Clean up. */
-    val CleaningServices: ImageVector by lazy {
-        icon(
-            "CleaningServices",
-            "M16,11h-1V3c0,-1.1 -0.9,-2 -2,-2h-2C9.9,1 9,1.9 9,3v8H8c-2.76,0 -5,2.24 -5,5v7h18v-7C21,13.24 18.76,11 16,11z" +
-                "M19,21h-2v-3c0,-0.55 -0.45,-1 -1,-1s-1,0.45 -1,1v3h-2v-3c0,-0.55 -0.45,-1 -1,-1s-1,0.45 -1,1v3H9v-3c0,-0.55 -0.45,-1 -1,-1s-1,0.45 -1,1v3H5v-5c0,-1.65 1.35,-3 3,-3h8c1.65,0 3,1.35 3,3V21z",
-            evenOdd = true,
+    /** Clean up: a broom drawn as a light 1.8 outline on the 24 grid (handle, flared head, bristle lines), matching [PullRequest]. */
+    val Broom: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Broom",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
         )
+            .addPath(
+                pathData = PathParser().parsePathString(
+                    "M12,2.5V10" +
+                        "M8,10H16L19,21H5Z" +
+                        "M6.5,15.5H17.5" +
+                        "M9.6,15.5L9.1,21" +
+                        "M12,15.5V21" +
+                        "M14.4,15.5L14.9,21",
+                ).toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 1.8f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .build()
     }
     /** Octicon "issue-opened" (ring with a dot). */
     val IssueOpened: ImageVector by lazy {

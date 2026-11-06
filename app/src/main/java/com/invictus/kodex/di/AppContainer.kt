@@ -90,6 +90,12 @@ class AppContainer(context: Context) {
         return GitHubRepository(GitHubApi(http, repo), repo, java.io.File(appContext.cacheDir, "gh_logs"))
     }
 
+    fun gitHubAccountApi(): com.invictus.kodex.github.api.GitHubAccountApi =
+        com.invictus.kodex.github.api.GitHubAccountApi(GitHubHttp(gitHubOkHttp, token = { gitHubTokenProvider.token() }))
+
+    /** Hand-off from "New repository" to the Clone screen: a repo to clone straight away. */
+    val pendingClone: com.invictus.kodex.core.git.PendingClone by lazy { com.invictus.kodex.core.git.PendingClone() }
+
     // M11 search: fuzzy file search + workspace grep + Room-backed search history.
     val fileSearchEngine: FileSearchEngine by lazy { FileSearchEngine() }
     val codeSearchEngine: CodeSearchEngine by lazy { CodeSearchEngine() }

@@ -147,7 +147,7 @@ fun GitHubManagerScreen(
                             Icon(XIcons.PullRequest, contentDescription = stringResource(R.string.pr_title), modifier = Modifier.size(22.dp))
                         }
                         IconButton(onClick = { viewModel.tools.openCleanup() }) {
-                            Icon(XIcons.CleaningServices, contentDescription = stringResource(R.string.gh_cleanup_title))
+                            Icon(XIcons.Broom, contentDescription = stringResource(R.string.gh_cleanup_title))
                         }
                         IconButton(onClick = viewModel::refresh) {
                             Icon(XIcons.Refresh, contentDescription = stringResource(R.string.action_refresh))

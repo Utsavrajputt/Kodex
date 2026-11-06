@@ -250,6 +250,19 @@ class GitHubApi(private val http: GitHubHttp, private val repo: GhRepoRef) {
         http.send("PATCH", "$base/issues/$number", json)
     }
 
+    // ---- Actions secrets -----------------------------------------------------------------
+
+    /** `GET /repos/{o}/{r}/actions/secrets/public-key`: the key every secret value is sealed with. */
+    suspend fun getActionsPublicKey(): GhPublicKey {
+        val j = JSONObject(http.getJson("$base/actions/secrets/public-key"))
+        return GhPublicKey(j.getString("key_id"), j.getString("key"))
+    }
+
+    /** `PUT /repos/{o}/{r}/actions/secrets/{name}`; [encryptedValue] is base64 of a sealed box. */
+    suspend fun putActionsSecret(name: String, encryptedValue: String, keyId: String) {
+        http.send("PUT", "$base/actions/secrets/${enc(name)}", JSONObject().put("encrypted_value", encryptedValue).put("key_id", keyId))
+    }
+
     suspend fun deleteBranch(branch: String) { http.send("DELETE", "$base/git/refs/heads/${enc(branch)}") }
 
     /** Message of the newest commit on [ref] (branch name): feeds the "auto-fill title" of a new pull request. */

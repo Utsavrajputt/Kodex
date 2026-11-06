@@ -158,6 +158,8 @@ data class IssueDetailState(
     /** Close / reopen request in flight. */
     val acting: Boolean = false,
     val closeDialog: Boolean = false,
+    /** GitHub's three ways to close: `completed`, `not_planned`, `duplicate`. */
+    val closeReason: String = "completed",
     val draft: String = "",
     val posting: Boolean = false,
 )
@@ -228,23 +230,25 @@ class IssueDetailViewModel(
         }
     }
 
-    fun openCloseDialog() = _state.update { it.copy(closeDialog = true) }
+    fun openCloseDialog() = _state.update { it.copy(closeDialog = true, closeReason = "completed") }
+    fun setCloseReason(r: String) = _state.update { it.copy(closeReason = r) }
     fun dismissDialogs() = _state.update { it.copy(closeDialog = false) }
 
     fun confirmClose() {
+        val reason = _state.value.closeReason
         _state.update { it.copy(closeDialog = false) }
-        act(close = true)
+        act(close = true, reason = reason)
     }
 
-    fun reopen() = act(close = false)
+    fun reopen() = act(close = false, reason = null)
 
-    private fun act(close: Boolean) {
+    private fun act(close: Boolean, reason: String?) {
         if (_state.value.acting) return
         _state.update { it.copy(acting = true) }
         viewModelScope.launch {
             try {
                 val repo = holder.get() ?: run { _state.update { it.copy(acting = false) }; return@launch }
-                if (close) repo.closeIssue(number) else repo.reopenIssue(number)
+                if (close) repo.closeIssue(number, reason ?: "completed") else repo.reopenIssue(number)
                 val fresh = repo.issue(number)
                 _state.update { it.copy(acting = false, issue = fresh) }
                 _events.tryEmit(GhEvent.Snack(GhText.Res(if (close) R.string.issue_closed_ok else R.string.issue_reopened_ok)))

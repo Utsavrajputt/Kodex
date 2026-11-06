@@ -810,7 +810,7 @@ private fun OverviewTab(pull: GhPull, nowMs: Long, p: GhPalette) {
             if (pull.body.isBlank()) {
                 Text(stringResource(R.string.pr_no_description), style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted)
             } else {
-                MarkdownContent(pull.body)
+                GhMarkdown(pull.body, p)
             }
         }
         Spacer(Modifier.height(12.dp))

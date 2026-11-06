@@ -35,6 +35,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -44,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -72,6 +75,12 @@ import com.invictus.kodex.github.api.GhLabel
 import com.invictus.kodex.github.api.IssueFilter
 import com.invictus.kodex.ui.icons.XIcons
 
+/** Markdown body drawn in the GitHub screens' own text colour (the plain theme colour is unreadable on their dark cards). */
+@Composable
+internal fun GhMarkdown(text: String, p: GhPalette) {
+    CompositionLocalProvider(LocalContentColor provides p.onCard) { MarkdownContent(text) }
+}
+
 private val ClosedPurple = Color(0xFF8957E5)
 
 private class IssueVisual(val icon: ImageVector, val label: Int, val color: Color)
@@ -80,6 +89,7 @@ private class IssueVisual(val icon: ImageVector, val label: Int, val color: Colo
 private fun issueVisual(i: GhIssue, p: GhPalette): IssueVisual = when {
     i.isOpen -> IssueVisual(XIcons.IssueOpened, R.string.issue_status_open, p.success)
     i.stateReason == "not_planned" -> IssueVisual(XIcons.IssueClosed, R.string.issue_status_not_planned, p.onCardMuted)
+    i.stateReason == "duplicate" -> IssueVisual(XIcons.IssueClosed, R.string.issue_status_duplicate, p.onCardMuted)
     else -> IssueVisual(XIcons.IssueClosed, R.string.issue_status_closed, ClosedPurple)
 }
 
@@ -309,7 +319,23 @@ fun IssueDetailScreen(
         AlertDialog(
             onDismissRequest = vm::dismissDialogs,
             title = { Text(stringResource(R.string.issue_close_title)) },
-            text = { Text(stringResource(R.string.issue_close_body)) },
+            text = {
+                Column {
+                    listOf(
+                        "completed" to R.string.issue_close_completed,
+                        "not_planned" to R.string.issue_close_not_planned,
+                        "duplicate" to R.string.issue_close_duplicate,
+                    ).forEach { (reason, label) ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { vm.setCloseReason(reason) }.padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = state.closeReason == reason, onClick = { vm.setCloseReason(reason) })
+                            Text(stringResource(label), style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+            },
             confirmButton = {
                 Button(
                     onClick = vm::confirmClose,
@@ -353,7 +379,7 @@ private fun IssueBody(issue: GhIssue, state: IssueDetailState, nowMs: Long, p: G
         ) {
             Text(stringResource(R.string.issue_description), style = MaterialTheme.typography.labelLarge, color = p.onCardMuted)
             if (issue.body.isBlank()) Text(stringResource(R.string.issue_no_description), style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted)
-            else MarkdownContent(issue.body)
+            else GhMarkdown(issue.body, p)
         }
         Text(
             stringResource(R.string.issue_comments_title) + " (${issue.comments})",
@@ -380,7 +406,7 @@ private fun CommentCard(c: GhIssueComment, nowMs: Long, p: GhPalette) {
             Text(c.author, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = p.onCard)
             agoText(c.createdAt, nowMs)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = p.onCardMuted) }
         }
-        if (c.body.isNotBlank()) MarkdownContent(c.body)
+        if (c.body.isNotBlank()) GhMarkdown(c.body, p)
     }
 }
 

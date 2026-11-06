@@ -38,6 +38,7 @@ class GitCloneViewModel(
     private val credentialStore: GitCredentialStore,
     private val manager: GitCloneManager,
     private val defaultParent: File,
+    private val pendingClone: com.invictus.kodex.core.git.PendingClone,
 ) : ViewModel() {
 
     data class UiState(
@@ -97,6 +98,13 @@ class GitCloneViewModel(
 
     init {
         viewModelScope.launch { manager.cancelled.collect { message(R.string.clone_cancelled) } }
+        // Coming from "New repository": the repo to clone is already known, so start right away.
+        pendingClone.take()?.let { p ->
+            if (manager.run.value.request == null) {
+                form.value = Form(p.url, defaultParent.absolutePath, p.folder, "")
+                startClone()
+            }
+        }
     }
 
     fun onEvent(event: GitCloneEvent) {
@@ -184,6 +192,7 @@ class GitCloneViewModel(
                     credentialStore = app.container.gitCredentialStore,
                     manager = app.container.gitCloneManager,
                     defaultParent = defaultParent,
+                    pendingClone = app.container.pendingClone,
                 )
             }
         }

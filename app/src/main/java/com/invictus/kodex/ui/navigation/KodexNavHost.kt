@@ -37,6 +37,7 @@ import com.invictus.kodex.github.ui.PullRequestsScreen
 import com.invictus.kodex.github.ui.RunLogScreen
 import com.invictus.kodex.feature.git.GitBranchesScreen
 import com.invictus.kodex.feature.git.GitCloneScreen
+import com.invictus.kodex.feature.git.GitNewRepoScreen
 import com.invictus.kodex.feature.git.GitCredentialsScreen
 import com.invictus.kodex.feature.git.GitHistoryScreen
 import com.invictus.kodex.feature.git.GitOnboardingScreen
@@ -279,6 +280,17 @@ fun KodexNavHost(
             GitCloneScreen(
                 onBack = { navController.popBackStack() },
                 onOpenGitHubSettings = { navController.navigate(Routes.SETTINGS_GITHUB) },
+                onNewRepo = { navController.navigate(Routes.GIT_NEW_REPO) },
+            )
+        }
+        composable(Routes.GIT_NEW_REPO) {
+            GitNewRepoScreen(
+                onBack = { navController.popBackStack() },
+                // The new repo clones itself on the Clone screen; replace this screen so Back returns to the project list.
+                onStartClone = {
+                    navController.popBackStack(Routes.GIT_CLONE, inclusive = true)
+                    navController.navigate(Routes.GIT_CLONE)
+                },
             )
         }
         composable(Routes.GIT_BRANCHES) { entry ->

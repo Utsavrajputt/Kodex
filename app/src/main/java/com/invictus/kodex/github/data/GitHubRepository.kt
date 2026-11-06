@@ -5,6 +5,8 @@ import com.invictus.kodex.github.api.GhCommitDetail
 import com.invictus.kodex.github.api.GhCompare
 import com.invictus.kodex.github.api.GhDeployment
 import com.invictus.kodex.github.api.GhJob
+import android.util.Base64
+import com.invictus.kodex.github.signing.SealedBox
 import com.invictus.kodex.github.api.GhIssue
 import com.invictus.kodex.github.api.GhIssueComment
 import com.invictus.kodex.github.api.IssueFilter
@@ -158,7 +160,7 @@ class GitHubRepository(
     suspend fun issue(number: Int): GhIssue = api.getIssue(number)
     suspend fun issueComments(number: Int): List<GhIssueComment> = collectPages(3) { api.listIssueComments(number, it) }
     suspend fun addIssueComment(number: Int, body: String): GhIssueComment = api.addIssueComment(number, body)
-    suspend fun closeIssue(number: Int) = api.setIssueState(number, "closed", "completed")
+    suspend fun closeIssue(number: Int, reason: String) = api.setIssueState(number, "closed", reason)
     suspend fun reopenIssue(number: Int) = api.setIssueState(number, "open")
 
     suspend fun pull(number: Int): GhPull = api.getPull(number)
@@ -177,6 +179,16 @@ class GitHubRepository(
     suspend fun mergePull(number: Int, method: PullMergeMethod) = api.mergePull(number, method)
     suspend fun closePull(number: Int) = api.setPullState(number, "closed")
     suspend fun reopenPull(number: Int) = api.setPullState(number, "open")
+    /** Seals each value with the repo's public key (libsodium sealed box) and stores it as an Actions secret. */
+    suspend fun setActionsSecrets(secrets: Map<String, String>) {
+        val key = api.getActionsPublicKey()
+        val publicKey = Base64.decode(key.key, Base64.DEFAULT)
+        for ((name, value) in secrets) {
+            val sealed = SealedBox.seal(value.toByteArray(Charsets.UTF_8), publicKey)
+            api.putActionsSecret(name, Base64.encodeToString(sealed, Base64.NO_WRAP), key.keyId)
+        }
+    }
+
     suspend fun deleteBranch(branch: String) = api.deleteBranch(branch)
     suspend fun tipCommitMessage(ref: String): String = api.tipCommitMessage(ref)
 

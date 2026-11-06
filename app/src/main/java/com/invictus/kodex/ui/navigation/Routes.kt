@@ -20,6 +20,7 @@ object Routes {
     const val MEDIA_PREVIEW = "media_preview"
     const val GIT = "git/{projectPath}"
     const val GIT_CLONE = "git_clone"
+    const val GIT_NEW_REPO = "git_new_repo"
     const val GIT_BRANCHES = "git_branches/{projectPath}"
     const val GIT_HISTORY = "git_history/{projectPath}?path={path}"
     const val GIT_STASH = "git_stash/{projectPath}"
