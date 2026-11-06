@@ -29,8 +29,8 @@ android {
         release {
             // R8 code shrinking + obfuscation. Keep rules live in proguard-rules.pro
             // (JGit, Sora/tm4e, Room, WebView). Resource shrinking stays off for now.
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

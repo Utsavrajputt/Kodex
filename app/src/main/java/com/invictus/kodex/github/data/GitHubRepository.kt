@@ -5,6 +5,9 @@ import com.invictus.kodex.github.api.GhCommitDetail
 import com.invictus.kodex.github.api.GhCompare
 import com.invictus.kodex.github.api.GhDeployment
 import com.invictus.kodex.github.api.GhJob
+import com.invictus.kodex.github.api.GhIssue
+import com.invictus.kodex.github.api.GhIssueComment
+import com.invictus.kodex.github.api.IssueFilter
 import com.invictus.kodex.github.api.GhPull
 import com.invictus.kodex.github.api.GhPullCommit
 import com.invictus.kodex.github.api.GhPullFile
@@ -132,6 +135,31 @@ class GitHubRepository(
         }
         return Page(out, page, more, out.size)
     }
+
+    // ---- issues ----------------------------------------------------------------------
+
+    /** Like [pulls]: filters the API cannot do itself (mine) are applied here, so keep reading (bounded) for a useful batch. */
+    suspend fun issues(startPage: Int, filter: IssueFilter, login: String?): Page<GhIssue> {
+        val out = ArrayList<GhIssue>()
+        var page = startPage
+        var fetched = 0
+        var more: Boolean
+        while (true) {
+            val raw = api.listIssues(page, filter.apiState)
+            out += raw.items.filter { filter.matches(it, login) }
+            fetched++
+            more = raw.hasMore
+            if (!more || out.size >= PULL_MIN_BATCH || fetched >= PULL_MAX_RAW_PAGES) break
+            page++
+        }
+        return Page(out, page, more, out.size)
+    }
+
+    suspend fun issue(number: Int): GhIssue = api.getIssue(number)
+    suspend fun issueComments(number: Int): List<GhIssueComment> = collectPages(3) { api.listIssueComments(number, it) }
+    suspend fun addIssueComment(number: Int, body: String): GhIssueComment = api.addIssueComment(number, body)
+    suspend fun closeIssue(number: Int) = api.setIssueState(number, "closed", "completed")
+    suspend fun reopenIssue(number: Int) = api.setIssueState(number, "open")
 
     suspend fun pull(number: Int): GhPull = api.getPull(number)
 

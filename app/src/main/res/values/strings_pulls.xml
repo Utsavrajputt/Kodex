@@ -102,4 +102,49 @@
     <string name="pr_commits_header">Commits (%1$d)</string>
     <string name="pr_files_header">Files changed (%1$d)</string>
     <string name="pr_more_items">+ %1$d more</string>
+
+    <!-- Hub: create + pull requests + issues -->
+    <string name="hub_title">Pull requests &amp; issues</string>
+    <string name="hub_prs_section">Pull requests</string>
+    <string name="hub_issues_section">Issues</string>
+    <string name="hub_show_all">Show all</string>
+    <string name="pr_empty_open">No open pull requests</string>
+    <string name="issue_empty_open">No open issues</string>
+    <string name="pr_list_title">All pull requests</string>
+
+    <!-- Issues -->
+    <string name="issue_list_title">All issues</string>
+    <string name="issue_header_title">Issue #%1$d</string>
+    <string name="issue_empty">No issues here</string>
+    <string name="issue_filter_open">Open</string>
+    <string name="issue_filter_closed">Closed</string>
+    <string name="issue_filter_all">All</string>
+    <string name="issue_filter_mine">Created by me</string>
+    <string name="issue_status_open">Open</string>
+    <string name="issue_status_closed">Closed</string>
+    <string name="issue_status_not_planned">Not planned</string>
+    <string name="issue_by_author">%1$s opened this</string>
+    <string name="issue_row_meta">#%1$d \u2022 %2$s \u2022 %3$s</string>
+    <string name="issue_row_meta_no_time">#%1$d \u2022 %2$s</string>
+    <string name="issue_comments_count">%1$d comments</string>
+    <string name="issue_description">Description</string>
+    <string name="issue_no_description">No description provided.</string>
+    <string name="issue_comments_title">Comments</string>
+    <string name="issue_no_comments">No comments yet</string>
+    <string name="issue_comment_hint">Write a comment</string>
+    <string name="issue_comment_send">Send comment</string>
+    <string name="issue_close">Close issue</string>
+    <string name="issue_reopen">Reopen issue</string>
+    <string name="issue_close_title">Close this issue?</string>
+    <string name="issue_close_body">It is marked as completed. You can reopen it later.</string>
+    <string name="issue_closed_ok">Issue closed</string>
+    <string name="issue_reopened_ok">Issue reopened</string>
+    <string name="issue_disabled_title">Issues are turned off</string>
+    <string name="issue_disabled_body">%1$s has issues switched off, so there is no list. Turn them on in GitHub: Settings \u2192 General \u2192 Features.</string>
+
+    <!-- AI summaries -->
+    <string name="ai_summary_hint">Summarize with AI</string>
+    <string name="ai_summary_title_pulls">Open pull requests</string>
+    <string name="ai_summary_title_issues">Open issues</string>
+    <string name="ai_summary_title_thread">Issue summary</string>
 </resources>

@@ -33,6 +33,9 @@ object Routes {
     const val GITHUB_RUN_LOG = "github_run_log/{projectPath}/{runId}"
     const val GITHUB_PULLS = "github_pulls/{projectPath}"
     const val GITHUB_PULL = "github_pull/{projectPath}/{number}"
+    const val GITHUB_PULL_LIST = "github_pull_list/{projectPath}"
+    const val GITHUB_ISSUES = "github_issues/{projectPath}"
+    const val GITHUB_ISSUE = "github_issue/{projectPath}/{number}"
 
     /** Encoded deep-link style route for a project's Source Control screen. */
     fun git(projectPath: String): String =
@@ -57,4 +60,7 @@ object Routes {
     fun githubRunLog(p: String, runId: Long) = "github_run_log/${android.net.Uri.encode(p)}/$runId"
     fun githubPulls(p: String) = "github_pulls/${android.net.Uri.encode(p)}"
     fun githubPull(p: String, number: Int) = "github_pull/${android.net.Uri.encode(p)}/$number"
+    fun githubPullList(p: String) = "github_pull_list/${android.net.Uri.encode(p)}"
+    fun githubIssues(p: String) = "github_issues/${android.net.Uri.encode(p)}"
+    fun githubIssue(p: String, number: Int) = "github_issue/${android.net.Uri.encode(p)}/$number"
 }

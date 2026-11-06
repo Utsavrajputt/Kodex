@@ -19,7 +19,7 @@ class GitHubApi(private val http: GitHubHttp, private val repo: GhRepoRef) {
             val name = pj.str("name")
             if (owner != null && name != null) GhRepoRef(owner, name, pj.str("default_branch")) else null
         }
-        return repo.copy(defaultBranch = j.str("default_branch"), parent = parent, pullsEnabled = j.optBoolean("has_pull_requests", true))
+        return repo.copy(defaultBranch = j.str("default_branch"), parent = parent, pullsEnabled = j.optBoolean("has_pull_requests", true), issuesEnabled = j.optBoolean("has_issues", true))
     }
 
     /** `GET /repos/{o}/{r}/actions/workflows` (first 100). */
@@ -208,6 +208,46 @@ class GitHubApi(private val http: GitHubHttp, private val repo: GhRepoRef) {
     /** Close (`closed`) or reopen (`open`). */
     suspend fun setPullState(number: Int, state: String) {
         http.send("PATCH", "$base/pulls/$number", JSONObject().put("state", state))
+    }
+
+    // ---- issues --------------------------------------------------------------------------
+
+    /**
+     * `GET /repos/{o}/{r}/issues` newest first. GitHub lists pull requests here too, so those are dropped; a page can
+     * therefore hold fewer than [perPage] issues while [Page.hasMore] is still true.
+     */
+    suspend fun listIssues(page: Int, state: String, perPage: Int = 30): Page<GhIssue> {
+        val arr = JSONArray(
+            http.getJson(
+                "$base/issues",
+                mapOf("state" to state, "sort" to "created", "direction" to "desc", "per_page" to perPage.toString(), "page" to page.toString()),
+            ),
+        )
+        val items = buildList {
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                if (!o.has("pull_request")) add(GhIssue.fromJson(o))
+            }
+        }
+        return Page(items, page, hasMore = arr.length() == perPage, total = items.size)
+    }
+
+    suspend fun getIssue(number: Int): GhIssue = GhIssue.fromJson(JSONObject(http.getJson("$base/issues/$number")))
+
+    suspend fun listIssueComments(number: Int, page: Int): Page<GhIssueComment> {
+        val arr = JSONArray(http.getJson("$base/issues/$number/comments", mapOf("per_page" to "100", "page" to page.toString())))
+        val items = buildList { for (i in 0 until arr.length()) add(GhIssueComment.fromJson(arr.getJSONObject(i))) }
+        return Page(items, page, hasMore = items.size == 100, total = items.size)
+    }
+
+    suspend fun addIssueComment(number: Int, body: String): GhIssueComment =
+        GhIssueComment.fromJson(JSONObject(http.sendJson("POST", "$base/issues/$number/comments", JSONObject().put("body", body))))
+
+    /** Close (`closed`, optional reason `completed` / `not_planned`) or reopen (`open`). */
+    suspend fun setIssueState(number: Int, state: String, reason: String? = null) {
+        val json = JSONObject().put("state", state)
+        if (reason != null) json.put("state_reason", reason)
+        http.send("PATCH", "$base/issues/$number", json)
     }
 
     suspend fun deleteBranch(branch: String) { http.send("DELETE", "$base/git/refs/heads/${enc(branch)}") }

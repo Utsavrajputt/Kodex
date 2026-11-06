@@ -180,6 +180,30 @@ object XIcons {
         )
     }
 
+    /** Material "cleaning_services": a broom, for Clean up. */
+    val CleaningServices: ImageVector by lazy {
+        icon(
+            "CleaningServices",
+            "M16,11h-1V3c0,-1.1 -0.9,-2 -2,-2h-2C9.9,1 9,1.9 9,3v8H8c-2.76,0 -5,2.24 -5,5v7h18v-7C21,13.24 18.76,11 16,11z" +
+                "M19,21h-2v-3c0,-0.55 -0.45,-1 -1,-1s-1,0.45 -1,1v3h-2v-3c0,-0.55 -0.45,-1 -1,-1s-1,0.45 -1,1v3H9v-3c0,-0.55 -0.45,-1 -1,-1s-1,0.45 -1,1v3H5v-5c0,-1.65 1.35,-3 3,-3h8c1.65,0 3,1.35 3,3V21z",
+            evenOdd = true,
+        )
+    }
+    /** Octicon "issue-opened" (ring with a dot). */
+    val IssueOpened: ImageVector by lazy {
+        icon16(
+            "IssueOpened",
+            "M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z",
+        )
+    }
+    /** Octicon "issue-closed" (ring with a check). */
+    val IssueClosed: ImageVector by lazy {
+        icon16(
+            "IssueClosed",
+            "M11.28 6.78a.75.75 0 0 0-1.06-1.06L7.25 8.69 5.78 7.22a.75.75 0 0 0-1.06 1.06l2 2a.75.75 0 0 0 1.06 0l3.5-3.5ZM16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0Zm-1.5 0a6.5 6.5 0 1 0-13 0 6.5 6.5 0 0 0 13 0Z",
+        )
+    }
+
     // M15 GitHub Manager: run status glyphs (Material paths). Status is shown as glyph + text, never colour alone.
     val CheckCircle: ImageVector by lazy {
         icon("CheckCircle", "M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2zM10,17l-5,-5 1.41,-1.41L10,14.17l7.59,-7.59L19,8l-9,9z")

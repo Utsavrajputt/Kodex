@@ -30,6 +30,9 @@ import com.invictus.kodex.github.ui.AllApksScreen
 import com.invictus.kodex.github.ui.GitHubManagerScreen
 import com.invictus.kodex.github.ui.GitHubRunsScreen
 import com.invictus.kodex.github.ui.PullDetailScreen
+import com.invictus.kodex.github.ui.IssueDetailScreen
+import com.invictus.kodex.github.ui.IssueListScreen
+import com.invictus.kodex.github.ui.PullListScreen
 import com.invictus.kodex.github.ui.PullRequestsScreen
 import com.invictus.kodex.github.ui.RunLogScreen
 import com.invictus.kodex.feature.git.GitBranchesScreen
@@ -378,7 +381,40 @@ fun KodexNavHost(
                     projectPath = path,
                     onBack = { navController.popBackStack() },
                     onOpenPull = { number -> navController.navigate(Routes.githubPull(path, number)) },
+                    onOpenPullList = { navController.navigate(Routes.githubPullList(path)) },
+                    onOpenIssue = { number -> navController.navigate(Routes.githubIssue(path, number)) },
+                    onOpenIssueList = { navController.navigate(Routes.githubIssues(path)) },
                 )
+            }
+        }
+        composable(Routes.GITHUB_PULL_LIST) { entry ->
+            val path = entry.arguments?.getString("projectPath")
+            if (path != null) {
+                PullListScreen(
+                    projectPath = path,
+                    onBack = { navController.popBackStack() },
+                    onOpenPull = { number -> navController.navigate(Routes.githubPull(path, number)) },
+                )
+            }
+        }
+        composable(Routes.GITHUB_ISSUES) { entry ->
+            val path = entry.arguments?.getString("projectPath")
+            if (path != null) {
+                IssueListScreen(
+                    projectPath = path,
+                    onBack = { navController.popBackStack() },
+                    onOpenIssue = { number -> navController.navigate(Routes.githubIssue(path, number)) },
+                )
+            }
+        }
+        composable(
+            route = Routes.GITHUB_ISSUE,
+            arguments = listOf(navArgument("number") { type = NavType.IntType }),
+        ) { entry ->
+            val path = entry.arguments?.getString("projectPath")
+            val number = entry.arguments?.getInt("number")
+            if (path != null && number != null) {
+                IssueDetailScreen(projectPath = path, number = number, onBack = { navController.popBackStack() })
             }
         }
         composable(

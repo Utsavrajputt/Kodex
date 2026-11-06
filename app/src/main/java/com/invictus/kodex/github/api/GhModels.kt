@@ -12,6 +12,8 @@ data class GhRepoRef(
     val parent: GhRepoRef? = null,
     /** `has_pull_requests` from `GET /repos/{o}/{r}`: false = the owner switched pull requests off. */
     val pullsEnabled: Boolean = true,
+    /** `has_issues` from `GET /repos/{o}/{r}`: false = the owner switched issues off. */
+    val issuesEnabled: Boolean = true,
 ) {
     val fullName: String get() = "$owner/$name"
 }

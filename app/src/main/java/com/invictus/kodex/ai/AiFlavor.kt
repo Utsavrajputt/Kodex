@@ -76,4 +76,8 @@ class RealAiGate(private val app: Application) : AiGateImpl {
     @Composable
     override fun ExplainErrorAi(errorText: String, projectPath: String?, app: Application) =
         com.invictus.kodex.ai.ui.ExplainErrorAi(errorText, projectPath, app)
+
+    @Composable
+    override fun ListSummaryAi(kind: AiSummaryKind, itemsText: String, app: Application) =
+        com.invictus.kodex.ai.ui.ListSummaryAi(kind, itemsText, app)
 }

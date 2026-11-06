@@ -11,6 +11,9 @@ import com.invictus.kodex.feature.editor.EditorViewModel
  */
 val AiGate: AiGateImpl? get() = if (AiSwitch.enabled) AiFlavor.gate else null
 
+/** What [AiGateImpl.ListSummaryAi] digests. */
+enum class AiSummaryKind { PULLS, ISSUES, THREAD }
+
 interface AiGateImpl {
     val settingsRoute: String
 
@@ -52,4 +55,8 @@ interface AiGateImpl {
     /** Explain an error (Run log, Diagnostics); an optional fix patch goes through diff review. */
     @Composable
     fun ExplainErrorAi(errorText: String, projectPath: String?, app: android.app.Application)
+
+    /** Sparkle button that streams a short digest of [itemsText] (open pull requests, open issues or one issue thread). */
+    @Composable
+    fun ListSummaryAi(kind: AiSummaryKind, itemsText: String, app: android.app.Application)
 }

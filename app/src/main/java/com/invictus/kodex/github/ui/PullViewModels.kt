@@ -42,7 +42,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /** Resolves the project's GitHub repo once and keeps the repository object; shared by the three pull request screens. */
-private class RepoHolder(
+internal class RepoHolder(
     private val projectPath: String,
     private val resolver: GitHubProjectResolver,
     private val repoFactory: (GhRepoRef) -> GitHubRepository,
@@ -63,7 +63,7 @@ private class RepoHolder(
 }
 
 /** Like [describe], but a 404 names the repo and GitHub's own message so the cause can be pinned down. */
-private fun describeFor(repo: String?, e: GitHubError): GhText =
+internal fun describeFor(repo: String?, e: GitHubError): GhText =
     if (e is GitHubError.NotFound && !repo.isNullOrBlank()) {
         GhText.Res(R.string.pr_err_not_found_repo, listOf(repo, e.message.orEmpty().ifBlank { "Not Found" }))
     } else describe(e)

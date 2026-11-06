@@ -1,5 +1,11 @@
 package com.invictus.kodex.github.ui
 
+import com.invictus.kodex.ai.AiSummaryKind
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.foundation.lazy.LazyListScope
+import android.content.Context
+import android.app.Application
 import android.content.Intent
 import android.net.Uri
 import android.text.format.DateUtils
@@ -109,14 +115,14 @@ private fun pullVisual(d: PullDisplay, p: GhPalette): PullVisual = when (d) {
     PullDisplay.Closed -> PullVisual(XIcons.PullRequest, R.string.pr_status_closed, p.danger)
 }
 
-private fun agoText(i: Instant?, nowMs: Long): String? = i?.let {
+internal fun agoText(i: Instant?, nowMs: Long): String? = i?.let {
     val t = it.toEpochMilli()
     DateUtils.getRelativeTimeSpanString(t, maxOf(nowMs, t), DateUtils.MINUTE_IN_MILLIS).toString()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PullTopBar(title: String, onBack: () -> Unit, p: GhPalette, actions: @Composable () -> Unit = {}) {
+internal fun PullTopBar(title: String, onBack: () -> Unit, p: GhPalette, actions: @Composable () -> Unit = {}) {
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Color.Transparent,
@@ -146,7 +152,7 @@ private fun StatusPill(v: PullVisual) {
 }
 
 @Composable
-private fun ErrorBlock(text: String, onRetry: () -> Unit, p: GhPalette) {
+internal fun ErrorBlock(text: String, onRetry: () -> Unit, p: GhPalette) {
     Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(text, style = MaterialTheme.typography.bodyMedium, color = p.onCard)
         TextButton(onClick = onRetry) { Text(stringResource(R.string.gh_retry)) }
@@ -157,15 +163,30 @@ private fun ErrorBlock(text: String, onRetry: () -> Unit, p: GhPalette) {
 // List
 // =================================================================================================
 
+/** Rows shown per section on the hub; "Show all" opens the full list. */
+private const val HUB_LIMIT = 5
+
+/**
+ * Hub: create a pull request, then the pull request and issue sections (first [HUB_LIMIT] open items each).
+ * Order: create, pull requests, issues. When pull requests are off or none are open, and issues has something to show,
+ * issues moves up; with both populated, pull requests stay first.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PullRequestsScreen(
     projectPath: String,
     onBack: () -> Unit,
     onOpenPull: (Int) -> Unit,
+    onOpenPullList: () -> Unit,
+    onOpenIssue: (Int) -> Unit,
+    onOpenIssueList: () -> Unit,
     vm: PullListViewModel = viewModel(
         key = "gh_pulls_$projectPath",
         factory = PullListViewModel.factory(projectPath),
+    ),
+    issuesVm: IssueListViewModel = viewModel(
+        key = "gh_issues_hub_$projectPath",
+        factory = IssueListViewModel.factory(projectPath),
     ),
     /** The "new pull request" section lives on this screen, so it shares this screen's lifetime. */
     createVm: CreatePullViewModel = viewModel(
@@ -174,7 +195,151 @@ fun PullRequestsScreen(
     ),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    val issues by issuesVm.state.collectAsStateWithLifecycle()
     val create by createVm.state.collectAsStateWithLifecycle()
+    val p = ghPalette()
+    val context = LocalContext.current
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val now = rememberNowMs()
+
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume(); issuesVm.onResume() }
+    LaunchedEffect(vm) { vm.events.collect { handleEvent(it, context, snackbar, scope) } }
+    LaunchedEffect(issuesVm) { issuesVm.events.collect { handleEvent(it, context, snackbar, scope) } }
+    LaunchedEffect(createVm) { createVm.created.collect { createVm.reset(); onOpenPull(it) } }
+    LaunchedEffect(createVm) {
+        createVm.createdUpstream.collect { url ->
+            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            createVm.reset()
+        }
+    }
+    val refreshAll = { vm.refresh(); issuesVm.refresh(); createVm.retry() }
+
+    // Issues go first only when there is nothing to show under pull requests but issues has items.
+    val pullsEmpty = state.disabled || (!state.loading && state.error == null && state.items.isEmpty())
+    val issuesFirst = pullsEmpty && !issues.disabled && issues.items.isNotEmpty()
+
+    Scaffold(
+        modifier = Modifier.background(p.screen),
+        containerColor = Color.Transparent,
+        topBar = {
+            PullTopBar(stringResource(R.string.hub_title), onBack, p) {
+                IconButton(onClick = refreshAll) { Icon(XIcons.Refresh, contentDescription = stringResource(R.string.action_refresh)) }
+            }
+        },
+        snackbarHost = { SnackbarHost(snackbar) },
+    ) { padding ->
+        PullToRefreshBox(
+            isRefreshing = state.refreshing || issues.refreshing,
+            onRefresh = refreshAll,
+            modifier = Modifier.padding(padding).fillMaxSize(),
+        ) {
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                // Hidden while loading or when the repo can't be read: the sections below show that error themselves.
+                // With pull requests off on this repo, creating still works for a fork whose upstream accepts them.
+                val canCreate = !state.disabled || (create.upstreamName != null && create.upstreamPullsEnabled)
+                if (canCreate && !create.loading && create.error == null) item(key = "create") { NewPullPanel(create, createVm, p) }
+                if (issuesFirst) {
+                    issuesSection(issues, now, p, context, onOpenIssue, onOpenIssueList, issuesVm::retry)
+                    pullsSection(state, now, p, context, onOpenPull, onOpenPullList, vm::retry)
+                } else {
+                    pullsSection(state, now, p, context, onOpenPull, onOpenPullList, vm::retry)
+                    issuesSection(issues, now, p, context, onOpenIssue, onOpenIssueList, issuesVm::retry)
+                }
+            }
+        }
+    }
+
+    // Step 2 of "new pull request" (title, description, file changes) covers the hub, like a detail screen.
+    if (create.step == CreateStep.Details) {
+        androidx.activity.compose.BackHandler { createVm.backToCompare() }
+        Box(Modifier.fillMaxSize().background(p.screen)) {
+            Scaffold(
+                containerColor = Color.Transparent,
+                topBar = { PullTopBar(stringResource(R.string.pr_details_title), { createVm.backToCompare() }, p) },
+            ) { padding ->
+                Box(Modifier.padding(padding).fillMaxSize()) { DetailsStep(create, createVm, p) }
+            }
+        }
+    }
+    CreatePickerDialog(create, createVm)
+}
+
+@Composable
+internal fun HubSectionHeader(title: String, onShowAll: () -> Unit, p: GhPalette, ai: @Composable () -> Unit = {}) {
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = p.onCard, modifier = Modifier.weight(1f))
+        CompositionLocalProvider(LocalContentColor provides p.accent) { ai() }
+        TextButton(onClick = onShowAll, contentPadding = PaddingValues(start = 10.dp, end = 4.dp)) {
+            Text(stringResource(R.string.hub_show_all), color = p.accent)
+            Icon(XIcons.ChevronRight, contentDescription = null, tint = p.accent, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+private fun LazyListScope.pullsSection(
+    state: PullListState, now: Long, p: GhPalette, context: Context,
+    onOpen: (Int) -> Unit, onShowAll: () -> Unit, onRetry: () -> Unit,
+) {
+    if (state.disabled) {
+        item(key = "pr-disabled") { NoticeBlock(stringResource(R.string.pr_disabled_title), stringResource(R.string.pr_disabled_body, state.repoName), p) }
+        return
+    }
+    item(key = "pr-header") {
+        HubSectionHeader(stringResource(R.string.hub_prs_section), onShowAll, p) {
+            AiGate?.ListSummaryAi(AiSummaryKind.PULLS, pullsDigest(state.items), context.applicationContext as Application)
+        }
+    }
+    when {
+        state.loading -> item(key = "pr-loading") { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp), color = p.accent) }
+        state.error != null && state.items.isEmpty() -> item(key = "pr-error") { ErrorBlock(state.error.resolve(context), onRetry, p) }
+        state.items.isEmpty() -> item(key = "pr-empty") {
+            Text(stringResource(R.string.pr_empty_open), style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted, modifier = Modifier.padding(vertical = 8.dp))
+        }
+        else -> items(state.items.take(HUB_LIMIT), key = { "pr-${it.number}" }) { pull -> PullRow(pull, now, p) { onOpen(pull.number) } }
+    }
+}
+
+private fun LazyListScope.issuesSection(
+    state: IssueListState, now: Long, p: GhPalette, context: Context,
+    onOpen: (Int) -> Unit, onShowAll: () -> Unit, onRetry: () -> Unit,
+) {
+    if (state.disabled) {
+        item(key = "issue-disabled") { NoticeBlock(stringResource(R.string.issue_disabled_title), stringResource(R.string.issue_disabled_body, state.repoName), p) }
+        return
+    }
+    item(key = "issue-header") {
+        HubSectionHeader(stringResource(R.string.hub_issues_section), onShowAll, p) {
+            AiGate?.ListSummaryAi(AiSummaryKind.ISSUES, issuesDigest(state.items), context.applicationContext as Application)
+        }
+    }
+    when {
+        state.loading -> item(key = "issue-loading") { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp), color = p.accent) }
+        state.error != null && state.items.isEmpty() -> item(key = "issue-error") { ErrorBlock(state.error.resolve(context), onRetry, p) }
+        state.items.isEmpty() -> item(key = "issue-empty") {
+            Text(stringResource(R.string.issue_empty_open), style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted, modifier = Modifier.padding(vertical = 8.dp))
+        }
+        else -> items(state.items.take(HUB_LIMIT), key = { "issue-${it.number}" }) { issue -> IssueRow(issue, now, p) { onOpen(issue.number) } }
+    }
+}
+
+/** Full pull request list with filters and paging (opened from the hub's "Show all"). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PullListScreen(
+    projectPath: String,
+    onBack: () -> Unit,
+    onOpenPull: (Int) -> Unit,
+    vm: PullListViewModel = viewModel(
+        key = "gh_pull_list_$projectPath",
+        factory = PullListViewModel.factory(projectPath),
+    ),
+) {
+    val state by vm.state.collectAsStateWithLifecycle()
     val p = ghPalette()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
@@ -183,38 +348,29 @@ fun PullRequestsScreen(
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume() }
     LaunchedEffect(vm) { vm.events.collect { handleEvent(it, context, snackbar, scope) } }
-    LaunchedEffect(createVm) { createVm.created.collect { createVm.reset(); onOpenPull(it) } }
-    LaunchedEffect(createVm) {
-        createVm.createdUpstream.collect { url ->
-            runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            createVm.reset()
-        }
-    }
-    val refreshAll = { vm.refresh(); createVm.retry() }
 
     Scaffold(
         modifier = Modifier.background(p.screen),
         containerColor = Color.Transparent,
         topBar = {
-            PullTopBar(stringResource(R.string.pr_title), onBack, p) {
-                IconButton(onClick = refreshAll) { Icon(XIcons.Refresh, contentDescription = stringResource(R.string.action_refresh)) }
+            PullTopBar(stringResource(R.string.pr_list_title), onBack, p) {
+                AiGate?.ListSummaryAi(AiSummaryKind.PULLS, pullsDigest(state.items), context.applicationContext as Application)
+                IconButton(onClick = vm::refresh) { Icon(XIcons.Refresh, contentDescription = stringResource(R.string.action_refresh)) }
             }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = refreshAll, modifier = Modifier.padding(padding).fillMaxSize()) {
+        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = vm::refresh, modifier = Modifier.padding(padding).fillMaxSize()) {
             LazyColumn(
                 Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                // Hidden while loading or when the repo can't be read: the list below shows that error itself.
-                // With pull requests off on this repo, creating still works for a fork whose upstream accepts them.
-                val canCreate = !state.disabled || (create.upstreamName != null && create.upstreamPullsEnabled)
-                if (canCreate && !create.loading && create.error == null) item(key = "create") { NewPullPanel(create, createVm, p) }
                 if (!state.disabled) item(key = "filters") { PullFilters(state.filter, vm::setFilter, p) }
                 when {
-                    state.disabled -> item(key = "disabled") { PullsDisabledBlock(state.repoName, p) }
+                    state.disabled -> item(key = "disabled") {
+                        NoticeBlock(stringResource(R.string.pr_disabled_title), stringResource(R.string.pr_disabled_body, state.repoName), p)
+                    }
                     state.loading -> item(key = "loading") { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp), color = p.accent) }
                     state.error != null && state.items.isEmpty() -> item(key = "error") {
                         ErrorBlock(state.error?.resolve(context).orEmpty(), vm::retry, p)
@@ -239,25 +395,10 @@ fun PullRequestsScreen(
             }
         }
     }
-
-    // Step 2 of "new pull request" (title, description, file changes) covers the list, like a detail screen.
-    if (create.step == CreateStep.Details) {
-        androidx.activity.compose.BackHandler { createVm.backToCompare() }
-        Box(Modifier.fillMaxSize().background(p.screen)) {
-            Scaffold(
-                containerColor = Color.Transparent,
-                topBar = { PullTopBar(stringResource(R.string.pr_details_title), { createVm.backToCompare() }, p) },
-            ) { padding ->
-                Box(Modifier.padding(padding).fillMaxSize()) { DetailsStep(create, createVm, p) }
-            }
-        }
-    }
-    CreatePickerDialog(create, createVm)
 }
 
-/** Slim notice shown instead of the list when the repo owner switched pull requests off on GitHub. */
 @Composable
-private fun PullsDisabledBlock(repoName: String, p: GhPalette) {
+internal fun NoticeBlock(title: String, body: String, p: GhPalette) {
     val shape = RoundedCornerShape(14.dp)
     Row(
         Modifier.fillMaxWidth().clip(shape).background(p.runCard).border(1.dp, p.cardBorder, shape).padding(12.dp),
@@ -266,9 +407,18 @@ private fun PullsDisabledBlock(repoName: String, p: GhPalette) {
     ) {
         Icon(XIcons.Info, contentDescription = null, tint = p.accent, modifier = Modifier.size(20.dp))
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(stringResource(R.string.pr_disabled_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = p.onCard)
-            Text(stringResource(R.string.pr_disabled_body, repoName), style = MaterialTheme.typography.bodySmall, color = p.onCardMuted)
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = p.onCard)
+            Text(body, style = MaterialTheme.typography.bodySmall, color = p.onCardMuted)
         }
+    }
+}
+
+/** Plain-text digest of pull requests for the AI summary (titles, authors, branches, short description). */
+internal fun pullsDigest(items: List<GhPull>): String = items.take(40).joinToString("\n\n") { p ->
+    buildString {
+        append("#${p.number} ${p.title} (by ${p.author}, ${p.headRef} -> ${p.baseRef}${if (p.draft) ", draft" else ""}")
+        append(", ${p.comments} comments, created ${p.createdAt?.toString()?.take(10) ?: "?"})")
+        if (p.body.isNotBlank()) append("\n").append(p.body.trim().take(300))
     }
 }
 
@@ -285,20 +435,26 @@ private fun NewPullPanel(state: CreatePullState, vm: CreatePullViewModel, p: GhP
             .clip(shape)
             .background(p.accent.copy(alpha = 0.12f))
             .border(1.dp, p.accent.copy(alpha = 0.5f), shape)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(horizontal = 14.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Box(Modifier.size(28.dp).clip(CircleShape).background(p.accent), contentAlignment = Alignment.Center) {
-                Icon(XIcons.Add, contentDescription = null, tint = p.onInstall, modifier = Modifier.size(18.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(34.dp).clip(CircleShape).background(p.accent), contentAlignment = Alignment.Center) {
+                Icon(XIcons.Add, contentDescription = null, tint = p.onInstall, modifier = Modifier.size(20.dp))
             }
-            Text(
-                stringResource(R.string.pr_create), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                color = p.onCard, modifier = Modifier.weight(1f),
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.pr_create), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                    color = p.onCard, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    stringResource(R.string.pr_create_hint), style = MaterialTheme.typography.labelSmall,
+                    color = p.onCardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
             Button(
                 onClick = vm::goDetails, enabled = state.canCompare,
-                contentPadding = PaddingValues(horizontal = 18.dp), modifier = Modifier.height(36.dp),
+                contentPadding = PaddingValues(horizontal = 18.dp), modifier = Modifier.height(40.dp),
             ) { Text(stringResource(R.string.pr_compare)) }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -324,7 +480,7 @@ private fun BranchChip(label: String, value: String, p: GhPalette, modifier: Mod
     val shape = RoundedCornerShape(12.dp)
     Column(
         modifier.clip(shape).background(p.runCard).border(1.dp, p.pickerBorder, shape).clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = 9.dp),
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = p.onCardMuted)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -336,7 +492,7 @@ private fun BranchChip(label: String, value: String, p: GhPalette, modifier: Mod
 }
 
 @Composable
-private fun PullFilters(selected: PullFilter, onSelect: (PullFilter) -> Unit, p: GhPalette) {
+internal fun PullFilters(selected: PullFilter, onSelect: (PullFilter) -> Unit, p: GhPalette) {
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -357,7 +513,7 @@ private fun PullFilters(selected: PullFilter, onSelect: (PullFilter) -> Unit, p:
 }
 
 @Composable
-private fun PullRow(pull: GhPull, nowMs: Long, p: GhPalette, onClick: () -> Unit) {
+internal fun PullRow(pull: GhPull, nowMs: Long, p: GhPalette, onClick: () -> Unit) {
     val v = pullVisual(pull.display, p)
     val shape = RoundedCornerShape(18.dp)
     val ago = agoText(pull.createdAt, nowMs)
