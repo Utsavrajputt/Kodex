@@ -6,6 +6,8 @@ object AgentPrompt {
         topLevel: List<String>,
         instructions: ProjectInstructions.Found? = null,
         canPaintImages: Boolean = false,
+        /** True when the git_* tools are available (the project is a git repository). */
+        hasGit: Boolean = false,
         autoApply: Boolean = false,
         /** The user's custom instructions from AI settings (apply to every project); null/blank = none. */
         globalInstructions: String? = null,
@@ -33,7 +35,7 @@ object AgentPrompt {
         } else {
             appendLine("- Your changes are only STAGED. The user reviews every change in a diff before anything is written, so never claim a file is already changed; say what you changed and that it is ready to review.")
         }
-        appendLine("- Release / version requests (\"prepare a release\", \"bump the version\"): first read the real files that hold the version (Gradle build files and version catalog, CHANGELOG.md, README, package manifests) and update every place the version is defined, using today's date for changelog entries. Do not assume a file is already right. You have no git tool: never claim to have committed, tagged or pushed; tell the user which commands to run.")
+        appendLine("- Release / version requests (\"prepare a release\", \"bump the version\"): first read the real files that hold the version (Gradle build files and version catalog, CHANGELOG.md, README, package manifests) and update every place the version is defined, using today's date for changelog entries. Do not assume a file is already right. " + (if (hasGit) "For release notes or a changelog, read the real history first: git_log with since='last_tag' (or the last release's tag), and git_show for details; never ask the user to list the commits. You can commit and tag LOCALLY (git_commit, git_tag) but only when the user asks; you can never push, so tell them to push." else "You have no git tool: never claim to have committed, tagged or pushed; tell the user which commands to run."))
         appendLine("- Prefer minimal changes that match the project's existing style. Do not rewrite whole files.")
         appendLine("- Some files are blocked by the user's privacy settings. If a tool says a path is blocked, do not try to work around it.")
         appendLine("- Be concise. Use Markdown: short paragraphs, bullet lists, fenced code blocks with a language tag, and `path/to/File.kt` for file names.")
@@ -44,9 +46,11 @@ object AgentPrompt {
             appendLine("- Use render_svg ONLY when the user explicitly asks for SVG or vector art. If they ask for a PNG or just \"an image\" / \"an icon\", use generate_image.")
             appendLine("- To change an image the user attached, call generate_image with use_reference=attached and describe the change; to refine your own earlier result use use_reference=last_generated.")
         } else {
-            appendLine("- No image model is available right now (it needs a Gemini or OpenAI API key in AI settings). If the user wants a normal image, tell them to add one of those keys and that you can draw an SVG meanwhile. Use render_svg only when they ask for SVG/vector or accept the SVG alternative.")
+            appendLine("- No image model is available right now (it needs a Gemini or OpenAI API key in AI settings). If the user wants an image, logo or icon, tell them that plainly and that they need to add one of those keys. Do NOT draw an SVG as a substitute; use render_svg only when the user explicitly asks for SVG / vector art.")
         }
         appendLine("- For an app icon: look at the project first (name, purpose, colours in the resources), then write a rich prompt: one bold, memorable subject, strong contrast, polished modern style, full-bleed square artwork (no rounded corners, no text unless asked) with the key shapes inside the central 60%. Use purpose='app_icon' and a clear title. Don't ask questions unless the app is unclear.")
+        appendLine("- \"More like this\": when the user says this about an image you made, call generate_image again with use_reference=last_generated, keep the same idea, palette and style, but give a clearly fresh take (different symbol composition or angle).")
+        if (hasGit) appendLine("- git tools: read freely when useful; never run git_commit or git_tag unless the user asked for it in this chat.")
         appendLine("- Generated images are only previews until the user presses \"Use as app icon\" or Save under the picture; never claim the icon was installed.")
         if (!globalInstructions.isNullOrBlank()) {
             appendLine()

@@ -40,6 +40,10 @@ data class IssueListState(
     val error: GhText? = null,
     /** The repo owner turned issues off (GitHub setting), so there is nothing to list. */
     val disabled: Boolean = false,
+    /** Which repo is listed: the project's own, or (for a fork) its upstream. */
+    val source: RepoSource = RepoSource.Origin,
+    /** `owner/name` of the upstream when this project is a fork (shows the switch), else null. */
+    val upstreamName: String? = null,
 )
 
 class IssueListViewModel(
@@ -48,10 +52,11 @@ class IssueListViewModel(
     repoFactory: (GhRepoRef) -> GitHubRepository,
     private val profiles: GitHubProfileRepository,
     private val tokens: GitHubTokenProvider,
+    initialSource: RepoSource? = null,
 ) : ViewModel() {
 
     private val holder = RepoHolder(projectPath, resolver, repoFactory)
-    private val _state = MutableStateFlow(IssueListState())
+    private val _state = MutableStateFlow(IssueListState(source = initialSource ?: RepoSource.Origin))
     val state: StateFlow<IssueListState> = _state.asStateFlow()
 
     private val _events = MutableSharedFlow<GhEvent>(extraBufferCapacity = 8)
@@ -61,6 +66,7 @@ class IssueListViewModel(
     private var nextPage = 1
     private var login: String? = null
     private var resumed = false
+    private var sourceChosen = initialSource != null
 
     init { load(reset = true) }
 
@@ -73,6 +79,14 @@ class IssueListViewModel(
     fun setFilter(f: IssueFilter) {
         if (f == _state.value.filter) return
         _state.update { it.copy(filter = f, items = emptyList(), hasMore = false) }
+        load(reset = true)
+    }
+
+    /** Switch between the fork itself and its upstream repo. */
+    fun setSource(s: RepoSource) {
+        if (s == _state.value.source) return
+        sourceChosen = true
+        _state.update { it.copy(source = s, items = emptyList(), hasMore = false, loading = true, disabled = false, error = null) }
         load(reset = true)
     }
 
@@ -96,14 +110,27 @@ class IssueListViewModel(
         }
         job = viewModelScope.launch {
             try {
-                val repo = holder.get() ?: run { fail(GhText.Res(R.string.gh_err_not_ready)); return@launch }
-                _state.update { it.copy(repoName = holder.ref?.fullName.orEmpty()) }
+                val origin = holder.get() ?: run { fail(GhText.Res(R.string.gh_err_not_ready)); return@launch }
+                var source = _state.value.source
+                var ownInfo: GhRepoRef? = null
+                if (reset) {
+                    ownInfo = try { origin.repoInfo() } catch (e: GitHubError) { null }
+                    val parent = ownInfo?.parent
+                    // First load of a fork whose own issues are switched off: show the upstream's instead.
+                    if (!sourceChosen) {
+                        sourceChosen = true
+                        if (parent != null && ownInfo?.issuesEnabled == false) source = RepoSource.Upstream
+                    }
+                    _state.update { it.copy(upstreamName = parent?.fullName, source = source) }
+                }
+                val repo = holder.forSource(source) ?: run { fail(GhText.Res(R.string.gh_err_not_ready)); return@launch }
+                _state.update { it.copy(repoName = holder.refFor(source)?.fullName.orEmpty()) }
                 if (filter == IssueFilter.Mine && login == null) {
                     login = profiles.cached(GitHubTokenProvider.HOST)?.login
                         ?: tokens.token()?.let { profiles.fetch(GitHubTokenProvider.HOST, it)?.login }
                 }
                 if (reset) {
-                    val info = try { repo.repoInfo() } catch (e: GitHubError) { null }
+                    val info = if (source == RepoSource.Origin) ownInfo else try { repo.repoInfo() } catch (e: GitHubError) { null }
                     if (info != null && !info.issuesEnabled) {
                         _state.update {
                             it.copy(loading = false, loadingMore = false, refreshing = false, items = emptyList(), hasMore = false, error = null, disabled = true)
@@ -126,9 +153,9 @@ class IssueListViewModel(
             } catch (e: GitHubError) {
                 if (_state.value.items.isNotEmpty()) {
                     _state.update { it.copy(loading = false, loadingMore = false, refreshing = false) }
-                    _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e)))
+                    _events.tryEmit(GhEvent.Snack(describeFor(holder.refFor(_state.value.source)?.fullName, e)))
                 } else {
-                    fail(describeFor(holder.ref?.fullName, e))
+                    fail(describeFor(holder.refFor(_state.value.source)?.fullName, e))
                 }
             }
         }
@@ -137,10 +164,10 @@ class IssueListViewModel(
     private fun fail(text: GhText) = _state.update { it.copy(loading = false, loadingMore = false, refreshing = false, error = text) }
 
     companion object {
-        fun factory(projectPath: String) = viewModelFactory {
+        fun factory(projectPath: String, initialSource: RepoSource? = null) = viewModelFactory {
             initializer {
                 val c = (this[APPLICATION_KEY] as KodexApp).container
-                IssueListViewModel(projectPath, c.gitHubProjectResolver, c::gitHubRepository, c.gitHubProfileRepository, c.gitHubTokenProvider)
+                IssueListViewModel(projectPath, c.gitHubProjectResolver, c::gitHubRepository, c.gitHubProfileRepository, c.gitHubTokenProvider, initialSource)
             }
         }
     }
@@ -167,6 +194,7 @@ data class IssueDetailState(
 class IssueDetailViewModel(
     projectPath: String,
     private val number: Int,
+    private val source: RepoSource,
     resolver: GitHubProjectResolver,
     repoFactory: (GhRepoRef) -> GitHubRepository,
 ) : ViewModel() {
@@ -188,26 +216,38 @@ class IssueDetailViewModel(
         _state.update { it.copy(commentsLoading = true, commentsError = null) }
         viewModelScope.launch {
             try {
-                val repo = holder.get() ?: run { fail(GhText.Res(R.string.gh_err_not_ready)); return@launch }
+                val repo = holder.forSource(source) ?: run { fail(GhText.Res(R.string.gh_err_not_ready)); return@launch }
                 val issue = repo.issue(number)
                 _state.update { it.copy(loading = false, error = null, issue = issue) }
                 try {
                     val list = repo.issueComments(number)
                     _state.update { it.copy(comments = list, commentsLoading = false) }
                 } catch (e: GitHubError) {
-                    _state.update { it.copy(commentsLoading = false, commentsError = describeFor(holder.ref?.fullName, e)) }
+                    _state.update { it.copy(commentsLoading = false, commentsError = describeFor(holder.refFor(source)?.fullName, e)) }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
                 _state.update { it.copy(commentsLoading = false) }
-                if (silent && _state.value.issue != null) _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e)))
-                else fail(describeFor(holder.ref?.fullName, e))
+                if (silent && _state.value.issue != null) _events.tryEmit(GhEvent.Snack(describeFor(holder.refFor(source)?.fullName, e)))
+                else fail(describeFor(holder.refFor(source)?.fullName, e))
             }
         }
     }
 
     private fun fail(text: GhText) = _state.update { it.copy(loading = false, commentsLoading = false, error = text) }
+
+    private val _refs = MutableStateFlow<List<RefItem>>(emptyList())
+
+    /** Issues and pull requests offered after typing "#" in the comment box. */
+    val refs: StateFlow<List<RefItem>> = _refs.asStateFlow()
+    private var refsLoaded = false
+
+    fun loadRefs() {
+        if (refsLoaded) return
+        refsLoaded = true
+        viewModelScope.launch { _refs.value = holder.forSource(source)?.recentRefs().orEmpty() }
+    }
 
     fun setDraft(text: String) = _state.update { it.copy(draft = text) }
 
@@ -218,14 +258,14 @@ class IssueDetailViewModel(
         _state.update { it.copy(posting = true) }
         viewModelScope.launch {
             try {
-                val repo = holder.get() ?: run { _state.update { it.copy(posting = false) }; return@launch }
+                val repo = holder.forSource(source) ?: run { _state.update { it.copy(posting = false) }; return@launch }
                 val c = repo.addIssueComment(number, text)
                 _state.update { it.copy(posting = false, draft = "", comments = it.comments + c, issue = it.issue?.copy(comments = it.issue.comments + 1)) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
                 _state.update { it.copy(posting = false) }
-                _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e)))
+                _events.tryEmit(GhEvent.Snack(describeFor(holder.refFor(source)?.fullName, e)))
             }
         }
     }
@@ -247,7 +287,7 @@ class IssueDetailViewModel(
         _state.update { it.copy(acting = true) }
         viewModelScope.launch {
             try {
-                val repo = holder.get() ?: run { _state.update { it.copy(acting = false) }; return@launch }
+                val repo = holder.forSource(source) ?: run { _state.update { it.copy(acting = false) }; return@launch }
                 if (close) repo.closeIssue(number, reason ?: "completed") else repo.reopenIssue(number)
                 val fresh = repo.issue(number)
                 _state.update { it.copy(acting = false, issue = fresh) }
@@ -256,16 +296,16 @@ class IssueDetailViewModel(
                 throw e
             } catch (e: GitHubError) {
                 _state.update { it.copy(acting = false) }
-                _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e)))
+                _events.tryEmit(GhEvent.Snack(describeFor(holder.refFor(source)?.fullName, e)))
             }
         }
     }
 
     companion object {
-        fun factory(projectPath: String, number: Int) = viewModelFactory {
+        fun factory(projectPath: String, number: Int, source: RepoSource = RepoSource.Origin) = viewModelFactory {
             initializer {
                 val c = (this[APPLICATION_KEY] as KodexApp).container
-                IssueDetailViewModel(projectPath, number, c.gitHubProjectResolver, c::gitHubRepository)
+                IssueDetailViewModel(projectPath, number, source, c.gitHubProjectResolver, c::gitHubRepository)
             }
         }
     }

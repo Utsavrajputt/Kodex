@@ -38,7 +38,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -194,11 +194,12 @@ private fun IssueFilters(selected: IssueFilter, onSelect: (IssueFilter) -> Unit,
 @Composable
 fun IssueListScreen(
     projectPath: String,
+    source: RepoSource,
     onBack: () -> Unit,
-    onOpenIssue: (Int) -> Unit,
+    onOpenIssue: (Int, RepoSource) -> Unit,
     vm: IssueListViewModel = viewModel(
-        key = "gh_issue_list_$projectPath",
-        factory = IssueListViewModel.factory(projectPath),
+        key = "gh_issue_list_${projectPath}_${source.arg}",
+        factory = IssueListViewModel.factory(projectPath, source),
     ),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -228,6 +229,7 @@ fun IssueListScreen(
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                if (state.upstreamName != null) item(key = "source") { SourceToggle(state.source, state.repoName, vm::setSource, p) }
                 if (!state.disabled) item(key = "filters") { IssueFilters(state.filter, vm::setFilter, p) }
                 when {
                     state.disabled -> item(key = "disabled") {
@@ -245,7 +247,7 @@ fun IssueListScreen(
                         )
                     }
                     else -> {
-                        items(state.items, key = { it.number }) { issue -> IssueRow(issue, now, p) { onOpenIssue(issue.number) } }
+                        items(state.items, key = { it.number }) { issue -> IssueRow(issue, now, p) { onOpenIssue(issue.number, state.source) } }
                         if (state.hasMore) item(key = "more-${state.items.size}") {
                             LaunchedEffect(Unit) { vm.loadMore() }
                             Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
@@ -269,9 +271,10 @@ fun IssueDetailScreen(
     projectPath: String,
     number: Int,
     onBack: () -> Unit,
+    source: RepoSource = RepoSource.Origin,
     vm: IssueDetailViewModel = viewModel(
-        key = "gh_issue_${projectPath}_$number",
-        factory = IssueDetailViewModel.factory(projectPath, number),
+        key = "gh_issue_${projectPath}_${source.arg}_$number",
+        factory = IssueDetailViewModel.factory(projectPath, number, source),
     ),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -413,12 +416,18 @@ private fun CommentCard(c: GhIssueComment, nowMs: Long, p: GhPalette) {
 /** Bottom bar: close / reopen and the comment box. */
 @Composable
 private fun IssueComposer(issue: GhIssue, state: IssueDetailState, vm: IssueDetailViewModel, p: GhPalette) {
+    val refs by vm.refs.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
+            HashRefField(
                 value = state.draft, onValueChange = vm::setDraft,
+                refs = refs, onNeedRefs = vm::loadRefs, p = p,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = p.accent, unfocusedBorderColor = p.pickerBorder,
+                    focusedTextColor = p.onCard, unfocusedTextColor = p.onCard, cursorColor = p.accent,
+                ),
                 placeholder = { Text(stringResource(R.string.issue_comment_hint)) },
-                maxLines = 4, modifier = Modifier.weight(1f),
+                maxLines = 4, modifier = Modifier.weight(1f), suggestionsAbove = true,
             )
             IconButton(onClick = vm::postComment, enabled = state.draft.isNotBlank() && !state.posting) {
                 if (state.posting) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = p.accent)

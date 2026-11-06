@@ -29,6 +29,8 @@ data class GhIssue(
     val closedAt: Instant?,
     val htmlUrl: String,
     val body: String,
+    /** The "issue" is really a pull request (GitHub numbers both from one sequence). */
+    val isPull: Boolean = false,
 ) {
     val isOpen: Boolean get() = state == "open"
 
@@ -54,6 +56,7 @@ data class GhIssue(
                 closedAt = parseInstant(j.str("closed_at")),
                 htmlUrl = j.optString("html_url"),
                 body = j.str("body").orEmpty(),
+                isPull = j.has("pull_request"),
             )
         }
     }

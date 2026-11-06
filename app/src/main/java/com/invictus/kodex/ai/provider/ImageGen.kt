@@ -22,10 +22,10 @@ object ImageGen {
     fun supports(providerId: String) = providerId == "gemini" || providerId == "openai"
 
     /** [reference] is an existing picture to edit / restyle (null = create from scratch). Throws [AiException]. */
-    suspend fun generate(providerId: String, key: String, prompt: String, reference: ByteArray?, refMime: String): Result =
+    suspend fun generate(providerId: String, key: String, prompt: String, reference: ByteArray?, refMime: String, highQuality: Boolean = false): Result =
         when (providerId) {
-            "gemini" -> gemini(key, prompt, reference, refMime)
-            "openai" -> openAi(key, prompt, reference, refMime)
+            "gemini" -> gemini(key, prompt, reference, refMime, highQuality)
+            "openai" -> openAi(key, prompt, reference, refMime, highQuality)
             else -> throw AiException(AiError.Unknown(0, "$providerId can't generate images"))
         }
 
@@ -36,9 +36,11 @@ object ImageGen {
             (l.contains("model") || l.contains("verif") || l.contains("not supported") || l.contains("not found")))
     }
 
-    private suspend fun gemini(key: String, prompt: String, reference: ByteArray?, refMime: String): Result {
+    private suspend fun gemini(key: String, prompt: String, reference: ByteArray?, refMime: String, highQuality: Boolean): Result {
         var last: AiError? = null
-        for (model in GEMINI_MODELS) {
+        // Icons and logos: the Pro image model first (cleaner shapes, better composition); the others if the key has no access.
+        val models = if (highQuality) listOf("gemini-3-pro-image", "gemini-3.1-flash-image", "gemini-2.5-flash-image") else GEMINI_MODELS
+        for (model in models) {
             val parts = JSONArray().put(JSONObject().put("text", prompt))
             if (reference != null) {
                 parts.put(
@@ -100,11 +102,11 @@ object ImageGen {
         throw AiException(AiError.Unknown(0, "No image returned" + if (said.isNotBlank()) ": " + said.take(160) else ""))
     }
 
-    private suspend fun openAi(key: String, prompt: String, reference: ByteArray?, refMime: String): Result {
+    private suspend fun openAi(key: String, prompt: String, reference: ByteArray?, refMime: String, highQuality: Boolean): Result {
         var last: AiError? = null
         for (model in OPENAI_MODELS) {
             val req = if (reference == null) {
-                val body = JSONObject().put("model", model).put("prompt", prompt).put("size", "1024x1024").put("n", 1)
+                val body = JSONObject().put("model", model).put("prompt", prompt).put("size", "1024x1024").put("n", 1).also { if (highQuality) it.put("quality", "high") }
                 Request.Builder()
                     .url("https://api.openai.com/v1/images/generations")
                     .header("Authorization", "Bearer $key")
@@ -116,6 +118,7 @@ object ImageGen {
                     .addFormDataPart("model", model)
                     .addFormDataPart("prompt", prompt)
                     .addFormDataPart("size", "1024x1024")
+                    .apply { if (highQuality) addFormDataPart("quality", "high") }
                     .addFormDataPart("image[]", "reference.$ext", reference.toRequestBody(refMime.toMediaType()))
                     .build()
                 Request.Builder()

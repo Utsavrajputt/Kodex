@@ -41,7 +41,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Resolves the project's GitHub repo once and keeps the repository object; shared by the three pull request screens. */
+/** Which repo the lists and details read: the project's own repo (origin) or, for a fork, the repo it was forked from. */
+enum class RepoSource(val arg: String) {
+    Origin("origin"), Upstream("upstream");
+
+    companion object {
+        fun of(arg: String?): RepoSource = if (arg == Upstream.arg) Upstream else Origin
+    }
+}
+
+/** Resolves the project's GitHub repo once and keeps the repository object; shared by the pull request and issue screens. */
 internal class RepoHolder(
     private val projectPath: String,
     private val resolver: GitHubProjectResolver,
@@ -52,6 +61,21 @@ internal class RepoHolder(
     var ref: GhRepoRef? = null
         private set
 
+    /** The repo this fork was forked from, once looked up (null for a non-fork or when it can't be read). */
+    var parent: GhRepoRef? = null
+        private set
+
+    internal var upstreamRepository: GitHubRepository?
+        get() = upstreamRepo
+        set(v) { upstreamRepo = v }
+    private var upstreamRepo: GitHubRepository? = null
+    private val factory = repoFactory
+
+    internal fun setUpstream(p: GhRepoRef): GitHubRepository {
+        parent = p
+        return factory(p).also { upstreamRepo = it }
+    }
+
     /** Null when the project is not ready (no git / no GitHub remote / no token). */
     suspend fun get(): GitHubRepository? {
         repository?.let { return it }
@@ -61,6 +85,18 @@ internal class RepoHolder(
         }
     }
 }
+
+/** Upstream (parent) repo of a fork, or null. */
+internal suspend fun RepoHolder.upstream(): GitHubRepository? {
+    upstreamRepository?.let { return it }
+    val own = get() ?: return null
+    val p = (try { own.repoInfo().parent } catch (e: GitHubError) { null }) ?: return null
+    return setUpstream(p)
+}
+
+internal suspend fun RepoHolder.forSource(s: RepoSource): GitHubRepository? = if (s == RepoSource.Upstream) upstream() else get()
+
+internal fun RepoHolder.refFor(s: RepoSource): GhRepoRef? = if (s == RepoSource.Upstream) parent else ref
 
 /** Like [describe], but a 404 names the repo and GitHub's own message so the cause can be pinned down. */
 internal fun describeFor(repo: String?, e: GitHubError): GhText =
@@ -81,6 +117,10 @@ data class PullListState(
     val error: GhText? = null,
     /** The repo owner turned pull requests off (GitHub setting), so there is nothing to list or create. */
     val disabled: Boolean = false,
+    /** Which repo is listed: the project's own, or (for a fork) its upstream. */
+    val source: RepoSource = RepoSource.Origin,
+    /** `owner/name` of the upstream when this project is a fork (shows the switch), else null. */
+    val upstreamName: String? = null,
 )
 
 class PullListViewModel(
@@ -89,10 +129,11 @@ class PullListViewModel(
     repoFactory: (GhRepoRef) -> GitHubRepository,
     private val profiles: GitHubProfileRepository,
     private val tokens: GitHubTokenProvider,
+    initialSource: RepoSource? = null,
 ) : ViewModel() {
 
     private val holder = RepoHolder(projectPath, resolver, repoFactory)
-    private val _state = MutableStateFlow(PullListState())
+    private val _state = MutableStateFlow(PullListState(source = initialSource ?: RepoSource.Origin))
     val state: StateFlow<PullListState> = _state.asStateFlow()
 
     private val _events = MutableSharedFlow<GhEvent>(extraBufferCapacity = 8)
@@ -102,6 +143,7 @@ class PullListViewModel(
     private var nextPage = 1
     private var login: String? = null
     private var resumed = false
+    private var sourceChosen = initialSource != null
 
     init { load(reset = true) }
 
@@ -114,6 +156,14 @@ class PullListViewModel(
     fun setFilter(f: PullFilter) {
         if (f == _state.value.filter) return
         _state.update { it.copy(filter = f, items = emptyList(), hasMore = false) }
+        load(reset = true)
+    }
+
+    /** Switch between the fork itself and its upstream repo. */
+    fun setSource(s: RepoSource) {
+        if (s == _state.value.source) return
+        sourceChosen = true
+        _state.update { it.copy(source = s, items = emptyList(), hasMore = false, loading = true, disabled = false, error = null) }
         load(reset = true)
     }
 
@@ -137,15 +187,27 @@ class PullListViewModel(
         }
         job = viewModelScope.launch {
             try {
-                val repo = holder.get() ?: run { fail(GhText.Res(R.string.gh_err_not_ready)); return@launch }
-                _state.update { it.copy(repoName = holder.ref?.fullName.orEmpty()) }
+                val origin = holder.get() ?: run { fail(GhText.Res(R.string.gh_err_not_ready)); return@launch }
+                var source = _state.value.source
+                var ownInfo: GhRepoRef? = null
+                if (reset) {
+                    ownInfo = try { origin.repoInfo() } catch (e: GitHubError) { null }
+                    val parent = ownInfo?.parent
+                    // First load of a fork whose own pull requests are switched off: show the upstream's instead.
+                    if (!sourceChosen) {
+                        sourceChosen = true
+                        if (parent != null && ownInfo?.pullsEnabled == false) source = RepoSource.Upstream
+                    }
+                    _state.update { it.copy(upstreamName = parent?.fullName, source = source) }
+                }
+                val repo = holder.forSource(source) ?: run { fail(GhText.Res(R.string.gh_err_not_ready)); return@launch }
+                _state.update { it.copy(repoName = holder.refFor(source)?.fullName.orEmpty()) }
                 if (filter == PullFilter.Mine && login == null) {
                     login = profiles.cached(GitHubTokenProvider.HOST)?.login
                         ?: tokens.token()?.let { profiles.fetch(GitHubTokenProvider.HOST, it)?.login }
                 }
                 if (reset) {
-                    // GitHub answers 404 for the pulls of a repo with pull requests switched off: ask the repo itself first.
-                    val info = try { repo.repoInfo() } catch (e: GitHubError) { null }
+                    val info = if (source == RepoSource.Origin) ownInfo else try { repo.repoInfo() } catch (e: GitHubError) { null }
                     if (info != null && !info.pullsEnabled) {
                         _state.update {
                             it.copy(loading = false, loadingMore = false, refreshing = false, items = emptyList(), hasMore = false, error = null, disabled = true)
@@ -168,9 +230,9 @@ class PullListViewModel(
             } catch (e: GitHubError) {
                 if (_state.value.items.isNotEmpty()) {
                     _state.update { it.copy(loading = false, loadingMore = false, refreshing = false) }
-                    _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e)))
+                    _events.tryEmit(GhEvent.Snack(describeFor(holder.refFor(_state.value.source)?.fullName, e)))
                 } else {
-                    fail(describeFor(holder.ref?.fullName, e))
+                    fail(describeFor(holder.refFor(_state.value.source)?.fullName, e))
                 }
             }
         }
@@ -179,10 +241,10 @@ class PullListViewModel(
     private fun fail(text: GhText) = _state.update { it.copy(loading = false, loadingMore = false, refreshing = false, error = text) }
 
     companion object {
-        fun factory(projectPath: String) = viewModelFactory {
+        fun factory(projectPath: String, initialSource: RepoSource? = null) = viewModelFactory {
             initializer {
                 val c = (this[APPLICATION_KEY] as KodexApp).container
-                PullListViewModel(projectPath, c.gitHubProjectResolver, c::gitHubRepository, c.gitHubProfileRepository, c.gitHubTokenProvider)
+                PullListViewModel(projectPath, c.gitHubProjectResolver, c::gitHubRepository, c.gitHubProfileRepository, c.gitHubTokenProvider, initialSource)
             }
         }
     }
@@ -245,6 +307,7 @@ private fun GhCommitDetail.toSummary() = GitCommitSummary(
 class PullDetailViewModel(
     projectPath: String,
     private val number: Int,
+    private val source: RepoSource,
     resolver: GitHubProjectResolver,
     repoFactory: (GhRepoRef) -> GitHubRepository,
 ) : ViewModel() {
@@ -270,7 +333,7 @@ class PullDetailViewModel(
         if (!silent) _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
             try {
-                val repo = holder.get() ?: run { fail(GhText.Res(R.string.gh_err_not_ready)); return@launch }
+                val repo = holder.forSource(source) ?: run { fail(GhText.Res(R.string.gh_err_not_ready)); return@launch }
                 var pull = repo.pull(number)
                 _state.update { it.copy(loading = false, error = null, pull = pull) }
                 if (pull.isOpen && pull.mergeable == null) {
@@ -282,7 +345,7 @@ class PullDetailViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
-                if (silent && _state.value.pull != null) _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e))) else fail(describeFor(holder.ref?.fullName, e))
+                if (silent && _state.value.pull != null) _events.tryEmit(GhEvent.Snack(describeFor(holder.refFor(source)?.fullName, e))) else fail(describeFor(holder.refFor(source)?.fullName, e))
             }
         }
     }
@@ -313,13 +376,13 @@ class PullDetailViewModel(
         _state.update { it.copy(commitsLoading = true, commitsError = null) }
         viewModelScope.launch {
             try {
-                val repo = holder.get() ?: run { _state.update { it.copy(commitsLoading = false, commitsError = GhText.Res(R.string.gh_err_not_ready)) }; return@launch }
+                val repo = holder.forSource(source) ?: run { _state.update { it.copy(commitsLoading = false, commitsError = GhText.Res(R.string.gh_err_not_ready)) }; return@launch }
                 val list = repo.pullCommits(number)
                 _state.update { it.copy(commits = list, commitsLoading = false) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
-                _state.update { it.copy(commitsLoading = false, commitsError = describeFor(holder.ref?.fullName, e)) }
+                _state.update { it.copy(commitsLoading = false, commitsError = describeFor(holder.refFor(source)?.fullName, e)) }
             }
         }
     }
@@ -328,13 +391,13 @@ class PullDetailViewModel(
         _state.update { it.copy(filesLoading = true, filesError = null) }
         viewModelScope.launch {
             try {
-                val repo = holder.get() ?: run { _state.update { it.copy(filesLoading = false, filesError = GhText.Res(R.string.gh_err_not_ready)) }; return@launch }
+                val repo = holder.forSource(source) ?: run { _state.update { it.copy(filesLoading = false, filesError = GhText.Res(R.string.gh_err_not_ready)) }; return@launch }
                 val list = repo.pullFiles(number)
                 _state.update { it.copy(files = list, filesLoading = false) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
-                _state.update { it.copy(filesLoading = false, filesError = describeFor(holder.ref?.fullName, e)) }
+                _state.update { it.copy(filesLoading = false, filesError = describeFor(holder.refFor(source)?.fullName, e)) }
             }
         }
     }
@@ -351,7 +414,7 @@ class PullDetailViewModel(
         }
         viewModelScope.launch {
             try {
-                val repo = holder.get() ?: run {
+                val repo = holder.forSource(source) ?: run {
                     _state.update { it.copy(commitView = null) }
                     _events.tryEmit(GhEvent.Snack(GhText.Res(R.string.gh_err_not_ready)))
                     return@launch
@@ -375,7 +438,7 @@ class PullDetailViewModel(
                 throw e
             } catch (e: GitHubError) {
                 _state.update { it.copy(commitView = null) }
-                _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e)))
+                _events.tryEmit(GhEvent.Snack(describeFor(holder.refFor(source)?.fullName, e)))
             }
         }
     }
@@ -415,7 +478,7 @@ class PullDetailViewModel(
         _state.update { it.copy(acting = true, mergeDialog = false) }
         viewModelScope.launch {
             try {
-                val repo = holder.get() ?: return@launch
+                val repo = holder.forSource(source) ?: return@launch
                 repo.mergePull(number, s.mergeMethod)
                 var branchLeft = false
                 if (s.deleteBranch && pull.canDeleteBranch) {
@@ -427,16 +490,48 @@ class PullDetailViewModel(
                         branchLeft = true
                     }
                 }
-                _events.tryEmit(GhEvent.Snack(GhText.Res(if (branchLeft) R.string.pr_merged_branch_kept else R.string.pr_merged_ok)))
+                val commented = announceCompletion(repo, pull)
+                _events.tryEmit(
+                    GhEvent.Snack(
+                        when {
+                            branchLeft -> GhText.Res(R.string.pr_merged_branch_kept)
+                            commented > 0 -> GhText.Res(R.string.pr_merged_commented, listOf(commented))
+                            else -> GhText.Res(R.string.pr_merged_ok)
+                        },
+                    ),
+                )
                 _state.update { it.copy(acting = false) }
                 load(silent = true)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
                 _state.update { it.copy(acting = false) }
-                _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e)))
+                _events.tryEmit(GhEvent.Snack(describeFor(holder.refFor(source)?.fullName, e)))
             }
         }
+    }
+
+    /**
+     * After a merge into the default branch: comment "Completed in #PR" on every issue the title or description closes
+     * ("fixes #12"), the same ones GitHub closes by itself. Pull requests and failures are skipped; returns how many got one.
+     */
+    private suspend fun announceCompletion(repo: GitHubRepository, pull: GhPull): Int {
+        val defaultBranch = holder.refFor(source)?.defaultBranch
+        if (defaultBranch != null && pull.baseRef != defaultBranch) return 0
+        var done = 0
+        for (n in closingIssueRefs(pull.title + "\n" + pull.body)) {
+            if (n == pull.number) continue
+            try {
+                if (repo.issue(n).isPull) continue
+                repo.addIssueComment(n, "Completed in #${pull.number}")
+                done++
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: GitHubError) {
+                // best effort: the merge itself already succeeded
+            }
+        }
+        return done
     }
 
     fun confirmClose() = changeState(close = true)
@@ -447,7 +542,7 @@ class PullDetailViewModel(
         _state.update { it.copy(acting = true, closeDialog = false) }
         viewModelScope.launch {
             try {
-                val repo = holder.get() ?: return@launch
+                val repo = holder.forSource(source) ?: return@launch
                 if (close) repo.closePull(number) else repo.reopenPull(number)
                 _events.tryEmit(GhEvent.Snack(GhText.Res(if (close) R.string.pr_closed_ok else R.string.pr_reopened_ok)))
                 _state.update { it.copy(acting = false) }
@@ -456,16 +551,16 @@ class PullDetailViewModel(
                 throw e
             } catch (e: GitHubError) {
                 _state.update { it.copy(acting = false) }
-                _events.tryEmit(GhEvent.Snack(describeFor(holder.ref?.fullName, e)))
+                _events.tryEmit(GhEvent.Snack(describeFor(holder.refFor(source)?.fullName, e)))
             }
         }
     }
 
     companion object {
-        fun factory(projectPath: String, number: Int) = viewModelFactory {
+        fun factory(projectPath: String, number: Int, source: RepoSource = RepoSource.Origin) = viewModelFactory {
             initializer {
                 val c = (this[APPLICATION_KEY] as KodexApp).container
-                PullDetailViewModel(projectPath, number, c.gitHubProjectResolver, c::gitHubRepository)
+                PullDetailViewModel(projectPath, number, source, c.gitHubProjectResolver, c::gitHubRepository)
             }
         }
     }
@@ -675,6 +770,23 @@ class CreatePullViewModel(
         }
         if (cmp.isEmpty) return ""
         return cmp.toPromptText(skip = { com.invictus.kodex.ai.Redactor.isExcluded(it, excludeGlobs) })
+    }
+
+    private val _refs = MutableStateFlow<List<RefItem>>(emptyList())
+
+    /** Issues and pull requests offered after typing "#", from the repo the pull request is opened against. */
+    val refs: StateFlow<List<RefItem>> = _refs.asStateFlow()
+    private var refsFor: String? = null
+
+    fun loadRefs() {
+        val up = upstreamRef
+        val target = if (_state.value.useUpstream && up != null) up else holder.ref
+        if (target == null || target.fullName == refsFor) return
+        refsFor = target.fullName
+        viewModelScope.launch {
+            val repo = if (target === up) repoFactory(target) else holder.get()
+            _refs.value = repo?.recentRefs().orEmpty()
+        }
     }
 
     fun setTitle(v: String) { titleEdited = true; _state.update { it.copy(title = v, formError = null) } }

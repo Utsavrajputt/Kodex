@@ -11,6 +11,7 @@ import com.invictus.kodex.ai.notify.AiNotifier
 import com.invictus.kodex.ai.notify.AppVisibility
 import com.invictus.kodex.ai.AiRuntime
 import com.invictus.kodex.ai.Redactor
+import com.invictus.kodex.ai.agent.AgentGit
 import com.invictus.kodex.ai.agent.AgentPrompt
 import com.invictus.kodex.ai.agent.MemoryDocs
 import com.invictus.kodex.ai.agent.ProjectInstructions
@@ -385,7 +386,11 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                     },
                     lastGenerated = { _messages.value.flatMap { it.generated }.lastOrNull()?.let { File(it.path) } },
                     onImage = { g -> updateLast { it.copy(generated = it.generated + g) } },
+                    svgAllowed = { _messages.value.any { it.role == "user" && SVG_ASK.containsMatchIn(it.text) } },
                 )
+                val gitTools = if (File(root, ".git").exists()) {
+                    AgentGit(root, (app as com.invictus.kodex.KodexApp).container.gitGlobalIdentityFile, files)
+                } else null
                 val auto = prefs.autoApply.first()
                 val memoryOn = prefs.memoryEnabled.first()
                 val memoryStore = if (memoryOn) ProjectMemory.Store(memDir, globalMemDir) { text -> condenseMemory(provider, key, model, text) } else null
@@ -393,7 +398,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                 synchronized(turnUndo) { turnUndo.clear() }
                 val r = AgentRunner(
                     provider, key, model,
-                    AgentTools(files, pending, toolbox, writer.takeIf { auto }, memoryStore),
+                    AgentTools(files, pending, toolbox, writer.takeIf { auto }, memoryStore, gitTools),
                     budget,
                     sendImages = ModelInfo.supportsImages(provider.id, model),
                 )
@@ -413,7 +418,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                 r.run(
                     AgentPrompt.system(
                         root.name, topLevel, instructions,
-                        canPaintImages = toolbox.canRaster, autoApply = auto,
+                        canPaintImages = toolbox.canRaster, hasGit = gitTools != null, autoApply = auto,
                         globalInstructions = globalInstructions, memoryEnabled = memoryOn, memory = memory, globalMemory = globalMemory,
                     ),
                     history, sink,
@@ -817,6 +822,9 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     }
 
     companion object {
+        /** The user asked for SVG / vector art (only then may the agent draw an SVG). */
+        private val SVG_ASK = Regex("(?i)\\b(svg|vectors?|vectori[sz]e[ds]?|scalable)\\b|वेक्टर")
+
         /** Photos per message. */
         const val MAX_IMAGES = 4
 

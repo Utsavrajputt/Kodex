@@ -34,6 +34,7 @@ import com.invictus.kodex.github.ui.IssueDetailScreen
 import com.invictus.kodex.github.ui.IssueListScreen
 import com.invictus.kodex.github.ui.PullListScreen
 import com.invictus.kodex.github.ui.PullRequestsScreen
+import com.invictus.kodex.github.ui.RepoSource
 import com.invictus.kodex.github.ui.RunLogScreen
 import com.invictus.kodex.feature.git.GitBranchesScreen
 import com.invictus.kodex.feature.git.GitCloneScreen
@@ -392,51 +393,73 @@ fun KodexNavHost(
                 PullRequestsScreen(
                     projectPath = path,
                     onBack = { navController.popBackStack() },
-                    onOpenPull = { number -> navController.navigate(Routes.githubPull(path, number)) },
-                    onOpenPullList = { navController.navigate(Routes.githubPullList(path)) },
-                    onOpenIssue = { number -> navController.navigate(Routes.githubIssue(path, number)) },
-                    onOpenIssueList = { navController.navigate(Routes.githubIssues(path)) },
+                    onOpenPull = { number, src -> navController.navigate(Routes.githubPull(path, number, src.arg)) },
+                    onOpenPullList = { src -> navController.navigate(Routes.githubPullList(path, src.arg)) },
+                    onOpenIssue = { number, src -> navController.navigate(Routes.githubIssue(path, number, src.arg)) },
+                    onOpenIssueList = { src -> navController.navigate(Routes.githubIssues(path, src.arg)) },
                 )
             }
         }
-        composable(Routes.GITHUB_PULL_LIST) { entry ->
+        composable(
+            route = Routes.GITHUB_PULL_LIST,
+            arguments = listOf(navArgument("src") { type = NavType.StringType; defaultValue = "origin" }),
+        ) { entry ->
             val path = entry.arguments?.getString("projectPath")
             if (path != null) {
                 PullListScreen(
                     projectPath = path,
+                    source = RepoSource.of(entry.arguments?.getString("src")),
                     onBack = { navController.popBackStack() },
-                    onOpenPull = { number -> navController.navigate(Routes.githubPull(path, number)) },
+                    onOpenPull = { number, src -> navController.navigate(Routes.githubPull(path, number, src.arg)) },
                 )
             }
         }
-        composable(Routes.GITHUB_ISSUES) { entry ->
+        composable(
+            route = Routes.GITHUB_ISSUES,
+            arguments = listOf(navArgument("src") { type = NavType.StringType; defaultValue = "origin" }),
+        ) { entry ->
             val path = entry.arguments?.getString("projectPath")
             if (path != null) {
                 IssueListScreen(
                     projectPath = path,
+                    source = RepoSource.of(entry.arguments?.getString("src")),
                     onBack = { navController.popBackStack() },
-                    onOpenIssue = { number -> navController.navigate(Routes.githubIssue(path, number)) },
+                    onOpenIssue = { number, src -> navController.navigate(Routes.githubIssue(path, number, src.arg)) },
                 )
             }
         }
         composable(
             route = Routes.GITHUB_ISSUE,
-            arguments = listOf(navArgument("number") { type = NavType.IntType }),
+            arguments = listOf(
+                navArgument("number") { type = NavType.IntType },
+                navArgument("src") { type = NavType.StringType; defaultValue = "origin" },
+            ),
         ) { entry ->
             val path = entry.arguments?.getString("projectPath")
             val number = entry.arguments?.getInt("number")
             if (path != null && number != null) {
-                IssueDetailScreen(projectPath = path, number = number, onBack = { navController.popBackStack() })
+                IssueDetailScreen(
+                    projectPath = path, number = number,
+                    source = RepoSource.of(entry.arguments?.getString("src")),
+                    onBack = { navController.popBackStack() },
+                )
             }
         }
         composable(
             route = Routes.GITHUB_PULL,
-            arguments = listOf(navArgument("number") { type = NavType.IntType }),
+            arguments = listOf(
+                navArgument("number") { type = NavType.IntType },
+                navArgument("src") { type = NavType.StringType; defaultValue = "origin" },
+            ),
         ) { entry ->
             val path = entry.arguments?.getString("projectPath")
             val number = entry.arguments?.getInt("number")
             if (path != null && number != null) {
-                PullDetailScreen(projectPath = path, number = number, onBack = { navController.popBackStack() })
+                PullDetailScreen(
+                    projectPath = path, number = number,
+                    source = RepoSource.of(entry.arguments?.getString("src")),
+                    onBack = { navController.popBackStack() },
+                )
             }
         }
         composable(Routes.CODE_SEARCH) { entry ->

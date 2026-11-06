@@ -176,10 +176,10 @@ private const val HUB_LIMIT = 5
 fun PullRequestsScreen(
     projectPath: String,
     onBack: () -> Unit,
-    onOpenPull: (Int) -> Unit,
-    onOpenPullList: () -> Unit,
-    onOpenIssue: (Int) -> Unit,
-    onOpenIssueList: () -> Unit,
+    onOpenPull: (Int, RepoSource) -> Unit,
+    onOpenPullList: (RepoSource) -> Unit,
+    onOpenIssue: (Int, RepoSource) -> Unit,
+    onOpenIssueList: (RepoSource) -> Unit,
     vm: PullListViewModel = viewModel(
         key = "gh_pulls_$projectPath",
         factory = PullListViewModel.factory(projectPath),
@@ -206,7 +206,7 @@ fun PullRequestsScreen(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.onResume(); issuesVm.onResume() }
     LaunchedEffect(vm) { vm.events.collect { handleEvent(it, context, snackbar, scope) } }
     LaunchedEffect(issuesVm) { issuesVm.events.collect { handleEvent(it, context, snackbar, scope) } }
-    LaunchedEffect(createVm) { createVm.created.collect { createVm.reset(); onOpenPull(it) } }
+    LaunchedEffect(createVm) { createVm.created.collect { createVm.reset(); onOpenPull(it, RepoSource.Origin) } }
     LaunchedEffect(createVm) {
         createVm.createdUpstream.collect { url ->
             runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -244,11 +244,11 @@ fun PullRequestsScreen(
                 val canCreate = !state.disabled || (create.upstreamName != null && create.upstreamPullsEnabled)
                 if (canCreate && !create.loading && create.error == null) item(key = "create") { NewPullPanel(create, createVm, p) }
                 if (issuesFirst) {
-                    issuesSection(issues, now, p, context, onOpenIssue, onOpenIssueList, issuesVm::retry)
-                    pullsSection(state, now, p, context, onOpenPull, onOpenPullList, vm::retry)
+                    issuesSection(issues, now, p, context, onOpenIssue, onOpenIssueList, issuesVm::setSource, issuesVm::retry)
+                    pullsSection(state, now, p, context, onOpenPull, onOpenPullList, vm::setSource, vm::retry)
                 } else {
-                    pullsSection(state, now, p, context, onOpenPull, onOpenPullList, vm::retry)
-                    issuesSection(issues, now, p, context, onOpenIssue, onOpenIssueList, issuesVm::retry)
+                    pullsSection(state, now, p, context, onOpenPull, onOpenPullList, vm::setSource, vm::retry)
+                    issuesSection(issues, now, p, context, onOpenIssue, onOpenIssueList, issuesVm::setSource, issuesVm::retry)
                 }
             }
         }
@@ -283,47 +283,61 @@ internal fun HubSectionHeader(title: String, onShowAll: () -> Unit, p: GhPalette
 
 private fun LazyListScope.pullsSection(
     state: PullListState, now: Long, p: GhPalette, context: Context,
-    onOpen: (Int) -> Unit, onShowAll: () -> Unit, onRetry: () -> Unit,
+    onOpen: (Int, RepoSource) -> Unit, onShowAll: (RepoSource) -> Unit, onSource: (RepoSource) -> Unit, onRetry: () -> Unit,
 ) {
     if (state.disabled) {
         item(key = "pr-disabled") { NoticeBlock(stringResource(R.string.pr_disabled_title), stringResource(R.string.pr_disabled_body, state.repoName), p) }
         return
     }
     item(key = "pr-header") {
-        HubSectionHeader(stringResource(R.string.hub_prs_section), onShowAll, p) {
+        HubSectionHeader(stringResource(R.string.hub_prs_section), { onShowAll(state.source) }, p) {
             AiGate?.ListSummaryAi(AiSummaryKind.PULLS, pullsDigest(state.items), context.applicationContext as Application)
         }
     }
+    if (state.upstreamName != null) item(key = "pr-source") { SourceToggle(state.source, state.repoName, onSource, p) }
     when {
         state.loading -> item(key = "pr-loading") { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp), color = p.accent) }
         state.error != null && state.items.isEmpty() -> item(key = "pr-error") { ErrorBlock(state.error.resolve(context), onRetry, p) }
         state.items.isEmpty() -> item(key = "pr-empty") {
             Text(stringResource(R.string.pr_empty_open), style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted, modifier = Modifier.padding(vertical = 8.dp))
         }
-        else -> items(state.items.take(HUB_LIMIT), key = { "pr-${it.number}" }) { pull -> PullRow(pull, now, p) { onOpen(pull.number) } }
+        else -> items(state.items.take(HUB_LIMIT), key = { "pr-${it.number}" }) { pull -> PullRow(pull, now, p) { onOpen(pull.number, state.source) } }
     }
 }
 
 private fun LazyListScope.issuesSection(
     state: IssueListState, now: Long, p: GhPalette, context: Context,
-    onOpen: (Int) -> Unit, onShowAll: () -> Unit, onRetry: () -> Unit,
+    onOpen: (Int, RepoSource) -> Unit, onShowAll: (RepoSource) -> Unit, onSource: (RepoSource) -> Unit, onRetry: () -> Unit,
 ) {
     if (state.disabled) {
         item(key = "issue-disabled") { NoticeBlock(stringResource(R.string.issue_disabled_title), stringResource(R.string.issue_disabled_body, state.repoName), p) }
         return
     }
     item(key = "issue-header") {
-        HubSectionHeader(stringResource(R.string.hub_issues_section), onShowAll, p) {
+        HubSectionHeader(stringResource(R.string.hub_issues_section), { onShowAll(state.source) }, p) {
             AiGate?.ListSummaryAi(AiSummaryKind.ISSUES, issuesDigest(state.items), context.applicationContext as Application)
         }
     }
+    if (state.upstreamName != null) item(key = "issue-source") { SourceToggle(state.source, state.repoName, onSource, p) }
     when {
         state.loading -> item(key = "issue-loading") { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp), color = p.accent) }
         state.error != null && state.items.isEmpty() -> item(key = "issue-error") { ErrorBlock(state.error.resolve(context), onRetry, p) }
         state.items.isEmpty() -> item(key = "issue-empty") {
             Text(stringResource(R.string.issue_empty_open), style = MaterialTheme.typography.bodyMedium, color = p.onCardMuted, modifier = Modifier.padding(vertical = 8.dp))
         }
-        else -> items(state.items.take(HUB_LIMIT), key = { "issue-${it.number}" }) { issue -> IssueRow(issue, now, p) { onOpen(issue.number) } }
+        else -> items(state.items.take(HUB_LIMIT), key = { "issue-${it.number}" }) { issue -> IssueRow(issue, now, p) { onOpen(issue.number, state.source) } }
+    }
+}
+
+/** Origin | Upstream switch for a fork, with the repo currently shown underneath. */
+@Composable
+internal fun SourceToggle(source: RepoSource, repoName: String, onSelect: (RepoSource) -> Unit, p: GhPalette) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            RunFilterChip(label = stringResource(R.string.source_origin), dot = null, selected = source == RepoSource.Origin, onClick = { onSelect(RepoSource.Origin) })
+            RunFilterChip(label = stringResource(R.string.source_upstream), dot = null, selected = source == RepoSource.Upstream, onClick = { onSelect(RepoSource.Upstream) })
+        }
+        if (repoName.isNotBlank()) Text(repoName, style = MaterialTheme.typography.labelSmall, color = p.onCardMuted)
     }
 }
 
@@ -332,11 +346,12 @@ private fun LazyListScope.issuesSection(
 @Composable
 fun PullListScreen(
     projectPath: String,
+    source: RepoSource,
     onBack: () -> Unit,
-    onOpenPull: (Int) -> Unit,
+    onOpenPull: (Int, RepoSource) -> Unit,
     vm: PullListViewModel = viewModel(
-        key = "gh_pull_list_$projectPath",
-        factory = PullListViewModel.factory(projectPath),
+        key = "gh_pull_list_${projectPath}_${source.arg}",
+        factory = PullListViewModel.factory(projectPath, source),
     ),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -366,6 +381,7 @@ fun PullListScreen(
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                if (state.upstreamName != null) item(key = "source") { SourceToggle(state.source, state.repoName, vm::setSource, p) }
                 if (!state.disabled) item(key = "filters") { PullFilters(state.filter, vm::setFilter, p) }
                 when {
                     state.disabled -> item(key = "disabled") {
@@ -383,7 +399,7 @@ fun PullListScreen(
                         )
                     }
                     else -> {
-                        items(state.items, key = { it.number }) { pull -> PullRow(pull, now, p) { onOpenPull(pull.number) } }
+                        items(state.items, key = { it.number }) { pull -> PullRow(pull, now, p) { onOpenPull(pull.number, state.source) } }
                         if (state.hasMore) item(key = "more-${state.items.size}") {
                             LaunchedEffect(Unit) { vm.loadMore() }
                             Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
@@ -569,9 +585,10 @@ fun PullDetailScreen(
     projectPath: String,
     number: Int,
     onBack: () -> Unit,
+    source: RepoSource = RepoSource.Origin,
     vm: PullDetailViewModel = viewModel(
-        key = "gh_pull_${projectPath}_$number",
-        factory = PullDetailViewModel.factory(projectPath, number),
+        key = "gh_pull_${projectPath}_${source.arg}_$number",
+        factory = PullDetailViewModel.factory(projectPath, number, source),
     ),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -1019,6 +1036,7 @@ private fun DetailsStep(state: CreatePullState, vm: CreatePullViewModel, p: GhPa
         focusedLabelColor = p.accent, unfocusedLabelColor = p.onCardMuted, cursorColor = p.accent,
     )
     val cmp = state.cmp
+    val refs by vm.refs.collectAsStateWithLifecycle()
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1027,8 +1045,9 @@ private fun DetailsStep(state: CreatePullState, vm: CreatePullViewModel, p: GhPa
             stringResource(R.string.pr_merge_summary, state.head, if (state.useUpstream) "${state.baseRepoName}:${state.base}" else state.base),
             style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = p.onCard,
         )
-        OutlinedTextField(
+        HashRefField(
             value = state.title, onValueChange = vm::setTitle,
+            refs = refs, onNeedRefs = vm::loadRefs, p = p, colors = fieldColors,
             label = { Text(stringResource(R.string.pr_field_title)) },
             singleLine = true,
             trailingIcon = {
@@ -1044,16 +1063,12 @@ private fun DetailsStep(state: CreatePullState, vm: CreatePullViewModel, p: GhPa
                     }
                 }
             },
-            colors = fieldColors,
-            modifier = Modifier.fillMaxWidth(),
         )
-        OutlinedTextField(
+        HashRefField(
             value = state.body, onValueChange = vm::setBody,
+            refs = refs, onNeedRefs = vm::loadRefs, p = p, colors = fieldColors,
             label = { Text(stringResource(R.string.pr_field_body)) },
             minLines = 5, maxLines = 12,
-            keyboardOptions = KeyboardOptions.Default,
-            colors = fieldColors,
-            modifier = Modifier.fillMaxWidth(),
         )
         Row(Modifier.fillMaxWidth().clickable { vm.setDraft(!state.draft) }, verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {

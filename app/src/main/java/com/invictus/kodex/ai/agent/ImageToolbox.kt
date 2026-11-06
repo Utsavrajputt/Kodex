@@ -42,12 +42,14 @@ class ImageToolbox(
     /** The newest image the agent made earlier in this chat (to refine it). */
     private val lastGenerated: () -> File?,
     private val onImage: (GeneratedImage) -> Unit,
+    /** True when the user asked for SVG / vector art somewhere in this chat; render_svg is refused otherwise. */
+    private val svgAllowed: () -> Boolean = { true },
 ) {
     val canRaster: Boolean = imageProviderId != null && !imageKey.isNullOrBlank() && ImageGen.supports(imageProviderId)
 
     suspend fun generate(a: JSONObject): AgentTools.Outcome {
         if (!canRaster || imageProviderId == null || imageKey == null) {
-            return err("No image model is available. Tell the user to add a Gemini or OpenAI API key in AI settings to create normal images, and offer an SVG drawing instead.")
+            return err("No image model is available: image generation needs a Gemini or OpenAI API key in AI settings. Tell the user exactly that. Do NOT draw an SVG instead unless the user asks for SVG / vector art.")
         }
         val prompt = a.optString("prompt").trim()
         if (prompt.isEmpty()) return err("Missing 'prompt'")
@@ -60,9 +62,12 @@ class ImageToolbox(
         }
         val full = if (purpose == GeneratedImage.PURPOSE_ICON) prompt + "\n\n" + ICON_BRIEF else prompt
         val result = try {
-            ImageGen.generate(imageProviderId, imageKey, full, ref?.readBytes(), if (ref?.extension.equals("png", true)) "image/png" else "image/jpeg")
+            ImageGen.generate(
+                imageProviderId, imageKey, full, ref?.readBytes(), if (ref?.extension.equals("png", true)) "image/png" else "image/jpeg",
+                highQuality = purpose == GeneratedImage.PURPOSE_ICON,
+            )
         } catch (e: AiException) {
-            return err("Image generation failed: ${e.error.message}")
+            return err("Image generation failed: ${e.error.message}. Tell the user this exact reason. Do NOT draw an SVG instead unless the user asks for SVG / vector art.")
         }
         val decoded = BitmapFactory.decodeByteArray(result.bytes, 0, result.bytes.size)
             ?: return err("The provider returned data that is not an image")
@@ -75,6 +80,9 @@ class ImageToolbox(
     }
 
     fun renderSvg(a: JSONObject): AgentTools.Outcome {
+        if (!svgAllowed()) {
+            return err("The user did not ask for SVG / vector art, so do not draw one. Use generate_image for pictures and icons; if it is unavailable or failed, tell the user why and stop.")
+        }
         val text = a.optString("svg").trim()
         if (!text.contains("<svg")) return err("'svg' must be a complete <svg>…</svg> document")
         val purpose = purposeOf(a)
@@ -130,9 +138,12 @@ class ImageToolbox(
             "Done. The image is now shown to the user in the chat with Save and \"Use as app icon\" buttons. " +
                 "Do not describe it at length; offer one or two ways to refine it."
         private const val ICON_BRIEF =
-            "Make it a polished, high-quality modern app icon, the kind a top designer would ship: rich but clean (soft gradients, depth, " +
-                "subtle lighting are welcome). Square 1:1 artwork that fills the whole canvas edge to edge (no rounded corners, no border, " +
-                "no mockup, no device frame, no transparent areas). One bold, memorable subject centred inside the central 60% of the " +
-                "canvas so launcher masks never cut it. Strong contrast, limited palette, readable at 48 px. No text unless the user asked for it."
+            "Design this like a top app-icon designer would for the Google Play / App Store: ONE bold, instantly recognisable symbol (a simple, " +
+                "clever shape, not a busy scene), built from clean geometric forms with smooth curves and precise edges. Modern premium look: " +
+                "a rich two- or three-colour gradient background, soft layered depth, a gentle highlight and a subtle soft shadow under the symbol, " +
+                "like polished glass or satin 3D, never flat clip-art and never noisy. Strong contrast between symbol and background, a limited " +
+                "harmonious palette, crisp at 48 px. Square 1:1 artwork that fills the whole canvas edge to edge (no rounded corners, no border, " +
+                "no frame, no mockup, no device, no transparent areas), symbol centred inside the central 60% so launcher masks never cut it. " +
+                "No text, letters or watermarks unless the user asked for them."
     }
 }

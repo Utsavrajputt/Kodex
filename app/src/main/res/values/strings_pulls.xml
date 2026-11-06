@@ -59,6 +59,7 @@
     <string name="pr_close_body">The branch stays as it is. You can reopen the pull request later.</string>
     <string name="pr_merged_ok">Pull request merged</string>
     <string name="pr_merged_branch_kept">Merged, but the branch could not be deleted</string>
+    <string name="pr_merged_commented">Pull request merged. Commented on %1$d linked issue(s)</string>
     <string name="pr_closed_ok">Pull request closed</string>
     <string name="pr_reopened_ok">Pull request reopened</string>
 
@@ -107,6 +108,8 @@
     <string name="hub_title">Pull requests &amp; issues</string>
     <string name="hub_prs_section">Pull requests</string>
     <string name="hub_issues_section">Issues</string>
+    <string name="source_origin">Origin</string>
+    <string name="source_upstream">Upstream</string>
     <string name="hub_show_all">Show all</string>
     <string name="pr_empty_open">No open pull requests</string>
     <string name="issue_empty_open">No open issues</string>

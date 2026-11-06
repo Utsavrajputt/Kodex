@@ -285,6 +285,9 @@ fun AgentChatContent(
                             },
                             onSaveImage = { g, svg -> vm.saveImage(g, svg) },
                             onApplyIcon = { g -> vm.applyAsAppIcon(g) },
+                            onMoreLikeThis = { g ->
+                                vm.send("More like this: make another version of this ${if (g.isIcon) "icon" else "image"} with the same idea and style, but a fresh take.", emptyList())
+                            },
                         )
                     }
                 }
@@ -670,6 +673,7 @@ private fun MessageItem(
     onEdit: () -> Unit,
     onSaveImage: (GeneratedImage, Boolean) -> Unit,
     onApplyIcon: (GeneratedImage) -> Unit,
+    onMoreLikeThis: (GeneratedImage) -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
     if (m.role == "user") {
@@ -728,7 +732,10 @@ private fun MessageItem(
                 SelectionContainer { MarkdownContent(m.text, Modifier.padding(top = if (showSteps) 8.dp else 0.dp)) }
             }
             m.generated.forEach { g ->
-                GeneratedImageCard(g, onSave = { svg -> onSaveImage(g, svg) }, onApplyIcon = { onApplyIcon(g) })
+                GeneratedImageCard(
+                    g, onSave = { svg -> onSaveImage(g, svg) }, onApplyIcon = { onApplyIcon(g) },
+                    onMoreLikeThis = if (isLast && !busy && g.svgPath == null) ({ onMoreLikeThis(g) }) else null,
+                )
             }
             if (!m.streaming && m.text.isNotBlank()) {
                 Row {
@@ -1095,7 +1102,7 @@ private fun SendStopButton(busy: Boolean, canSend: Boolean, onSend: () -> Unit, 
 
 /** A picture the agent made: preview + Save (PNG, and SVG when it is vector art) + Use as app icon. */
 @Composable
-private fun GeneratedImageCard(g: GeneratedImage, onSave: (svg: Boolean) -> Unit, onApplyIcon: () -> Unit) {
+private fun GeneratedImageCard(g: GeneratedImage, onSave: (svg: Boolean) -> Unit, onApplyIcon: () -> Unit, onMoreLikeThis: (() -> Unit)?) {
     val cs = MaterialTheme.colorScheme
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -1119,6 +1126,7 @@ private fun GeneratedImageCard(g: GeneratedImage, onSave: (svg: Boolean) -> Unit
                 if (g.isIcon) {
                     Button(onClick = onApplyIcon) { Text("Use as app icon") }
                 }
+                if (onMoreLikeThis != null) OutlinedButton(onClick = onMoreLikeThis) { Text("More like this") }
                 OutlinedButton(onClick = { onSave(false) }) { Text("Save PNG") }
                 if (g.svgPath != null) OutlinedButton(onClick = { onSave(true) }) { Text("Save SVG") }
             }

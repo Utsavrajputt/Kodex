@@ -23,11 +23,13 @@ class AgentTools(
     private val autoCommit: (suspend (FileChange) -> Boolean)? = null,
     /** Per-project memory (kept in app storage); null disables the save_memory tool. */
     private val memory: ProjectMemory.Store? = null,
+    /** Git read tools plus local commit / tag; null when the project is not a git repository. */
+    private val git: AgentGit? = null,
 ) {
 
     data class Outcome(val text: String, val isError: Boolean = false)
 
-    val specs: List<ToolSpec> get() = baseSpecs + memorySpecs() + imageSpecs()
+    val specs: List<ToolSpec> get() = baseSpecs + memorySpecs() + gitSpecs() + imageSpecs()
 
     private val baseSpecs: List<ToolSpec> = listOf(
         ToolSpec(
@@ -125,6 +127,46 @@ class AgentTools(
         )
     }
 
+    private fun gitSpecs(): List<ToolSpec> {
+        if (git == null) return emptyList()
+        return listOf(
+            ToolSpec("git_status", "Current branch and which files are changed, staged or untracked.", schema()),
+            ToolSpec(
+                "git_log",
+                "Recent commits, newest first (short id, date, author, message). Use it to summarize what changed, e.g. for a changelog or release notes. " +
+                    "Pass since='last_tag' (or a tag name) to list only the commits made after that tag.",
+                schema(
+                    "max" to int("How many commits (1-200, default 30)."),
+                    "path" to str("Only commits touching this file or folder."),
+                    "since" to str("A tag name, or 'last_tag' for the most recent tag: only commits after it."),
+                ),
+            ),
+            ToolSpec(
+                "git_show",
+                "One commit: full message, changed files and line counts. Pass 'path' to also get that file's diff in the commit.",
+                schema("commit" to str("Commit id or short id."), "path" to str("Optional file whose diff to include."), required = listOf("commit")),
+            ),
+            ToolSpec("git_diff", "Uncommitted changes as a diff: unstaged by default, or the staged ones with staged=true.", schema("staged" to str("'true' for staged changes."))),
+            ToolSpec("git_tags", "List tags, newest first.", schema()),
+            ToolSpec(
+                "git_commit",
+                "Create a LOCAL commit. Only when the user asks you to commit. Pass the files to include in 'paths', or all_changes='true' for everything changed. " +
+                    "Write a clear message (short subject line, optional body). Never pushes.",
+                schema(
+                    "message" to str("Commit message."),
+                    "paths" to strArray("Files to stage and commit, relative to the project root."),
+                    "all_changes" to str("'true' to stage and commit every changed file."),
+                    required = listOf("message"),
+                ),
+            ),
+            ToolSpec(
+                "git_tag",
+                "Create a LOCAL annotated tag on the current commit (for example v3.0.0). Only when the user asks. Never pushes.",
+                schema("name" to str("Tag name."), "message" to str("Optional tag message."), required = listOf("name")),
+            ),
+        )
+    }
+
     private fun imageSpecs(): List<ToolSpec> {
         val box = images ?: return emptyList()
         val out = ArrayList<ToolSpec>()
@@ -171,6 +213,13 @@ class AgentTools(
             "create_file" -> "Creating $path"
             "delete_file" -> "Deleting $path"
             "save_memory" -> if ((a.optJSONArray("add")?.length() ?: 0) > 0) "Saving to memory" else "Updating memory"
+            "git_status" -> "Checking git status"
+            "git_log" -> "Reading git history"
+            "git_show" -> "Reading commit ${a.optString("commit").take(7)}"
+            "git_diff" -> "Reading git diff"
+            "git_tags" -> "Reading git tags"
+            "git_commit" -> "Committing changes"
+            "git_tag" -> "Tagging ${a.optString("name")}"
             "generate_image" -> "Generating image" + a.optString("title").takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
             "render_svg" -> "Drawing SVG" + a.optString("title").takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
             else -> call.name
@@ -194,6 +243,17 @@ class AgentTools(
         "create_file" -> createFile(call.args)
         "delete_file" -> deleteFile(call.args)
         "save_memory" -> saveMemory(call.args)
+        "git_status" -> git?.status() ?: err("This project is not a git repository")
+        "git_log" -> git?.log(call.args.optInt("max", 30), call.args.optString("path"), call.args.optString("since")) ?: err("This project is not a git repository")
+        "git_show" -> git?.show(call.args.optString("commit"), call.args.optString("path")) ?: err("This project is not a git repository")
+        "git_diff" -> git?.diff(call.args.optString("staged").equals("true", true)) ?: err("This project is not a git repository")
+        "git_tags" -> git?.tags() ?: err("This project is not a git repository")
+        "git_commit" -> git?.commit(
+            call.args.optString("message"),
+            call.args.optJSONArray("paths")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(),
+            call.args.optString("all_changes").equals("true", true),
+        ) ?: err("This project is not a git repository")
+        "git_tag" -> git?.tag(call.args.optString("name"), call.args.optString("message")) ?: err("This project is not a git repository")
         "generate_image" -> images?.generate(call.args) ?: err("Image tools are not available")
         "render_svg" -> images?.renderSvg(call.args) ?: err("Image tools are not available")
         else -> err("Unknown tool: ${call.name}")
