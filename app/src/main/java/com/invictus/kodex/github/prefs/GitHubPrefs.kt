@@ -30,6 +30,13 @@ class GitHubPrefs(private val context: Context) {
         context.gitHubDataStore.edit { PrefsJson.applyTo(it, values, accept, replace) }
     }
 
+    /** "Include in settings export" on the GitHub account screen: the access token is then written into backups. */
+    suspend fun includePatInExport(): Boolean = context.gitHubDataStore.data.first()[includePatKey] ?: false
+
+    suspend fun setIncludePatInExport(value: Boolean) {
+        context.gitHubDataStore.edit { it[includePatKey] = value }
+    }
+
     suspend fun runFilters(project: String): RunFilters {
         val p = context.gitHubDataStore.data.first()
         val status = p[statusKey(project)]?.let { n -> RunStatusFilter.entries.firstOrNull { it.name == n } }
@@ -50,6 +57,8 @@ class GitHubPrefs(private val context: Context) {
     suspend fun setSectionExpanded(project: String, section: String, expanded: Boolean) {
         context.gitHubDataStore.edit { it[expandedKey(project, section)] = expanded }
     }
+
+    private val includePatKey = booleanPreferencesKey("account.includePatInExport")
 
     private fun statusKey(p: String) = stringPreferencesKey("gh.$p.runFilters.status")
     private fun workflowKey(p: String) = longPreferencesKey("gh.$p.runFilters.workflow")

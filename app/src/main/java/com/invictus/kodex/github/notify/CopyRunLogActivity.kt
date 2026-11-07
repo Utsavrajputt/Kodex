@@ -38,13 +38,13 @@ class CopyRunLogActivity : ComponentActivity() {
                 // A very large clip can be refused by the system: retry smaller before giving up.
                 val ok = ClipboardHelper.copy(this@CopyRunLogActivity, "Build #$number", text)
                     || ClipboardHelper.copy(this@CopyRunLogActivity, "Build #$number", text.takeLast(100_000))
-                toast(getString(if (ok) (if (mode == MODE_LOG) R.string.gh_copy_log_done else R.string.gh_copy_error_done) else R.string.gh_copy_failed))
+                toast(getString(if (ok) (if (mode == MODE_LOG) R.string.gh_copy_log_done else R.string.gh_copy_error_done) else R.string.gh_notif_copy_failed))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
                 toast(getString(R.string.gh_copy_fetch_failed))
             } catch (e: Exception) {
-                toast(getString(R.string.gh_copy_failed))
+                toast(getString(R.string.gh_notif_copy_failed))
             } finally {
                 finish()
             }

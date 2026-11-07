@@ -50,6 +50,7 @@ import com.invictus.kodex.feature.settings.LibrariesScreen
 import com.invictus.kodex.feature.settings.SettingsAppearanceScreen
 import com.invictus.kodex.feature.settings.SettingsBehaviorScreen
 import com.invictus.kodex.feature.settings.SettingsEditingScreen
+import com.invictus.kodex.feature.settings.SettingsGitHubAccountScreen
 import com.invictus.kodex.feature.settings.SettingsGitHubScreen
 import com.invictus.kodex.feature.search.CodeSearchScreen
 import com.invictus.kodex.feature.search.SearchBus
@@ -189,7 +190,13 @@ fun KodexNavHost(
             LibrariesScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.SETTINGS_GITHUB) {
-            SettingsGitHubScreen(onBack = { navController.popBackStack() })
+            SettingsGitHubScreen(
+                onBack = { navController.popBackStack() },
+                onOpenAccount = { navController.navigate(Routes.SETTINGS_GITHUB_ACCOUNT) },
+            )
+        }
+        composable(Routes.SETTINGS_GITHUB_ACCOUNT) {
+            SettingsGitHubAccountScreen(onBack = { navController.popBackStack() })
         }
         // AI routes are always registered. The AI settings screen stays reachable when AI is off (it holds the
         // Enable AI switch); the agent screen bounces straight back.

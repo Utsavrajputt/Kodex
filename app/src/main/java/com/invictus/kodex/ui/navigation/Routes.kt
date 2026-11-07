@@ -15,6 +15,7 @@ object Routes {
     const val SETTINGS_GIT_LOGS = "settings/git_logs"
     const val SETTINGS_CRASH_LOGS = "settings/crash_logs"
     const val SETTINGS_GITHUB = "settings/github"
+    const val SETTINGS_GITHUB_ACCOUNT = "settings/github/account"
     const val SETTINGS_ABOUT = "settings/about"
     const val SETTINGS_LIBRARIES = "settings/libraries"
     const val MEDIA_PREVIEW = "media_preview"

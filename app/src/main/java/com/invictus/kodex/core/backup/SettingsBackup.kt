@@ -42,14 +42,16 @@ class InvalidBackupException(message: String) : Exception(message)
 
 /**
  * Exports and imports Kodex settings as one .zip: manifest.json, settings.json and ai_chats/<project>/<chat>.json.
- * Secrets are never written: API keys (AiKeyStore), git credentials (GitCredentialStore) and the AI consent flag
- * stay on the device, so the user signs in again after importing. Chat images are left out to keep the file small.
+ * Secrets are never written: API keys (AiKeyStore) and the AI consent flag stay on the device. The one exception is
+ * the github.com access token, and only when the user switched on "Include in settings export" for it (it is then
+ * stored unencrypted in the file). Other git credentials stay on the device too. Chat images are left out to keep the file small.
  */
 class SettingsBackup(context: Context) {
     private val app = context.applicationContext
     private val editor = EditorSettingsStore(app)
     private val aiPrefs = AiPrefs(app)
     private val gitHubPrefs = GitHubPrefs(app)
+    private val credentials = com.invictus.kodex.core.security.GitCredentialStore(app)
 
     private enum class Store { Editor, Ai, GitHub }
 
@@ -85,6 +87,11 @@ class SettingsBackup(context: Context) {
                 Store.Ai -> o.put("store", aiPrefs.exportEntries(s.accept))
                 Store.GitHub -> o.put("store", gitHubPrefs.exportEntries(s.accept))
                 null -> Unit
+            }
+            if (c == BackupCategory.GitHub && gitHubPrefs.includePatInExport()) {
+                credentials.get(PAT_HOST)?.let { cred ->
+                    o.put("token", JSONObject().put("host", cred.host).put("username", cred.username).put("value", cred.token))
+                }
             }
             settings.put(c.id, o)
         }
@@ -189,6 +196,18 @@ class SettingsBackup(context: Context) {
                     Store.GitHub -> gitHubPrefs.importEntries(values, s.accept, replace)
                     null -> Unit
                 }
+                if (c == BackupCategory.GitHub) {
+                    o.optJSONObject("token")?.let { t ->
+                        val host = t.optString("host").ifBlank { PAT_HOST }
+                        val value = t.optString("value")
+                        // Merge keeps a token that is already here; replace overwrites it.
+                        if (value.isNotBlank() && (replace || credentials.get(host) == null)) {
+                            credentials.put(
+                                com.invictus.kodex.core.git.GitCredential(host, t.optString("username").ifBlank { "x-access-token" }, value),
+                            )
+                        }
+                    }
+                }
             }
             // Theme and the AI switch live in memory too: reload them so the change shows without a restart.
             withContext(Dispatchers.Main) {
@@ -222,6 +241,7 @@ class SettingsBackup(context: Context) {
 
     private companion object {
         const val APP_ID = "kodex"
+        const val PAT_HOST = "github.com"
         const val FORMAT = 1
         const val CHATS_DIR = "ai_chats"
         const val MAX_BYTES = 64L * 1024 * 1024

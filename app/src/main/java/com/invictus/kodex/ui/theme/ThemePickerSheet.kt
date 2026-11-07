@@ -1,5 +1,7 @@
 package com.invictus.kodex.ui.theme
 
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateTo
 import androidx.compose.foundation.background
@@ -183,6 +185,7 @@ private fun ThemePreviewCard(
     }
     // Expressive press-to-scale bounce.
     val scale = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
     val selectionColor = MaterialTheme.colorScheme.primary
     val borderWidth = if (selected) 3.dp else 1.dp
     val borderColor = if (selected) selectionColor else scheme.outlineVariant
@@ -195,16 +198,16 @@ private fun ThemePreviewCard(
                 scaleY = scale.value
             }
             .pointerInput(theme) {
+                // Selecting happens on a real TAP (finger lifted without moving), never on touch-down: otherwise
+                // putting a finger on a card to scroll the strip would pick that theme. The press scale is cosmetic only.
                 detectTapGestures(
-                    onPress = { offset ->
-                        try {
-                            scale.animateTo(0.94f, animationSpec = ExpressiveMotion.FastEffectsTween)
-                            onSelect(offset)
-                            tryAwaitRelease()
-                        } finally {
-                            scale.animateTo(1f, animationSpec = ExpressiveMotion.DefaultEffectsSpring)
-                        }
+                    onPress = {
+                        val down = scope.launch { scale.animateTo(0.94f, animationSpec = ExpressiveMotion.FastEffectsTween) }
+                        tryAwaitRelease()
+                        down.cancel()
+                        scope.launch { scale.animateTo(1f, animationSpec = ExpressiveMotion.DefaultEffectsSpring) }
                     },
+                    onTap = { offset -> onSelect(offset) },
                 )
             },
         horizontalAlignment = Alignment.CenterHorizontally,

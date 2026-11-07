@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -100,6 +101,7 @@ class SettingsGitHubViewModel(
     private val credentialStore: GitCredentialStore,
     private val settingsStore: EditorSettingsStore,
     private val profileRepo: GitHubProfileRepository,
+    private val gitHubPrefs: com.invictus.kodex.github.prefs.GitHubPrefs,
     globalIdentityFile: File,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
@@ -124,6 +126,8 @@ class SettingsGitHubViewModel(
         /** GitHub profile per host (github.com only), from cache first then live refresh. */
         val profiles: Map<String, GitHubProfile> = emptyMap(),
         val error: GitErrorDetails? = null,
+        /** "Include in settings export": the github.com token is written into backups. */
+        val includeInExport: Boolean = false,
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -134,6 +138,7 @@ class SettingsGitHubViewModel(
 
     init {
         load()
+        viewModelScope.launch(io) { _ui.update { it.copy(includeInExport = gitHubPrefs.includePatInExport()) } }
         viewModelScope.launch { settingsStore.cloneDefaultParent.collect { path -> _ui.update { it.copy(defaultParent = path) } } }
     }
 
@@ -240,6 +245,20 @@ class SettingsGitHubViewModel(
         loadTokens()
     }
 
+    fun setIncludeInExport(on: Boolean) {
+        _ui.update { it.copy(includeInExport = on) }
+        viewModelScope.launch(io) { gitHubPrefs.setIncludePatInExport(on) }
+    }
+
+    /** Account screen Save: the identity (when changed and complete) and the pasted token (when there is one). */
+    fun saveAccount(tokenDraft: String) {
+        val s = _ui.value
+        val identityChanged = (s.identityName.trim() != s.savedName || s.identityEmail.trim() != s.savedEmail) &&
+            s.identityName.isNotBlank() && s.identityEmail.isNotBlank()
+        if (identityChanged) saveIdentity()
+        if (tokenDraft.isNotBlank()) saveToken("github.com", "", tokenDraft.trim())
+    }
+
     fun openDeleteToken(host: String) = _ui.update { it.copy(deleteTarget = host) }
     fun dismissDeleteToken() = _ui.update { it.copy(deleteTarget = null) }
 
@@ -262,6 +281,7 @@ class SettingsGitHubViewModel(
                     credentialStore = app.container.gitCredentialStore,
                     settingsStore = app.container.editorSettingsStore,
                     profileRepo = app.container.gitHubProfileRepository,
+                    gitHubPrefs = com.invictus.kodex.github.prefs.GitHubPrefs(app),
                     globalIdentityFile = app.container.gitGlobalIdentityFile,
                 )
             }
@@ -273,11 +293,15 @@ class SettingsGitHubViewModel(
 @Composable
 fun SettingsGitHubScreen(
     onBack: () -> Unit,
+    onOpenAccount: () -> Unit,
     viewModel: SettingsGitHubViewModel = viewModel(factory = SettingsGitHubViewModel.Factory),
 ) {
     val ui by viewModel.ui.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val avatarLoader = (LocalContext.current.applicationContext as KodexApp).container.avatarImageLoader
+
+    // Back from the account screen: its name / email / token changes show up here.
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { viewModel.load() }
 
     LaunchedEffect(Unit) {
         viewModel.messages.collect { msg -> msg?.let { snackbar.showSnackbar(it); viewModel.messageHandled() } }
@@ -320,40 +344,11 @@ fun SettingsGitHubScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    SectionHeader(XIcons.Person, stringResource(R.string.settings_github_identity_title), stringResource(R.string.settings_github_identity_desc))
-                    OutlinedTextField(
-                        value = ui.identityName,
-                        onValueChange = viewModel::onIdentityName,
-                        label = { Text(stringResource(R.string.git_identity_name)) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth(),
+                    AccountRow(
+                        configured = ui.tokens.any { it.host == "github.com" },
+                        login = ui.profiles["github.com"]?.login,
+                        onClick = onOpenAccount,
                     )
-                    OutlinedTextField(
-                        value = ui.identityEmail,
-                        onValueChange = viewModel::onIdentityEmail,
-                        label = { Text(stringResource(R.string.git_identity_email)) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        if ((ui.identityName.isBlank() || ui.identityEmail.isBlank()) && ui.profiles.isNotEmpty()) {
-                            TextButton(onClick = viewModel::autofillFromGitHub) {
-                                Text(stringResource(R.string.settings_github_autofill))
-                            }
-                        }
-                        Spacer(Modifier.weight(1f))
-                        Button(
-                            onClick = viewModel::saveIdentity,
-                            enabled = !ui.savingIdentity && identityDirty &&
-                                ui.identityName.isNotBlank() && ui.identityEmail.isNotBlank(),
-                        ) {
-                            Icon(XIcons.Save, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.action_save))
-                        }
-                    }
 
                     HorizontalDivider(divider, color = MaterialTheme.colorScheme.outlineVariant)
 
@@ -377,42 +372,45 @@ fun SettingsGitHubScreen(
 
                     HorizontalDivider(divider, color = MaterialTheme.colorScheme.outlineVariant)
 
-                    SectionHeader(
-                        XIcons.Key,
-                        stringResource(R.string.settings_github_tokens_title),
-                        stringResource(R.string.settings_github_tokens_desc),
-                    )
-                    // Same inline style as the AI key section: status row, replace field, Save / Remove.
-                    ui.tokens.forEach { entry ->
-                        key(entry.host) {
-                            HostTokenCard(
-                                host = entry.host,
-                                login = ui.profiles[entry.host]?.login,
-                                hint = ui.tokenHints[entry.host],
-                                saved = true,
-                                onSave = { _, _, token -> viewModel.saveToken(entry.host, entry.username, token) },
-                                onRemove = { viewModel.openDeleteToken(entry.host) },
-                            )
+                    // github.com lives on the account screen; GitLab / Bitbucket tokens stay here.
+                    val otherTokens = ui.tokens.filter { it.host != GITHUB_HOST }
+                    val freeHosts = TOKEN_HOSTS.filter { h -> h != GITHUB_HOST && ui.tokens.none { it.host == h } }
+                    if (otherTokens.isNotEmpty() || freeHosts.isNotEmpty()) {
+                        SectionHeader(
+                            XIcons.Key,
+                            stringResource(R.string.settings_github_other_hosts_title),
+                            stringResource(R.string.settings_github_other_hosts_desc),
+                        )
+                        otherTokens.forEach { entry ->
+                            key(entry.host) {
+                                HostTokenCard(
+                                    host = entry.host,
+                                    login = null,
+                                    hint = ui.tokenHints[entry.host],
+                                    saved = true,
+                                    onSave = { _, _, token -> viewModel.saveToken(entry.host, entry.username, token) },
+                                    onRemove = { viewModel.openDeleteToken(entry.host) },
+                                )
+                            }
                         }
-                    }
-                    val freeHosts = TOKEN_HOSTS.filter { h -> ui.tokens.none { it.host == h } }
-                    if (ui.tokens.isEmpty() || freeHosts.isNotEmpty()) {
-                        var addingHost by remember { mutableStateOf(ui.tokens.isEmpty()) }
-                        if (addingHost || ui.tokens.isEmpty()) {
-                            HostTokenCard(
-                                host = freeHosts.firstOrNull() ?: "github.com",
-                                login = null,
-                                hint = null,
-                                saved = false,
-                                hostOptions = freeHosts,
-                                onSave = { host, user, token -> viewModel.saveToken(host, user, token); addingHost = false },
-                                onRemove = null,
-                            )
-                        } else {
-                            FilledTonalButton(onClick = { addingHost = true }, modifier = Modifier.fillMaxWidth()) {
-                                Icon(XIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(stringResource(R.string.settings_github_add_host))
+                        if (freeHosts.isNotEmpty()) {
+                            var addingHost by remember { mutableStateOf(false) }
+                            if (addingHost) {
+                                HostTokenCard(
+                                    host = freeHosts.first(),
+                                    login = null,
+                                    hint = null,
+                                    saved = false,
+                                    hostOptions = freeHosts,
+                                    onSave = { host, user, token -> viewModel.saveToken(host, user, token); addingHost = false },
+                                    onRemove = null,
+                                )
+                            } else {
+                                FilledTonalButton(onClick = { addingHost = true }, modifier = Modifier.fillMaxWidth()) {
+                                    Icon(XIcons.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(stringResource(R.string.settings_github_add_host))
+                                }
                             }
                         }
                     }
@@ -432,6 +430,37 @@ fun SettingsGitHubScreen(
         )
     }
     ui.error?.let { GitErrorDialog(details = it, onDismiss = viewModel::dismissError) }
+}
+
+/** One row that opens the GitHub account screen (name, email, token): status on the right like a switch row. */
+@Composable
+private fun AccountRow(configured: Boolean, login: String?, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Icon(XIcons.Key, contentDescription = null, tint = cs.primary, modifier = Modifier.size(24.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.settings_github_account_title), style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (configured) {
+                    (login?.let { "@$it \u00b7 " } ?: "") + stringResource(R.string.settings_github_account_ready)
+                } else {
+                    stringResource(R.string.settings_github_account_desc)
+                },
+                style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant,
+            )
+        }
+        if (configured) {
+            Box(Modifier.size(36.dp).clip(CircleShape).background(cs.primaryContainer), contentAlignment = Alignment.Center) {
+                Icon(XIcons.Check, contentDescription = null, tint = cs.onPrimaryContainer, modifier = Modifier.size(20.dp))
+            }
+        } else {
+            Icon(XIcons.ChevronRight, contentDescription = null, tint = cs.onSurfaceVariant)
+        }
+    }
 }
 
 /** Account summary at the top: avatar, name, handle, email, connected state and all profile stats. */
@@ -554,7 +583,8 @@ private fun SectionHeader(
     }
 }
 
-private val TOKEN_HOSTS = listOf("github.com", "gitlab.com", "bitbucket.org")
+private const val GITHUB_HOST = "github.com"
+private val TOKEN_HOSTS = listOf(GITHUB_HOST, "gitlab.com", "bitbucket.org")
 
 /**
  * One host's token, laid out like the AI key section: status row (saved hint / none), a masked

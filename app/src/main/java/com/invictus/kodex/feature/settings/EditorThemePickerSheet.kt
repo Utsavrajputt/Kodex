@@ -1,5 +1,7 @@
 package com.invictus.kodex.feature.settings
 
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -207,6 +209,7 @@ private fun CodePreviewCard(
     onSelect: () -> Unit,
 ) {
     val scale = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
     val selectionColor = MaterialTheme.colorScheme.primary
     val borderWidth = if (selected) 3.dp else 1.dp
     val borderColor = if (selected) selectionColor else foreground.copy(alpha = 0.15f)
@@ -219,16 +222,15 @@ private fun CodePreviewCard(
                 scaleY = scale.value
             }
             .pointerInput(name) {
+                // Select on a real tap (release without moving), not on touch-down, so scrolling the strip never picks a theme.
                 detectTapGestures(
                     onPress = {
-                        try {
-                            scale.animateTo(0.94f, animationSpec = ExpressiveMotion.FastEffectsTween)
-                            onSelect()
-                            tryAwaitRelease()
-                        } finally {
-                            scale.animateTo(1f, animationSpec = ExpressiveMotion.DefaultEffectsSpring)
-                        }
+                        val down = scope.launch { scale.animateTo(0.94f, animationSpec = ExpressiveMotion.FastEffectsTween) }
+                        tryAwaitRelease()
+                        down.cancel()
+                        scope.launch { scale.animateTo(1f, animationSpec = ExpressiveMotion.DefaultEffectsSpring) }
                     },
+                    onTap = { onSelect() },
                 )
             },
         horizontalAlignment = Alignment.CenterHorizontally,

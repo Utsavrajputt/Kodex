@@ -180,6 +180,10 @@ object XIcons {
         )
     }
 
+    /** Material "upload": an arrow rising out of a tray. */
+    val Upload: ImageVector by lazy {
+        icon("Upload", "M11,16V7.85l-2.6,2.6L7,9l5,-5 5,5 -1.4,1.45 -2.6,-2.6V16h-2zM5,20v-2h14v2H5z")
+    }
     /** Clean up: a bin with a sparkle inside (fresh, emptied), a light 1.8 outline on the 24 grid like [PullRequest]. */
     val CleanBin: ImageVector by lazy {
         ImageVector.Builder(
