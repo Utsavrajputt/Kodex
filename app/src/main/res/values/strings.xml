@@ -1027,6 +1027,14 @@
     <string name="gh_notif_done_text">%1$s is ready to download.</string>
     <string name="gh_notif_done_text_plain">The APK is ready to download.</string>
     <string name="gh_notif_failed_title">Build #%1$d failed</string>
+    <string name="gh_notif_copy_error">Copy error</string>
+    <string name="gh_notif_copy_log">Copy log</string>
+    <string name="gh_copy_working">Getting the log\u2026</string>
+    <string name="gh_copy_error_done">Error copied</string>
+    <string name="gh_copy_log_done">Log copied</string>
+    <string name="gh_copy_nothing">No log found for this build</string>
+    <string name="gh_copy_failed">Could not copy</string>
+    <string name="gh_copy_fetch_failed">Could not download the log (it may have expired)</string>
     <string name="gh_notif_failed_text">Tap to open the app and check the log.</string>
     <string name="gh_runs_empty">No workflow runs match.</string>
     <string name="gh_filter_all">All</string>

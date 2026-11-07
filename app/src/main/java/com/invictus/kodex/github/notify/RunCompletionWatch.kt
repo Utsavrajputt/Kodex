@@ -145,6 +145,7 @@ object RunCompletionWatch {
                 app.getString(R.string.gh_notif_failed_text),
                 ok = false,
                 projectPath = projectPath,
+                copyFor = Triple(repoRef.owner, repoRef.name, run.runNumber),
             )
             else -> Unit // cancelled / skipped: the user already knows
         }

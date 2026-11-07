@@ -56,6 +56,23 @@ class GhNotifier(context: Context) {
         return PendingIntent.getActivity(ctx, code, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
+    /**
+     * "Copy error" / "Copy log": a see-through activity does the work, because Android only lets an app that is on
+     * screen write the clipboard dependably (a plain receiver is refused on many versions).
+     */
+    private fun copyIntent(runId: Long, run: Triple<String, String, Int>, mode: String): PendingIntent =
+        PendingIntent.getActivity(
+            ctx, (runId.hashCode() * 31 + mode.hashCode()),
+            Intent(ctx, CopyRunLogActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                .putExtra(CopyRunLogActivity.EXTRA_OWNER, run.first)
+                .putExtra(CopyRunLogActivity.EXTRA_REPO, run.second)
+                .putExtra(CopyRunLogActivity.EXTRA_NUMBER, run.third)
+                .putExtra(CopyRunLogActivity.EXTRA_RUN_ID, runId)
+                .putExtra(CopyRunLogActivity.EXTRA_MODE, mode),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
     /** "Stop" on the build notification: ends the background watch (and with it the notification, on every Android version). */
     private fun stopWatchingIntent(): PendingIntent =
         PendingIntent.getService(
@@ -151,8 +168,12 @@ class GhNotifier(context: Context) {
     }
 
     /** A watched build finished (audible channel). One notification per run. */
-    fun buildDone(runId: Long, title: String, text: String, ok: Boolean, projectPath: String? = null) {
-        val n = NotificationCompat.Builder(ctx, CHANNEL_BUILDS)
+    fun buildDone(
+        runId: Long, title: String, text: String, ok: Boolean, projectPath: String? = null,
+        /** With a failed run: adds "Copy error" and "Copy log" buttons (owner, repo name, run number). */
+        copyFor: Triple<String, String, Int>? = null,
+    ) {
+        val builder = NotificationCompat.Builder(ctx, CHANNEL_BUILDS)
             .setSmallIcon(if (ok) R.drawable.ic_stat_check else R.drawable.ic_stat_error)
             .setColor(if (ok) accent else errorTint)
             .setContentTitle(title)
@@ -160,8 +181,11 @@ class GhNotifier(context: Context) {
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setAutoCancel(true)
             .setContentIntent(openApp(projectPath))
-            .build()
-        post(RESULT_BASE + 100 + (runId % 1000).toInt(), n)
+        if (!ok && copyFor != null) {
+            builder.addAction(0, ctx.getString(R.string.gh_notif_copy_error), copyIntent(runId, copyFor, CopyRunLogActivity.MODE_ERROR))
+            builder.addAction(0, ctx.getString(R.string.gh_notif_copy_log), copyIntent(runId, copyFor, CopyRunLogActivity.MODE_LOG))
+        }
+        post(RESULT_BASE + 100 + (runId % 1000).toInt(), builder.build())
     }
 
     /**

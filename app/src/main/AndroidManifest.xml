@@ -1151,6 +1151,15 @@
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />
 
+        <!-- Failed-build notification: "Copy error" / "Copy log". Invisible, closes itself. -->
+        <activity
+            android:name=".github.notify.CopyRunLogActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <receiver
             android:name=".github.install.InstallResultReceiver"
             android:exported="false" />
