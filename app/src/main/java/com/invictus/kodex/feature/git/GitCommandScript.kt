@@ -16,8 +16,10 @@ internal data class GitCommandScript(
     val addFirst: Boolean = false,
 )
 
+// Groups: 1 "closed double", 2 'closed single', 3 "unterminated double" (to end of line), 4 'unterminated single', 5 bare word.
+// An unterminated quote (clipboard cut before the closing quote) must keep the WHOLE line, not just its first word.
 private val COMMIT_RE = Regex(
-    """\bgit\s+commit\b[^\n]*?\s-[A-Za-z]*m\s*(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+))""",
+    """\bgit\s+commit\b[^\n]*?\s-[A-Za-z]*m\s*(?:"((?:[^"\\]|\\.)*)"|'([^']*)'|"([^"\n]*)(?=\n|\z)|'([^'\n]*)(?=\n|\z)|((?!["'])\S+))""",
 )
 private val ADD_RE = Regex("""\bgit\s+add\b""")
 private val PUSH_RE = Regex("""\bgit\s+push\b""")
@@ -37,6 +39,8 @@ internal fun parseGitScript(text: String): GitCommandScript? {
         val raw = m.groups[1]?.value?.let { ESCAPE_RE.replace(it) { e -> e.groupValues[1] } }
             ?: m.groups[2]?.value
             ?: m.groups[3]?.value
+            ?: m.groups[4]?.value
+            ?: m.groups[5]?.value
         raw?.trim()?.takeIf { it.isNotEmpty() }
     }
 

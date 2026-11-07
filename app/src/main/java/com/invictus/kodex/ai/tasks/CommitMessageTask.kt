@@ -38,7 +38,9 @@ class CommitMessageTask(
                     AiMessage("system", system),
                     AiMessage("user", "Here is the staged diff (or working-tree diff when nothing is staged):\n\n${Redactor.scrub(diffText)}\n\nWrite only the commit message."),
                 ),
-                maxOutputTokens = 512, temperature = 0.2, model = model,
+                // Hidden "thinking" tokens (Gemini 3) count against this limit; a small one cuts the message mid-sentence.
+                maxOutputTokens = when (style) { Style.SHORTER -> 1024; Style.LONGER -> 3072; else -> 2048 },
+                temperature = 0.2, model = model,
             ),
         )
     }
