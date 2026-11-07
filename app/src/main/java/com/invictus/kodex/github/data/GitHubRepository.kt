@@ -1,21 +1,11 @@
 package com.invictus.kodex.github.data
 
 import com.invictus.kodex.github.api.GhArtifact
-import com.invictus.kodex.github.api.GhCommitDetail
-import com.invictus.kodex.github.api.GhCompare
 import com.invictus.kodex.github.api.GhDeployment
 import com.invictus.kodex.github.api.GhJob
 import android.util.Base64
 import com.invictus.kodex.github.signing.SealedBox
-import com.invictus.kodex.github.api.GhIssue
-import com.invictus.kodex.github.api.GhIssueComment
-import com.invictus.kodex.github.api.IssueFilter
-import com.invictus.kodex.github.api.GhPull
-import com.invictus.kodex.github.api.GhPullCommit
-import com.invictus.kodex.github.api.GhPullFile
 import com.invictus.kodex.github.api.GhRepoRef
-import com.invictus.kodex.github.api.PullFilter
-import com.invictus.kodex.github.api.PullMergeMethod
 import com.invictus.kodex.github.api.GhRun
 import com.invictus.kodex.github.api.GhWorkflow
 import com.invictus.kodex.github.api.GitHubApi
@@ -116,69 +106,6 @@ class GitHubRepository(
         }
     }
 
-    // ---- pull requests ---------------------------------------------------------------
-
-    /**
-     * One list load. Filters the API cannot do itself (merged / draft / mine) are applied here, so a raw page can
-     * come back mostly empty: keep fetching (bounded) until there is a useful batch. [Page.page] is the last raw page read.
-     */
-    suspend fun pulls(startPage: Int, filter: PullFilter, login: String?): Page<GhPull> {
-        val out = ArrayList<GhPull>()
-        var page = startPage
-        var fetched = 0
-        var more: Boolean
-        while (true) {
-            val raw = api.listPulls(page, filter.apiState)
-            out += raw.items.filter { filter.matches(it, login) }
-            fetched++
-            more = raw.hasMore
-            if (!more || out.size >= PULL_MIN_BATCH || fetched >= PULL_MAX_RAW_PAGES) break
-            page++
-        }
-        return Page(out, page, more, out.size)
-    }
-
-    // ---- issues ----------------------------------------------------------------------
-
-    /** Like [pulls]: filters the API cannot do itself (mine) are applied here, so keep reading (bounded) for a useful batch. */
-    suspend fun issues(startPage: Int, filter: IssueFilter, login: String?): Page<GhIssue> {
-        val out = ArrayList<GhIssue>()
-        var page = startPage
-        var fetched = 0
-        var more: Boolean
-        while (true) {
-            val raw = api.listIssues(page, filter.apiState)
-            out += raw.items.filter { filter.matches(it, login) }
-            fetched++
-            more = raw.hasMore
-            if (!more || out.size >= PULL_MIN_BATCH || fetched >= PULL_MAX_RAW_PAGES) break
-            page++
-        }
-        return Page(out, page, more, out.size)
-    }
-
-    suspend fun issue(number: Int): GhIssue = api.getIssue(number)
-    suspend fun issueComments(number: Int): List<GhIssueComment> = collectPages(3) { api.listIssueComments(number, it) }
-    suspend fun addIssueComment(number: Int, body: String): GhIssueComment = api.addIssueComment(number, body)
-    suspend fun closeIssue(number: Int, reason: String) = api.setIssueState(number, "closed", reason)
-    suspend fun reopenIssue(number: Int) = api.setIssueState(number, "open")
-
-    suspend fun pull(number: Int): GhPull = api.getPull(number)
-
-    suspend fun pullCommits(number: Int): List<GhPullCommit> = collectPages(3) { api.listPullCommits(number, it) }
-
-    suspend fun commit(sha: String): GhCommitDetail = api.getCommit(sha)
-
-    suspend fun compare(baseBranch: String, head: String): GhCompare = api.compare(baseBranch, head)
-
-    suspend fun pullFiles(number: Int): List<GhPullFile> = collectPages(3) { api.listPullFiles(number, it) }
-
-    suspend fun createPull(title: String, body: String, head: String, base: String, draft: Boolean): GhPull =
-        api.createPull(title, body, head, base, draft)
-
-    suspend fun mergePull(number: Int, method: PullMergeMethod) = api.mergePull(number, method)
-    suspend fun closePull(number: Int) = api.setPullState(number, "closed")
-    suspend fun reopenPull(number: Int) = api.setPullState(number, "open")
     /** Seals each value with the repo's public key (libsodium sealed box) and stores it as an Actions secret. */
     suspend fun setActionsSecrets(secrets: Map<String, String>) {
         val key = api.getActionsPublicKey()
@@ -244,7 +171,5 @@ class GitHubRepository(
         /** Artifact zips above this are refused (an APK is capped lower after extraction). */
         const val MAX_ARTIFACT_BYTES = 320L * 1024 * 1024
         private const val SCAN_MAX_PAGES = 10
-        private const val PULL_MIN_BATCH = 10
-        private const val PULL_MAX_RAW_PAGES = 5
     }
 }

@@ -11,9 +11,6 @@ import com.invictus.kodex.feature.editor.EditorViewModel
  */
 val AiGate: AiGateImpl? get() = if (AiSwitch.enabled) AiFlavor.gate else null
 
-/** What [AiGateImpl.ListSummaryAi] digests. */
-enum class AiSummaryKind { PULLS, ISSUES, THREAD }
-
 interface AiGateImpl {
     val settingsRoute: String
 
@@ -39,15 +36,6 @@ interface AiGateImpl {
     @Composable
     fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -> Unit, app: android.app.Application)
 
-    /** Write a pull request title + description from the branch diff (New pull request). Fills the form only; never creates the PR. */
-    @Composable
-    fun PullRequestAi(
-        canGenerate: Boolean,
-        loadChanges: suspend (excludeGlobs: String) -> String,
-        onFill: (title: String, body: String) -> Unit,
-        app: android.app.Application,
-    )
-
     /** Explain a commit's diff (commit detail screen). */
     @Composable
     fun ExplainDiffAi(projectPath: String, commitId: String, filePaths: List<String>, app: android.app.Application)
@@ -55,8 +43,4 @@ interface AiGateImpl {
     /** Explain an error (Run log, Diagnostics); an optional fix patch goes through diff review. */
     @Composable
     fun ExplainErrorAi(errorText: String, projectPath: String?, app: android.app.Application)
-
-    /** Sparkle button that streams a short digest of [itemsText] (open pull requests, open issues or one issue thread). */
-    @Composable
-    fun ListSummaryAi(kind: AiSummaryKind, itemsText: String, app: android.app.Application)
 }

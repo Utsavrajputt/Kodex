@@ -1,0 +1,12 @@
+app/src/main/java/com/invictus/kodex/github/ui/PullScreens.kt
+app/src/main/java/com/invictus/kodex/github/ui/PullViewModels.kt
+app/src/main/java/com/invictus/kodex/github/ui/IssueScreens.kt
+app/src/main/java/com/invictus/kodex/github/ui/IssueViewModels.kt
+app/src/main/java/com/invictus/kodex/github/ui/RefSuggestions.kt
+app/src/main/java/com/invictus/kodex/github/api/GhPullModels.kt
+app/src/main/java/com/invictus/kodex/github/api/GhIssueModels.kt
+app/src/main/java/com/invictus/kodex/ai/ui/AiPullRequest.kt
+app/src/main/java/com/invictus/kodex/ai/ui/AiListSummary.kt
+app/src/main/java/com/invictus/kodex/ai/tasks/PullRequestTask.kt
+app/src/main/java/com/invictus/kodex/ai/tasks/ListSummaryTask.kt
+app/src/main/res/values/strings_pulls.xml

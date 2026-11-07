@@ -98,7 +98,6 @@ fun GitHubManagerScreen(
     onOpenRemotes: () -> Unit,
     onGitSetup: () -> Unit,
     onOpenGitHubSettings: () -> Unit,
-    onOpenPulls: () -> Unit,
     viewModel: GitHubManagerViewModel = viewModel(
         key = "gh_manager_$projectPath",
         factory = GitHubManagerViewModel.factory(projectPath),
@@ -143,9 +142,6 @@ fun GitHubManagerScreen(
                 },
                 actions = {
                     if (state.gate == GitHubGate.Ready) {
-                        IconButton(onClick = onOpenPulls) {
-                            Icon(XIcons.PullRequest, contentDescription = stringResource(R.string.pr_title), modifier = Modifier.size(22.dp))
-                        }
                         IconButton(onClick = { viewModel.tools.openCleanup() }) {
                             Icon(XIcons.CleanBin, contentDescription = stringResource(R.string.gh_cleanup_title))
                         }

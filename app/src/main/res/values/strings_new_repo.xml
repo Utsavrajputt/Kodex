@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- New repository -->
+    <string name="new_repo_title">New repository</string>
+    <string name="new_repo_create">Create</string>
+    <string name="new_repo_card_repo">Repository</string>
+    <string name="new_repo_card_signing">App signing</string>
+    <string name="new_repo_name_hint">Repository name</string>
+    <string name="new_repo_desc_hint">Description (optional)</string>
+    <string name="new_repo_private">Private</string>
+    <string name="new_repo_private_hint">Only you can see it</string>
+    <string name="new_repo_readme">Add a README</string>
+    <string name="new_repo_readme_hint">Creates the first commit</string>
+    <string name="new_repo_empty_clone_hint">Without a README the repository starts empty, so the clone has no files yet.</string>
+    <string name="new_repo_err_password">Password needs at least 6 characters</string>
+    <string name="new_repo_clone_after">Clone after creating</string>
+    <string name="new_repo_clone_after_hint">Opens Clone and starts it for you</string>
+    <string name="new_repo_signing">Generate signing keystore</string>
+    <string name="new_repo_signing_hint">Saved to GitHub secrets for your build workflow</string>
+    <string name="new_repo_alias_hint">Key alias</string>
+    <string name="new_repo_cn_hint">Your name (certificate)</string>
+    <string name="new_repo_org_hint">Organization (optional)</string>
+    <string name="new_repo_country_hint">Country code, e.g. IN (optional)</string>
+    <string name="new_repo_password_hint">Password</string>
+    <string name="new_repo_copy_password">Copy password</string>
+    <string name="new_repo_new_password">New password</string>
+    <string name="new_repo_password_copied">Password copied</string>
+    <string name="new_repo_signing_info">RSA 2048 key, valid %2$d years. Stored only as the GitHub secrets %1$s. A copy is not kept on this phone, and GitHub never shows secrets again.</string>
+    <string name="new_repo_step_creating">Creating repository\u2026</string>
+    <string name="new_repo_step_keystore">Generating keystore\u2026</string>
+    <string name="new_repo_step_secrets">Saving secrets to GitHub\u2026</string>
+    <string name="new_repo_created">Created %1$s</string>
+    <string name="new_repo_err_name">Use letters, numbers, dots, dashes or underscores for the name</string>
+    <string name="new_repo_err_alias">Enter a key alias</string>
+    <string name="new_repo_err_cn">Enter your name for the certificate</string>
+    <string name="new_repo_err_country">Country code must be 2 letters</string>
+    <string name="new_repo_signing_failed_title">Repository created</string>
+    <string name="new_repo_signing_failed_body">The repository exists, but the signing secrets could not be saved:\n\n%1$s</string>
+    <string name="new_repo_skip_signing">Skip signing</string>
+</resources>
