@@ -963,7 +963,7 @@ class GitHubToolsController(
 
     fun setCleanupKind(kind: CleanupKind) {
         if (_state.value.cleanup.running) return
-        updateCleanup { it.copy(filters = CleanupFilters(kind = kind), result = null, scanError = null) }
+        updateCleanup { it.copy(filters = CleanupFilters(kind = kind, failed = kind == CleanupKind.Runs), result = null, scanError = null) }
         recomputePlan()
         if (!_state.value.cleanup.hasData) scanCleanup()
     }

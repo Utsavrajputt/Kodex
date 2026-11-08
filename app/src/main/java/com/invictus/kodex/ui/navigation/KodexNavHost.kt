@@ -26,7 +26,8 @@ import com.invictus.kodex.feature.editor.EditorScreen
 import com.invictus.kodex.feature.editor.EditorViewModel
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
-import com.invictus.kodex.github.ui.AllApksScreen
+import com.invictus.kodex.feature.tools.KeystoreToolScreen
+import com.invictus.kodex.feature.tools.ToolsScreen
 import com.invictus.kodex.github.ui.GitHubManagerScreen
 import com.invictus.kodex.github.ui.GitHubRunsScreen
 import com.invictus.kodex.github.ui.RunLogScreen
@@ -128,12 +129,18 @@ fun KodexNavHost(
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onProjectOpened = { navController.navigate(Routes.WORKSPACE) },
                 onClone = { navController.navigate(Routes.GIT_CLONE) },
-                onOpenApks = { navController.navigate(Routes.ALL_APKS) },
+                onOpenTools = { navController.navigate(Routes.TOOLS) },
                 onViewAll = { navController.navigate(Routes.ALL_PROJECTS) },
             )
         }
-        composable(Routes.ALL_APKS) {
-            AllApksScreen(onBack = { navController.popBackStack() })
+        composable(Routes.TOOLS) {
+            ToolsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenKeystore = { navController.navigate(Routes.TOOLS_KEYSTORE) },
+            )
+        }
+        composable(Routes.TOOLS_KEYSTORE) {
+            KeystoreToolScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.ALL_PROJECTS) {
             AllProjectsScreen(

@@ -28,13 +28,22 @@ public final class KeystoreFactory {
     public static byte[] generate(
         String alias, char[] password, String commonName, String ou, String org, String country, int validityYears
     ) throws Exception {
+        return generate(alias, password, commonName, ou, org, null, null, country, validityYears, 2048);
+    }
+
+    /** Full form: [locality] (city) and [state] may be blank; [keySize] is the RSA size in bits (2048 or 4096). */
+    public static byte[] generate(
+        String alias, char[] password, String commonName, String ou, String org, String locality, String state,
+        String country, int validityYears, int keySize
+    ) throws Exception {
         if (commonName == null || commonName.trim().isEmpty()) throw new IllegalArgumentException("common name required");
+        if (keySize != 2048 && keySize != 3072 && keySize != 4096) throw new IllegalArgumentException("unsupported key size");
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
-        kpg.initialize(2048, new SecureRandom());
+        kpg.initialize(keySize, new SecureRandom());
         KeyPair kp = kpg.generateKeyPair();
 
         byte[] sigAlg = seq(oid("1.2.840.113549.1.1.11"), new byte[] {0x05, 0x00});
-        byte[] name = name(commonName.trim(), ou, org, country);
+        byte[] name = name(commonName.trim(), ou, org, locality, state, country);
         Calendar from = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
         from.add(Calendar.DAY_OF_YEAR, -1);
         Calendar to = (Calendar) from.clone();
@@ -109,13 +118,16 @@ public final class KeystoreFactory {
         return der(0x31, seq(oid(oidStr), der(stringTag, value.getBytes(StandardCharsets.UTF_8))));
     }
 
-    private static byte[] name(String cn, String ou, String org, String country) {
+    private static byte[] name(String cn, String ou, String org, String locality, String state, String country) {
         ByteArrayOutputStream o = new ByteArrayOutputStream();
         byte[] part;
+        // DER order is the reverse of how keytool prints it: C, ST, L, O, OU, CN.
         if (country != null && country.trim().length() == 2) {
             part = rdn("2.5.4.6", 0x13, country.trim().toUpperCase(java.util.Locale.ROOT));
             o.write(part, 0, part.length);
         }
+        if (state != null && !state.trim().isEmpty()) { part = rdn("2.5.4.8", 0x0c, state.trim()); o.write(part, 0, part.length); }
+        if (locality != null && !locality.trim().isEmpty()) { part = rdn("2.5.4.7", 0x0c, locality.trim()); o.write(part, 0, part.length); }
         if (org != null && !org.trim().isEmpty()) { part = rdn("2.5.4.10", 0x0c, org.trim()); o.write(part, 0, part.length); }
         if (ou != null && !ou.trim().isEmpty()) { part = rdn("2.5.4.11", 0x0c, ou.trim()); o.write(part, 0, part.length); }
         part = rdn("2.5.4.3", 0x0c, cn);

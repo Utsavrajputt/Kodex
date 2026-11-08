@@ -127,7 +127,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onProjectOpened: () -> Unit,
     onClone: () -> Unit = {},
-    onOpenApks: () -> Unit = {},
+    onOpenTools: () -> Unit = {},
     onViewAll: () -> Unit = {},
     modifier: Modifier = Modifier,
     projectsViewModel: ProjectsViewModel = viewModel(factory = ProjectsViewModel.Factory),
@@ -235,8 +235,8 @@ fun HomeScreen(
                             Icon(XIcons.GitClone, contentDescription = stringResource(R.string.home_clone))
                         }
                         Spacer(Modifier.width(10.dp))
-                        HeaderIconButton(onClick = onOpenApks) {
-                            Icon(XIcons.Download, contentDescription = stringResource(R.string.home_apks))
+                        HeaderIconButton(onClick = onOpenTools) {
+                            Icon(XIcons.Tools, contentDescription = stringResource(R.string.home_tools))
                         }
                         Spacer(Modifier.width(10.dp))
                         HeaderIconButton(onClick = onOpenSettings) {

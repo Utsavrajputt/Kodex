@@ -180,6 +180,12 @@ object XIcons {
         )
     }
 
+    /** Material "build": a wrench, for Tools. */
+    val Tools: ImageVector by lazy {
+        icon("Tools", "M22.7,19l-9.1,-9.1c0.9,-2.3 0.4,-5 -1.5,-6.9 -2,-2 -5,-2.4 -7.4,-1.3L9,6 6,9 1.6,4.7C0.4,7.1 0.9,10.1 2.9,12.1c1.9,1.9 4.6,2.4 6.9,1.5l9.1,9.1c0.4,0.4 1,0.4 1.4,0l2.3,-2.3c0.5,-0.4 0.5,-1.1 0.1,-1.4z")
+    }
+    val ExpandMore: ImageVector by lazy { icon("ExpandMore", "M16.59,8.59L12,13.17 7.41,8.59 6,10l6,6 6,-6z") }
+    val ExpandLess: ImageVector by lazy { icon("ExpandLess", "M12,8l-6,6 1.41,1.41L12,10.83l4.59,4.58L18,14z") }
     /** Material "upload": an arrow rising out of a tray. */
     val Upload: ImageVector by lazy {
         icon("Upload", "M11,16V7.85l-2.6,2.6L7,9l5,-5 5,5 -1.4,1.45 -2.6,-2.6V16h-2zM5,20v-2h14v2H5z")

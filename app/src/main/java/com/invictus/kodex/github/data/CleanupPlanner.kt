@@ -14,8 +14,8 @@ enum class CleanupKind { Runs, Deployments, Artifacts }
 /** Filters of plan 8.6. Flags that do not apply to a [kind] are ignored for it. */
 data class CleanupFilters(
     val kind: CleanupKind = CleanupKind.Runs,
-    /** Runs: include failed runs. With [cancelled] also set the two are OR-ed; neither = all completed. */
-    val failed: Boolean = false,
+    /** Runs: include failed runs (on by default: failed runs are what people clean up). With [cancelled] also set the two are OR-ed; neither = all completed. */
+    val failed: Boolean = true,
     val cancelled: Boolean = false,
     /** Runs only. */
     val workflowId: Long? = null,
