@@ -7,6 +7,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import com.invictus.kodex.core.project.RecentProject
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -76,12 +86,23 @@ fun FileSplitterScreen(
 
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(vm::pickFile) }
     val pickSourceFolder = rememberFolderPickerLauncher(onPicked = vm::pickFolder)
+    val recents by vm.recents.collectAsStateWithLifecycle()
+    var projectDialog by remember { mutableStateOf(false) }
     val pickDestFolder = rememberFolderPickerLauncher(onPicked = vm::setOutDir)
 
     LaunchedEffect(vm) {
         vm.effects.collect { e ->
             if (e is FileSplitterViewModel.Effect.Message) scope.launch { snackbar.showSnackbar(e.text.resolve(context)) }
         }
+    }
+
+    if (projectDialog) {
+        ProjectChooserDialog(
+            recents = recents,
+            onPick = { path -> projectDialog = false; vm.pickFolder(path) },
+            onBrowse = { projectDialog = false; pickSourceFolder() },
+            onDismiss = { projectDialog = false },
+        )
     }
 
     Scaffold(
@@ -107,7 +128,7 @@ fun FileSplitterScreen(
                         Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.split_choose_file))
                     }
-                    OutlinedButton(onClick = pickSourceFolder, enabled = !s.running, modifier = Modifier.weight(1f)) {
+                    OutlinedButton(onClick = { projectDialog = true }, enabled = !s.running, modifier = Modifier.weight(1f)) {
                         Icon(XIcons.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.split_choose_folder))
@@ -245,6 +266,44 @@ fun FileSplitterScreen(
                 }
             }
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/** Pick a project to split: the recently opened ones, or any folder from storage. */
+@Composable
+private fun ProjectChooserDialog(recents: List<RecentProject>, onPick: (String) -> Unit, onBrowse: () -> Unit, onDismiss: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(shape = RoundedCornerShape(28.dp), color = cs.surfaceContainerHigh, modifier = Modifier.fillMaxWidth(0.94f).heightIn(max = 560.dp)) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.split_choose_project_title), style = MaterialTheme.typography.titleLarge)
+                if (recents.isEmpty()) {
+                    Text(stringResource(R.string.split_no_recents), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+                } else {
+                    Text(stringResource(R.string.split_recent_projects), style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
+                    LazyColumn(Modifier.weight(1f, fill = false)) {
+                        items(recents, key = { it.file.path }) { r ->
+                            Row(
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { onPick(r.file.path) }.padding(horizontal = 8.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                Icon(XIcons.Folder, contentDescription = null, tint = cs.primary, modifier = Modifier.size(26.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(r.file.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(r.file.parent.orEmpty(), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                    }
+                }
+                OutlinedButton(onClick = onBrowse, modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                    Icon(XIcons.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.split_choose_storage))
+                }
+            }
         }
     }
 }

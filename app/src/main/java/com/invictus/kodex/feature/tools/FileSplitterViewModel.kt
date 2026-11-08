@@ -12,6 +12,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.invictus.kodex.KodexApp
 import com.invictus.kodex.R
 import com.invictus.kodex.core.editor.EditorSettingsStore
+import com.invictus.kodex.core.project.ProjectRepository
+import com.invictus.kodex.core.project.RecentProject
 import com.invictus.kodex.core.split.FileSplitter
 import com.invictus.kodex.core.split.TooManyPartsException
 import com.invictus.kodex.github.ui.GhText
@@ -20,10 +22,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -42,7 +46,12 @@ data class SplitResult(val dir: String, val base: String, val parts: List<SplitP
 class FileSplitterViewModel(
     private val app: Application,
     private val store: EditorSettingsStore,
+    projects: ProjectRepository,
 ) : ViewModel() {
+
+    /** Recently opened projects, shown in the project chooser (pinned first, newest first). */
+    val recents: StateFlow<List<RecentProject>> = projects.recents
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     data class UiState(
         val source: SplitSource? = null,
@@ -204,7 +213,7 @@ class FileSplitterViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as KodexApp
-                FileSplitterViewModel(app, app.container.editorSettingsStore)
+                FileSplitterViewModel(app, app.container.editorSettingsStore, app.container.projectRepository)
             }
         }
     }

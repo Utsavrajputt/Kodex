@@ -225,6 +225,10 @@ fun HomeScreen(
                             }
                         }
                     } else {
+                        HeaderIconButton(onClick = onOpenTools) {
+                            Icon(XIcons.Tools, contentDescription = stringResource(R.string.home_tools))
+                        }
+                        Spacer(Modifier.width(10.dp))
                         if (canSearch) {
                             HeaderIconButton(onClick = { searchRequested = true }) {
                                 Icon(XIcons.Search, contentDescription = stringResource(R.string.home_search))
@@ -233,10 +237,6 @@ fun HomeScreen(
                         }
                         HeaderIconButton(onClick = onClone) {
                             Icon(XIcons.GitClone, contentDescription = stringResource(R.string.home_clone))
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        HeaderIconButton(onClick = onOpenTools) {
-                            Icon(XIcons.Tools, contentDescription = stringResource(R.string.home_tools))
                         }
                         Spacer(Modifier.width(10.dp))
                         HeaderIconButton(onClick = onOpenSettings) {

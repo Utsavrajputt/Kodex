@@ -61,6 +61,12 @@ class KeystoreToolViewModel(
         val names: SecretNames = SecretNames(),
         val extras: List<ExtraSecret> = emptyList(),
         val moreOpen: Boolean = false,
+        /** Chips: keystore on by default; presets and custom are opt-in. */
+        val keystoreOn: Boolean = true,
+        val presetsOn: Set<String> = emptySet(),
+        /** Values of preset secrets, by secret name. */
+        val presetValues: Map<String, String> = emptyMap(),
+        val customOn: Boolean = false,
         val repos: List<GhRepoItem> = emptyList(),
         val reposLoading: Boolean = true,
         val reposError: GhText? = null,
@@ -99,11 +105,32 @@ class KeystoreToolViewModel(
 
     fun regeneratePassword() = edit { copy(password = RepoSigning.newPassword()) }
 
-    fun addExtra() = edit { copy(extras = extras + ExtraSecret(++extraId), moreOpen = true) }
+    fun toggleKeystore() = edit { copy(keystoreOn = !keystoreOn) }
+    fun togglePreset(id: String) = edit { copy(presetsOn = if (id in presetsOn) presetsOn - id else presetsOn + id) }
+    fun toggleCustom() = edit {
+        val on = !customOn
+        copy(customOn = on, extras = if (on && extras.isEmpty()) listOf(ExtraSecret(++extraId)) else extras)
+    }
+    fun setPresetValue(name: String, value: String) = edit { copy(presetValues = presetValues + (name to value)) }
+
+    /** Fills a preset field from a text file (a service-account or google-services JSON). */
+    fun loadFromFile(name: String, uri: Uri) {
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching { app.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) } }.getOrNull()
+            }
+            if (text == null || text.length > 40_000) message(GhText.Res(R.string.tools_file_read_failed)) else setPresetValue(name, text.trim())
+        }
+    }
+
+    fun addExtra() = edit { copy(extras = extras + ExtraSecret(++extraId)) }
     fun updateExtra(id: Long, name: String? = null, value: String? = null) = edit {
         copy(extras = extras.map { if (it.id == id) it.copy(name = name ?: it.name, value = value ?: it.value) else it })
     }
-    fun removeExtra(id: Long) = edit { copy(extras = extras.filterNot { it.id == id }) }
+    fun removeExtra(id: Long) = edit {
+        val left = extras.filterNot { it.id == id }
+        copy(extras = left, customOn = if (left.isEmpty()) false else customOn)
+    }
 
     // ---- repositories ------------------------------------------------------------------------
 
@@ -130,60 +157,86 @@ class KeystoreToolViewModel(
 
     // ---- generate / apply --------------------------------------------------------------------
 
+    private fun customRows(s: UiState) = if (s.customOn) s.extras.filterNot { it.name.isBlank() && it.value.isBlank() } else emptyList()
+    private fun activePresets(s: UiState) = SECRET_PRESETS.filter { it.id in s.presetsOn }
+
     private fun validate(s: UiState): Int? {
-        if (s.alias.isBlank()) return R.string.tools_err_alias
-        if (s.password.length < 6) return R.string.tools_err_password
-        if (s.commonName.isBlank()) return R.string.tools_err_cn
-        if (s.country.isNotBlank() && s.country.trim().length != 2) return R.string.tools_err_country
+        val extraCount = activePresets(s).size + customRows(s).size
+        if (!s.keystoreOn && extraCount == 0) return R.string.tools_err_nothing
+        if (!s.keystoreOn && s.selected.isEmpty()) return R.string.tools_err_pick_repos
         val used = HashSet<String>()
-        for (n in s.names.all()) {
-            if (!KeystoreTool.validSecretName(n.trim())) return R.string.tools_err_secret_name
-            if (!used.add(n.trim().uppercase())) return R.string.tools_err_secret_dupe
+        if (s.keystoreOn) {
+            if (s.alias.isBlank()) return R.string.tools_err_alias
+            if (s.password.length < 6) return R.string.tools_err_password
+            if (s.commonName.isBlank()) return R.string.tools_err_cn
+            if (s.country.isNotBlank() && s.country.trim().length != 2) return R.string.tools_err_country
+            for (n in s.names.all()) {
+                if (!KeystoreTool.validSecretName(n.trim())) return R.string.tools_err_secret_name
+                if (!used.add(n.trim().uppercase())) return R.string.tools_err_secret_dupe
+            }
         }
-        for (e in s.extras.filterNot { it.name.isBlank() && it.value.isBlank() }) {
+        for (p in activePresets(s)) for (f in p.fields) {
+            if (s.presetValues[f.name].orEmpty().isBlank()) return R.string.tools_err_preset_empty
+            if (!used.add(f.name.uppercase())) return R.string.tools_err_secret_dupe
+        }
+        for (e in customRows(s)) {
             if (!KeystoreTool.validSecretName(e.name.trim()) || e.value.isBlank()) return R.string.tools_err_extra
             if (!used.add(e.name.trim().uppercase())) return R.string.tools_err_secret_dupe
         }
         return null
     }
 
-    /** Generates the keystore; if repositories are picked, stores the secrets in each of them straight away. */
+    /** Every secret to store: the keystore ones (when generated), the chosen presets and the custom rows. */
+    private fun collectSecrets(s: UiState, result: GeneratedKeystore?): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        if (result != null) {
+            out.putAll(result.secrets(SecretNames(s.names.keystore.trim(), s.names.storePassword.trim(), s.names.alias.trim(), s.names.keyPassword.trim())))
+        }
+        for (p in activePresets(s)) for (f in p.fields) out[f.name] = s.presetValues[f.name].orEmpty().trim()
+        for (e in customRows(s)) out[e.name.trim()] = e.value
+        return out
+    }
+
+    /** Main button: generates the keystore when its chip is on, then stores everything in the picked repositories. */
     fun generate() {
         val s = _state.value
         if (s.busy) return
         validate(s)?.let { return message(GhText.Res(it)) }
-        _state.update { it.copy(generating = true, result = null, applying = emptyList()) }
+        _state.update { it.copy(generating = s.keystoreOn, applyBusy = !s.keystoreOn, result = null, applying = emptyList()) }
         viewModelScope.launch {
             try {
-                val result = KeystoreTool.generate(
-                    KeystoreSpec(
-                        alias = s.alias.trim(), password = s.password, keySize = s.keySize, validityYears = s.years,
-                        commonName = s.commonName.trim(), orgUnit = s.orgUnit.trim(), org = s.org.trim(),
-                        locality = s.locality.trim(), state = s.province.trim(), country = s.country.trim(),
-                    ),
-                )
+                val result = if (s.keystoreOn) {
+                    KeystoreTool.generate(
+                        KeystoreSpec(
+                            alias = s.alias.trim(), password = s.password, keySize = s.keySize, validityYears = s.years,
+                            commonName = s.commonName.trim(), orgUnit = s.orgUnit.trim(), org = s.org.trim(),
+                            locality = s.locality.trim(), state = s.province.trim(), country = s.country.trim(),
+                        ),
+                    )
+                } else null
                 _state.update { it.copy(generating = false, result = result) }
-                if (_state.value.selected.isNotEmpty()) applyTo(result)
+                if (_state.value.selected.isNotEmpty()) applyTo(collectSecrets(s, result))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(generating = false) }
+                _state.update { it.copy(generating = false, applyBusy = false) }
                 message(GhText.Raw(e.message ?: e.javaClass.simpleName))
             }
         }
     }
 
-    /** Stores the current keystore in the picked repositories again (e.g. after picking more). */
+    /** Stores the current keystore and values in the picked repositories again (e.g. after picking more). */
     fun applyToSelected() {
-        val r = _state.value.result ?: return
-        if (_state.value.busy || _state.value.selected.isEmpty()) return
-        viewModelScope.launch { applyTo(r) }
+        val s = _state.value
+        if (s.busy || s.selected.isEmpty()) return
+        // The keystore itself is already made; only the other secrets can still be invalid.
+        val err = validate(s.copy(keystoreOn = false))
+        if (err != null && err != R.string.tools_err_nothing) return message(GhText.Res(err))
+        viewModelScope.launch { applyTo(collectSecrets(s, s.result)) }
     }
 
-    private suspend fun applyTo(result: GeneratedKeystore) {
+    private suspend fun applyTo(secrets: Map<String, String>) {
         val s = _state.value
-        val secrets = LinkedHashMap(result.secrets(SecretNames(s.names.keystore.trim(), s.names.storePassword.trim(), s.names.alias.trim(), s.names.keyPassword.trim())))
-        s.extras.filterNot { it.name.isBlank() && it.value.isBlank() }.forEach { secrets[it.name.trim()] = it.value }
         val targets = s.repos.filter { it.fullName in s.selected }
         _state.update { it.copy(applyBusy = true, applying = targets.map { r -> ApplyRow(r.fullName, ApplyStatus.Pending) }) }
         for ((i, r) in targets.withIndex()) {

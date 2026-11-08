@@ -180,9 +180,33 @@ object XIcons {
         )
     }
 
-    /** Material "build": a wrench, for Tools. */
+    /** Tools: a toolbox. Filled body in two halves with a clasp across the gap, and a carry handle on top. */
     val Tools: ImageVector by lazy {
-        icon("Tools", "M22.7,19l-9.1,-9.1c0.9,-2.3 0.4,-5 -1.5,-6.9 -2,-2 -5,-2.4 -7.4,-1.3L9,6 6,9 1.6,4.7C0.4,7.1 0.9,10.1 2.9,12.1c1.9,1.9 4.6,2.4 6.9,1.5l9.1,9.1c0.4,0.4 1,0.4 1.4,0l2.3,-2.3c0.5,-0.4 0.5,-1.1 0.1,-1.4z")
+        ImageVector.Builder(
+            name = "Tools",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+        )
+            .addPath(
+                pathData = PathParser().parsePathString(
+                    // upper half, lower half, clasp
+                    "M5,7h14a2,2 0 0 1 2,2v3H3V9a2,2 0 0 1 2,-2z" +
+                        "M3,14h18v4a2,2 0 0 1 -2,2H5a2,2 0 0 1 -2,-2z" +
+                        "M9.5,10.5h5a1,1 0 0 1 1,1v3a1,1 0 0 1 -1,1h-5a1,1 0 0 1 -1,-1v-3a1,1 0 0 1 1,-1z",
+                ).toNodes(),
+                fill = SolidColor(Color.Black),
+            )
+            .addPath(
+                pathData = PathParser().parsePathString("M9,6.5V6a2,2 0 0 1 2,-2h2a2,2 0 0 1 2,2v0.5").toNodes(),
+                fill = null,
+                stroke = SolidColor(Color.Black),
+                strokeLineWidth = 2f,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+            .build()
     }
     /** Material "content_cut": scissors, for the file splitter. */
     val Scissors: ImageVector by lazy {
