@@ -26,6 +26,7 @@ import com.invictus.kodex.feature.editor.EditorScreen
 import com.invictus.kodex.feature.editor.EditorViewModel
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
+import com.invictus.kodex.feature.tools.FileSplitterScreen
 import com.invictus.kodex.feature.tools.KeystoreToolScreen
 import com.invictus.kodex.feature.tools.ToolsScreen
 import com.invictus.kodex.github.ui.GitHubManagerScreen
@@ -137,7 +138,11 @@ fun KodexNavHost(
             ToolsScreen(
                 onBack = { navController.popBackStack() },
                 onOpenKeystore = { navController.navigate(Routes.TOOLS_KEYSTORE) },
+                onOpenSplitter = { navController.navigate(Routes.TOOLS_SPLITTER) },
             )
+        }
+        composable(Routes.TOOLS_SPLITTER) {
+            FileSplitterScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.TOOLS_KEYSTORE) {
             KeystoreToolScreen(onBack = { navController.popBackStack() })

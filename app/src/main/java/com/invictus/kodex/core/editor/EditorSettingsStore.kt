@@ -39,6 +39,7 @@ class EditorSettingsStore(private val context: Context) {
         val RESTORE_TABS_ON_OPEN = booleanPreferencesKey("editor_restore_tabs_on_open")
         val PROJECT_SHEET_SHOW_HIDDEN = booleanPreferencesKey("project_sheet_show_hidden")
         val CLONE_DEFAULT_PARENT = stringPreferencesKey("clone_default_parent")
+        val SPLIT_OUTPUT_DIR = stringPreferencesKey("split_output_dir")
         val GIT_STATUS_POLLING_ENABLED = booleanPreferencesKey("git_status_polling_enabled")
         val SEARCH_DEFAULT_STRINGS_ONLY = booleanPreferencesKey("search_default_strings_only")
         val SEARCH_EXTRA_EXCLUDES = stringPreferencesKey("search_extra_excludes")
@@ -127,6 +128,14 @@ class EditorSettingsStore(private val context: Context) {
     /** Clone screen "Parent folder" default -- empty means fall back to external storage root. */
     val cloneDefaultParent: Flow<String> = context.editorSettingsDataStore.data
         .map { it[Keys.CLONE_DEFAULT_PARENT].orEmpty() }
+
+    /** File splitter tool: folder the parts are written to (the last one picked); empty = Documents/Kodex/splits. */
+    val splitOutputDir: Flow<String> = context.editorSettingsDataStore.data
+        .map { it[Keys.SPLIT_OUTPUT_DIR].orEmpty() }
+
+    suspend fun setSplitOutputDir(path: String) {
+        context.editorSettingsDataStore.edit { it[Keys.SPLIT_OUTPUT_DIR] = path }
+    }
 
     /** Settings screen "Git status detection" toggle -- background status polling for the file tree stripes; off by default. */
     val gitStatusPollingEnabled: Flow<Boolean> = context.editorSettingsDataStore.data
