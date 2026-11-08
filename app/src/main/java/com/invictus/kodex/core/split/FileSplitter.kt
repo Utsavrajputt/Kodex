@@ -10,6 +10,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.file.Files
+import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -27,7 +28,7 @@ class SplitOutputStream(private val dir: File, private val base: String, private
         if (parts.size >= FileSplitter.MAX_PARTS) throw TooManyPartsException()
         val f = File(dir, "%s.%03d".format(base, parts.size + 1))
         parts += f
-        out = BufferedOutputStream(FileOutputStream(f), 64 * 1024)
+        out = BufferedOutputStream(FileOutputStream(f), 512 * 1024)
         written = 0
     }
 
@@ -61,6 +62,13 @@ object FileSplitter {
     /** Folders never worth zipping when sharing source: build output and dependency caches. */
     val BUILD_DIRS = setOf("build", ".gradle", "node_modules", ".cxx")
 
+    /** Already compressed: deflating these again burns time for no size gain, so they are only stored. */
+    private val INCOMPRESSIBLE = setOf(
+        "apk", "aab", "jar", "zip", "gz", "tgz", "bz2", "xz", "7z", "rar", "zst", "png", "jpg", "jpeg", "webp", "gif", "heic",
+        "mp3", "aac", "ogg", "opus", "m4a", "mp4", "mkv", "webm", "mov", "avi", "pdf", "woff", "woff2",
+    )
+    private const val COPY_BUFFER = 1024 * 1024
+
     private fun clearOld(dir: File, base: String) {
         val re = Regex("^" + Regex.escape(base) + "\\.\\d{3}$")
         dir.listFiles()?.filter { re.matches(it.name) }?.forEach { it.delete() }
@@ -75,7 +83,7 @@ object FileSplitter {
         val sink = SplitOutputStream(outDir, base, maxBytes)
         try {
             input.use { ins ->
-                val buf = ByteArray(256 * 1024)
+                val buf = ByteArray(COPY_BUFFER)
                 var total = 0L
                 while (true) {
                     ensureActive()
@@ -104,7 +112,8 @@ object FileSplitter {
         val sink = SplitOutputStream(outDir, base, maxBytes)
         try {
             ZipOutputStream(sink).use { zip ->
-                val buf = ByteArray(256 * 1024)
+                zip.setLevel(Deflater.BEST_SPEED)
+                val buf = ByteArray(COPY_BUFFER)
                 var total = 0L
                 fun add(dir: File, prefix: String) {
                     val children = dir.listFiles()?.sortedBy { it.name } ?: return
@@ -119,6 +128,8 @@ object FileSplitter {
                             if (f.name in skipDirs) continue
                             add(f, "$prefix${f.name}/")
                         } else if (f.canRead()) {
+                            // The level applies to the entry about to start: none for files that are already compressed.
+                            zip.setLevel(if (f.extension.lowercase() in INCOMPRESSIBLE) Deflater.NO_COMPRESSION else Deflater.BEST_SPEED)
                             zip.putNextEntry(ZipEntry(prefix + f.name).apply { time = f.lastModified() })
                             f.inputStream().use { ins ->
                                 while (true) {

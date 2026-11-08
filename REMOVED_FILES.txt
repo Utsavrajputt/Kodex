@@ -1,2 +1,0 @@
-app/src/main/java/com/invictus/kodex/github/ui/AllApksScreen.kt
-app/src/main/java/com/invictus/kodex/github/ui/AllApksViewModel.kt

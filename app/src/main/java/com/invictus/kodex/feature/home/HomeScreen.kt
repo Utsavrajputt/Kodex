@@ -69,6 +69,8 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -101,6 +103,8 @@ import com.invictus.kodex.feature.workspace.FileTreeEvent
 import com.invictus.kodex.feature.workspace.FileTreeViewModel
 import com.invictus.kodex.ui.icons.XIcons
 import com.invictus.kodex.ui.theme.BrandFontFamily
+import com.invictus.kodex.ui.theme.ThemeSettings
+import com.invictus.kodex.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -426,6 +430,7 @@ internal fun InlineSearchField(query: String, onQueryChange: (String) -> Unit) {
  */
 @Composable
 private fun HeroBanner(modifier: Modifier = Modifier) {
+    val tint = rememberHeroTint()
     val transition = rememberInfiniteTransition(label = "hero")
     val a by transition.animateFloat(
         initialValue = 0f, targetValue = 1f,
@@ -496,21 +501,21 @@ private fun HeroBanner(modifier: Modifier = Modifier) {
             .aspectRatio(1.57f)
             .clip(shape)
             // No outline: the card fades out of the page instead of sitting on it like a sticker.
-            .background(Brush.linearGradient(listOf(Color(0xFF030716), Color(0xFF071445), Color(0xFF040B26)))),
+            .background(Brush.linearGradient(listOf(tint.c(Color(0xFF030716)), tint.c(Color(0xFF071445)), tint.c(Color(0xFF040B26))))),
     ) {
         val s = maxWidth.value / 328f
-        Canvas(Modifier.fillMaxSize()) { drawHeroArt(a, b, t, intro.value) }
+        Canvas(Modifier.fillMaxSize()) { drawHeroArt(a, b, t, intro.value, tint) }
         Column(Modifier.align(Alignment.CenterStart).padding(start = (26 * s).dp)) {
             Text(
                 text = buildAnnotatedString {
                     append(kickerFull.take(kickerLen))
                     // Invisible when off / inactive (keeps the line height and width stable).
-                    withStyle(SpanStyle(color = if (activeLine == 0 && cursorOn) Color(0xFFB4EAFF) else Color.Transparent)) {
+                    withStyle(SpanStyle(color = if (activeLine == 0 && cursorOn) tint.c(Color(0xFFB4EAFF)) else Color.Transparent)) {
                         append("|")
                     }
                 },
                 style = TextStyle(
-                    brush = Brush.horizontalGradient(listOf(Color(0xFF8DB0FF), Color(0xFFB4EAFF))),
+                    brush = Brush.horizontalGradient(listOf(tint.c(Color(0xFF8DB0FF)), tint.c(Color(0xFFB4EAFF)))),
                     fontSize = (10 * s).sp,
                     letterSpacing = (3 * s).sp,
                     fontWeight = FontWeight.Medium,
@@ -519,12 +524,12 @@ private fun HeroBanner(modifier: Modifier = Modifier) {
             Spacer(Modifier.height((9 * s).dp))
             Box(
                 Modifier.size(width = (22 * s).dp, height = (3 * s).dp)
-                    .clip(RoundedCornerShape(2.dp)).background(Color(0xFF5B6CFF)),
+                    .clip(RoundedCornerShape(2.dp)).background(tint.c(Color(0xFF5B6CFF))),
             )
             Spacer(Modifier.height((8 * s).dp))
             Text(
                 text = buildAnnotatedString {
-                    val cursor = SpanStyle(color = Color(0xFF7FEBFF))
+                    val cursor = SpanStyle(color = tint.c(Color(0xFF7FEBFF)))
                     val hidden = SpanStyle(color = Color.Transparent)
                     fun cursorFor(line: Int) = if (activeLine == line && cursorOn) cursor else hidden
                     append(line1Full.take(line1Len))
@@ -533,7 +538,7 @@ private fun HeroBanner(modifier: Modifier = Modifier) {
                     append(line2Full.take(line2Len))
                     withStyle(cursorFor(2)) { append("|") }
                     append("\n")
-                    withStyle(SpanStyle(brush = Brush.horizontalGradient(listOf(Color(0xFF2F9BFF), Color(0xFF7FEBFF))))) {
+                    withStyle(SpanStyle(brush = Brush.horizontalGradient(listOf(tint.c(Color(0xFF2F9BFF)), tint.c(Color(0xFF7FEBFF)))))) {
                         append(wordText)
                     }
                     withStyle(cursorFor(3)) { append("|") }
@@ -548,13 +553,54 @@ private fun HeroBanner(modifier: Modifier = Modifier) {
                 text = stringResource(R.string.home_hero_sub),
                 fontSize = (10 * s).sp,
                 lineHeight = (14 * s).sp,
-                color = Color(0xFFB8C4F0),
+                color = tint.c(Color(0xFFB8C4F0)),
             )
         }
     }
 }
 
-private fun DrawScope.drawHeroArt(a: Float, b: Float, t: Float, intro: Float) {
+/**
+ * Recolors the hero art for the selected theme. The art is drawn in Aurora's blues and violets; for every other theme
+ * each color keeps its brightness but takes the theme's hue (and roughly its saturation), so Aurora itself is untouched.
+ */
+@Stable
+private class HeroTint(private val hueShift: Float, private val satScale: Float) {
+    private val cache = HashMap<ULong, Color>()
+    private val hsv = FloatArray(3)
+
+    fun c(color: Color): Color {
+        if (hueShift == 0f && satScale == 1f) return color
+        return cache.getOrPut(color.value) {
+            android.graphics.Color.colorToHSV(color.copy(alpha = 1f).toArgb(), hsv)
+            hsv[0] = (hsv[0] + hueShift + 360f) % 360f
+            hsv[1] = (hsv[1] * satScale).coerceIn(0f, 1f)
+            Color(android.graphics.Color.HSVToColor(hsv)).copy(alpha = color.alpha)
+        }
+    }
+}
+
+private fun hsvOf(c: Color): FloatArray = FloatArray(3).also { android.graphics.Color.colorToHSV(c.toArgb(), it) }
+
+@Composable
+private fun rememberHeroTint(): HeroTint {
+    val theme = ThemeSettings.theme
+    val dynamicPrimary = MaterialTheme.colorScheme.primary
+    return remember(theme, dynamicPrimary) {
+        if (theme == AppTheme.Aurora) {
+            HeroTint(0f, 1f)
+        } else {
+            val target = hsvOf(if (theme.isDynamic) dynamicPrimary else theme.primaryDark)
+            val base = hsvOf(AppTheme.Aurora.primaryDark)
+            // Shortest way around the hue wheel, so blue -> green does not swing the long way.
+            var shift = target[0] - base[0]
+            if (shift > 180f) shift -= 360f
+            if (shift < -180f) shift += 360f
+            HeroTint(shift, (target[1] / base[1]).coerceIn(0.45f, 1.1f))
+        }
+    }
+}
+
+private fun DrawScope.drawHeroArt(a: Float, b: Float, t: Float, intro: Float, tint: HeroTint) {
     val w = size.width
     val h = size.height
     val drift = 12.dp.toPx()
@@ -567,18 +613,18 @@ private fun DrawScope.drawHeroArt(a: Float, b: Float, t: Float, intro: Float) {
             center = center,
         )
     }
-    blob(w * 0.02f, h * 0.05f + a * drift, w * 0.26f, Color(0xFF1F4DFF), 0.55f)
-    blob(w * 0.66f - b * drift, h * -0.04f, w * 0.20f, Color(0xFF2B5CFF), 0.45f)
-    blob(w * 0.88f, h * 1.0f - a * drift, w * 0.24f, Color(0xFF2E6BFF), 0.50f)
-    blob(b * drift * 0.5f, h * 1.02f, w * 0.17f, Color(0xFF2A4BFF), 0.45f)
-    blob(w * 1.02f, h * 0.62f + b * drift, w * 0.13f, Color(0xFF8B5CFF), 0.50f)
+    blob(w * 0.02f, h * 0.05f + a * drift, w * 0.26f, tint.c(Color(0xFF1F4DFF)), 0.55f)
+    blob(w * 0.66f - b * drift, h * -0.04f, w * 0.20f, tint.c(Color(0xFF2B5CFF)), 0.45f)
+    blob(w * 0.88f, h * 1.0f - a * drift, w * 0.24f, tint.c(Color(0xFF2E6BFF)), 0.50f)
+    blob(b * drift * 0.5f, h * 1.02f, w * 0.17f, tint.c(Color(0xFF2A4BFF)), 0.45f)
+    blob(w * 1.02f, h * 0.62f + b * drift, w * 0.13f, tint.c(Color(0xFF8B5CFF)), 0.50f)
 
     // Twinkling dot grids (top right, bottom left).
     val gap = 9.dp.toPx()
     for (r in 0..4) for (c in 0..4) {
         val on = (r + c) % 2 == 0
         val alpha = 0.12f + 0.28f * (if (on) a else 1f - a)
-        val dot = Color(0xFF7FA0FF).copy(alpha = alpha)
+        val dot = tint.c(Color(0xFF7FA0FF)).copy(alpha = alpha)
         drawCircle(dot, 1.2.dp.toPx(), Offset(w * 0.86f + c * gap, h * 0.06f + r * gap))
         drawCircle(dot, 1.2.dp.toPx(), Offset(w * 0.14f + c * gap, h * 0.80f + r * gap))
     }
@@ -589,7 +635,7 @@ private fun DrawScope.drawHeroArt(a: Float, b: Float, t: Float, intro: Float) {
     val stackC = Offset(w * 0.72f, h * 0.52f)
     drawCircle(
         brush = Brush.radialGradient(
-            listOf(Color(0xFF3A6BFF).copy(alpha = (0.22f + 0.14f * b) * intro), Color.Transparent),
+            listOf(tint.c(Color(0xFF3A6BFF)).copy(alpha = (0.22f + 0.14f * b) * intro), Color.Transparent),
             center = stackC, radius = w * 0.30f,
         ),
         radius = w * 0.30f, center = stackC,
@@ -611,11 +657,11 @@ private fun DrawScope.drawHeroArt(a: Float, b: Float, t: Float, intro: Float) {
     val bob = 6.dp.toPx()
     val corner = 9.dp.toPx()
     val fills = listOf(
-        listOf(Color(0x885CC8FF), Color(0x883A6BFF)),
-        listOf(Color(0x993F6BFF), Color(0x992F46E8)),
-        listOf(Color(0xE63B5BFF), Color(0xE67A4DFF)),
+        listOf(tint.c(Color(0x885CC8FF)), tint.c(Color(0x883A6BFF))),
+        listOf(tint.c(Color(0x993F6BFF)), tint.c(Color(0x992F46E8))),
+        listOf(tint.c(Color(0xE63B5BFF)), tint.c(Color(0xE67A4DFF))),
     )
-    val edges = listOf(Color(0xCC8FE3FF), Color(0x887FA8FF), Color(0xAA9FB4FF))
+    val edges = listOf(tint.c(Color(0xCC8FE3FF)), tint.c(Color(0x887FA8FF)), tint.c(Color(0xAA9FB4FF)))
     var frontX = 0f
     var frontY = 0f
     var frontP = 0f
@@ -679,8 +725,8 @@ private fun DrawScope.drawHeroArt(a: Float, b: Float, t: Float, intro: Float) {
     val br = Offset(tr.x, frontY - rise * (1 - t0) + panelH - bottom)
     val bl = Offset(tl.x, frontY - rise * t0 + panelH - bottom)
     val screen = roundedPolygon(listOf(tl, tr, br, bl), 5.dp.toPx())
-    drawPath(screen, Color(0x33081250), alpha = frontP)
-    drawPath(screen, Color(0x445F8CFF), alpha = frontP, style = Stroke(width = 1.dp.toPx(), join = StrokeJoin.Round))
+    drawPath(screen, tint.c(Color(0x33081250)), alpha = frontP)
+    drawPath(screen, tint.c(Color(0x445F8CFF)), alpha = frontP, style = Stroke(width = 1.dp.toPx(), join = StrokeJoin.Round))
 
     // Thin scan line travelling down the screen, fading at both ends.
     clipPath(screen) {
@@ -689,7 +735,7 @@ private fun DrawScope.drawHeroArt(a: Float, b: Float, t: Float, intro: Float) {
         val yl = tl.y + (bl.y - tl.y) * sp
         val yr = tr.y + (br.y - tr.y) * sp
         drawLine(
-            Color(0xFF7FEBFF).copy(alpha = 0.35f * fade * frontP), Offset(tl.x, yl), Offset(tr.x, yr),
+            tint.c(Color(0xFF7FEBFF)).copy(alpha = 0.35f * fade * frontP), Offset(tl.x, yl), Offset(tr.x, yr),
             strokeWidth = 1.4.dp.toPx(), cap = StrokeCap.Round,
         )
     }
@@ -709,9 +755,9 @@ private fun DrawScope.drawHeroArt(a: Float, b: Float, t: Float, intro: Float) {
     }
     // Soft glow (pulses with [b]) under a thin bright stroke; the stroke fades in last.
     val glyphIn = ease(((intro - 0.55f) / 0.45f).coerceIn(0f, 1f))
-    drawPath(glyph, Color(0xFF4FF0FF).copy(alpha = (0.10f + 0.18f * b) * glyphIn), style = Stroke(width = w * 0.026f, cap = StrokeCap.Round, join = StrokeJoin.Round))
-    drawPath(glyph, Color(0xFF4FF0FF).copy(alpha = 0.16f * glyphIn), style = Stroke(width = w * 0.015f, cap = StrokeCap.Round, join = StrokeJoin.Round))
-    drawPath(glyph, Color(0xFF5FF3FF), alpha = glyphIn, style = Stroke(width = w * 0.0085f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawPath(glyph, tint.c(Color(0xFF4FF0FF)).copy(alpha = (0.10f + 0.18f * b) * glyphIn), style = Stroke(width = w * 0.026f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawPath(glyph, tint.c(Color(0xFF4FF0FF)).copy(alpha = 0.16f * glyphIn), style = Stroke(width = w * 0.015f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawPath(glyph, tint.c(Color(0xFF5FF3FF)), alpha = glyphIn, style = Stroke(width = w * 0.0085f, cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
 
 /** Polygon with every corner rounded by [radius] (quadratic curve through the original vertex). */
