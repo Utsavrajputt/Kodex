@@ -23,6 +23,11 @@ object ImageTracer {
     /** Palette caps along the Colors slider; 0 = all colors (the last stop). */
     val COLOR_STEPS = intArrayOf(2, 4, 8, 16, 32, 64, 128, 0)
 
+    /** Longer-side presets offered next to "Original". Only those smaller than the picture show. */
+    val SIZE_PRESETS = intArrayOf(512, 1024, 2048)
+
+    fun sizeOptions(longSide: Int): List<Int> = SIZE_PRESETS.filter { it < longSide }
+
     /** Path data above this many characters is likely to trouble Android's vector compiler. */
     const val HEAVY_PATH_CHARS = 300_000
 
@@ -51,9 +56,27 @@ object ImageTracer {
         return Decoded(bitmap, scaled)
     }
 
-    /** Traces [bitmap]; blocking and CPU-heavy, call it off the main thread. */
-    fun trace(bitmap: Bitmap, quality: Int, colors: Int): String {
-        check(NativeTracer.available) { "The native tracer is not part of this build" }
+    /** Scales [src] so its longer side is [longSide]; never enlarges. Returns [src] when no change is needed. */
+    fun resize(src: Bitmap, longSide: Int): Bitmap {
+        val cur = max(src.width, src.height)
+        if (longSide >= cur) return src
+        val k = longSide.toFloat() / cur
+        val tw = (src.width * k).roundToInt().coerceAtLeast(1)
+        val th = (src.height * k).roundToInt().coerceAtLeast(1)
+        // Halve while still at least twice the target: one big bilinear step skips pixels and aliases.
+        var bmp = src
+        while (bmp.width / 2 >= tw && bmp.height / 2 >= th) {
+            val next = Bitmap.createScaledBitmap(bmp, bmp.width / 2, bmp.height / 2, true)
+            if (bmp !== src) bmp.recycle()
+            bmp = next
+        }
+        val out = Bitmap.createScaledBitmap(bmp, tw, th, true)
+        if (bmp !== src && bmp !== out) bmp.recycle()
+        return out
+    }
+
+    /** Straight (non-premultiplied) RGBA bytes, the layout the native tracer takes. */
+    private fun toRgba(bitmap: Bitmap): ByteArray {
         val w = bitmap.width
         val h = bitmap.height
         val argb = IntArray(w * h)
@@ -66,7 +89,18 @@ object ImageTracer {
             rgba[o++] = p.toByte()
             rgba[o++] = (p ushr 24).toByte()
         }
-        return NativeTracer.trace(rgba, w, h, quality.coerceIn(QUALITY_MIN, QUALITY_MAX), colors)
+        return rgba
+    }
+
+    /** Opens a [TraceSession] over [bitmap]; blocking, call it off the main thread. */
+    fun open(bitmap: Bitmap): TraceSession = TraceSession.open(toRgba(bitmap), bitmap.width, bitmap.height)
+
+    /** Traces [bitmap] once; blocking and CPU-heavy, call it off the main thread. */
+    fun trace(bitmap: Bitmap, quality: Int, colors: Int): String {
+        check(NativeTracer.available) { "The native tracer is not part of this build" }
+        return NativeTracer.trace(
+            toRgba(bitmap), bitmap.width, bitmap.height, quality.coerceIn(QUALITY_MIN, QUALITY_MAX), colors,
+        )
     }
 
     /** Draws [svg] 1:1 into a [width]×[height] bitmap. May throw [OutOfMemoryError] on very heavy SVGs. */

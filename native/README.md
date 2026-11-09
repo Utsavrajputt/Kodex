@@ -19,6 +19,14 @@ The Rust core behind **Tools → Image tracer**.
 
 **Colors** caps the palette (2 … 128); **All** keeps every color. Quality 5 is only exact with Colors = All.
 
+## Sessions (speed)
+
+The app opens one `TraceSession` per picture (`sessionOpen` / `sessionRender` / `sessionCancel` /
+`sessionClose`). The clustering is cached, so a render that only changes **Colors** skips it, and
+`sessionCancel` stops a render a newer setting has made stale. Output is byte-identical to the
+one-shot `trace` call (covered by `session_matches_one_shot_in_any_order`). Quality 5 (pixel-exact)
+bypasses the cache on purpose: its segmentation is large and the cached path clones it per render.
+
 ## Build
 
 CI does this automatically (`.github/scripts/build-native.sh`, run before Gradle in every workflow).

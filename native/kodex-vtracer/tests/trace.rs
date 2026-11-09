@@ -1,6 +1,6 @@
 //! Host-side checks of the slider mapping and the SVG → Android XML converter.
 
-use kodex_vtracer::{trace_rgba, xml::svg_to_vector_xml};
+use kodex_vtracer::{trace_rgba, xml::svg_to_vector_xml, TraceSession};
 use resvg::{tiny_skia, usvg};
 
 struct Rng(u64);
@@ -141,4 +141,29 @@ fn vector_xml_keeps_alpha_and_groups() {
 #[test]
 fn vector_xml_rejects_non_svg() {
     assert!(svg_to_vector_xml("hello").is_err());
+}
+
+/// A session must give exactly what the one-shot call gives, whatever order the settings come
+/// in; that is what lets a Colors-only change reuse the cached clustering.
+#[test]
+fn session_matches_one_shot_in_any_order() {
+    let (w, h) = (48usize, 40usize);
+    let src = picture(w, h);
+    let session = TraceSession::new(src.clone(), w, h).unwrap();
+    for (q, c) in [(3, 0), (3, 8), (3, 2), (4, 16), (2, 0), (5, 0), (5, 8), (3, 8)] {
+        let cached = session.render(q, c).unwrap();
+        let fresh = trace_rgba(src.clone(), w, h, q, c).unwrap();
+        assert_eq!(cached, fresh, "quality {q}, colors {c}");
+    }
+}
+
+#[test]
+fn session_rejects_bad_input_and_survives_a_stale_cancel() {
+    assert!(TraceSession::new(vec![0; 10], 4, 4).is_err());
+    assert!(TraceSession::new(vec![], 0, 0).is_err());
+    let (w, h) = (24usize, 20usize);
+    let session = TraceSession::new(picture(w, h), w, h).unwrap();
+    // A cancel with no render in flight must not poison the next render.
+    session.cancel();
+    assert!(session.render(3, 0).is_ok());
 }

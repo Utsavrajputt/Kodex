@@ -12,13 +12,16 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.invictus.kodex.R
 import com.invictus.kodex.core.preview.VectorExport
+import com.invictus.kodex.core.tracer.ImageAnalyzer
 import com.invictus.kodex.core.tracer.ImageTracer
 import com.invictus.kodex.core.tracer.NativeTracer
+import com.invictus.kodex.core.tracer.TraceSession
 import com.invictus.kodex.github.ui.GhText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,16 +31,30 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Image tracer: pick a picture, set Quality and Colors, see the traced SVG, then download the
- * preview PNG, the SVG or an Android vector XML. Tracing re-runs when a slider is released.
+ * Image tracer: pick a picture, choose its size, let Auto pick Quality and Colors (or set them
+ * by hand), see the traced SVG, then download the preview PNG, the SVG or an Android vector XML.
+ * Tracing re-runs when a slider is released, a size chip is tapped or Auto is switched on.
+ *
+ * Runs are serialized: a new one cancels the one in flight (natively, so it stops quickly) and
+ * waits for it before starting. The native session keeps the clustering between runs, so a
+ * Colors-only change skips it.
  */
 class ImageTracerViewModel(private val app: Application) : ViewModel() {
 
     data class UiState(
         val sourceName: String? = null,
+        /** The picture as loaded (already capped at [ImageTracer.MAX_SIDE]); what the "Original" chip stands for. */
+        val origWidth: Int = 0,
+        val origHeight: Int = 0,
+        /** The size actually traced. */
         val width: Int = 0,
         val height: Int = 0,
         val scaledDown: Boolean = false,
+        /** Longer side to trace at; 0 = Original. */
+        val targetSide: Int = 0,
+        val auto: Boolean = true,
+        /** What Auto saw in the last traced picture; null when Auto is off. */
+        val detected: ImageAnalyzer.Kind? = null,
         val quality: Int = ImageTracer.DEFAULT_QUALITY,
         val colorIndex: Int = ImageTracer.COLOR_STEPS.lastIndex,
         val running: Boolean = false,
@@ -54,7 +71,17 @@ class ImageTracerViewModel(private val app: Application) : ViewModel() {
     ) {
         val colors: Int get() = ImageTracer.COLOR_STEPS[colorIndex.coerceIn(0, ImageTracer.COLOR_STEPS.lastIndex)]
         val hasSource: Boolean get() = sourceName != null
+        val origLongSide: Int get() = maxOf(origWidth, origHeight)
     }
+
+    private class Traced(
+        val svg: String,
+        val preview: Bitmap?,
+        val paths: Int,
+        val quality: Int,
+        val colors: Int,
+        val kind: ImageAnalyzer.Kind?,
+    )
 
     sealed interface Effect { data class Message(val text: GhText) : Effect }
 
@@ -64,38 +91,93 @@ class ImageTracerViewModel(private val app: Application) : ViewModel() {
     private val _effects = Channel<Effect>(Channel.BUFFERED)
     val effects = _effects.receiveAsFlow()
 
-    private var source: Bitmap? = null
+    /** The picture as decoded, and the copy at the chosen size (the same object for "Original"). */
+    private var original: Bitmap? = null
+    private var working: Bitmap? = null
+
+    /** Native session over [working]; only touched by the serialized trace jobs. */
+    @Volatile private var session: TraceSession? = null
+
+    /** Quality/Colors of the SVG on screen, to skip a re-trace that would change nothing. */
+    private var tracedKey: Int? = null
+
     private var svg: String? = null
     private var pendingXml: String? = null
     private var job: Job? = null
 
-    fun pickImage(uri: Uri) {
-        job?.cancel()
+    /**
+     * Starts [block] as the only trace job: cancels the one in flight (stopping its native render
+     * too) and waits for it, so two jobs never touch the session or bitmaps together.
+     */
+    private fun schedule(block: suspend () -> Unit) {
+        val prev = job
+        prev?.cancel()
+        session?.cancel()
+        _state.update { it.copy(running = true) }
         job = viewModelScope.launch {
-            _state.update { it.copy(running = true, heavyXmlChars = null) }
+            prev?.join()
             try {
-                val (name, decoded) = withContext(Dispatchers.IO) { displayName(uri) to ImageTracer.decode(app, uri) }
-                source = decoded.bitmap
-                svg = null
-                _state.update {
-                    it.copy(
-                        sourceName = name,
-                        width = decoded.bitmap.width,
-                        height = decoded.bitmap.height,
-                        scaledDown = decoded.scaledDown,
-                        hasResult = false,
-                        preview = null,
-                        previewFailed = false,
-                    )
-                }
-                runTrace()
+                block()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
+                // A render aborted by a newer one fails natively; that is not an error to show.
+                ensureActive()
                 _state.update { it.copy(running = false) }
                 say(GhText.Res(R.string.tracer_failed, listOf(e.message ?: e.javaClass.simpleName)))
             }
         }
+    }
+
+    fun pickImage(uri: Uri) {
+        _state.update { it.copy(heavyXmlChars = null) }
+        schedule {
+            val (name, decoded) = withContext(Dispatchers.IO) { displayName(uri) to ImageTracer.decode(app, uri) }
+            closeSession()
+            setWorking(decoded.bitmap)
+            original = decoded.bitmap
+            svg = null
+            tracedKey = null
+            _state.update {
+                it.copy(
+                    sourceName = name,
+                    origWidth = decoded.bitmap.width,
+                    origHeight = decoded.bitmap.height,
+                    width = decoded.bitmap.width,
+                    height = decoded.bitmap.height,
+                    scaledDown = decoded.scaledDown,
+                    targetSide = 0,
+                    detected = null,
+                    hasResult = false,
+                    preview = null,
+                    previewFailed = false,
+                )
+            }
+            runTrace()
+        }
+    }
+
+    /** Size chip: 0 = Original, otherwise the longer side in px. */
+    fun setTargetSide(side: Int) {
+        val orig = original ?: return
+        if (side == _state.value.targetSide) return
+        _state.update { it.copy(targetSide = side) }
+        schedule {
+            val bmp = withContext(Dispatchers.Default) { if (side == 0) orig else ImageTracer.resize(orig, side) }
+            closeSession()
+            setWorking(bmp)
+            svg = null
+            tracedKey = null
+            _state.update { it.copy(width = bmp.width, height = bmp.height, hasResult = false) }
+            runTrace()
+        }
+    }
+
+    /** Auto picks Quality and Colors from the picture; off hands the sliders back at their current values. */
+    fun setAuto(on: Boolean) {
+        if (_state.value.auto == on) return
+        _state.update { it.copy(auto = on, detected = if (on) it.detected else null) }
+        if (on && working != null) schedule { runTrace() }
     }
 
     /** Slider moves only update the label; [commit] (on release) re-traces. */
@@ -104,27 +186,46 @@ class ImageTracerViewModel(private val app: Application) : ViewModel() {
     fun setColorIndex(i: Int) = _state.update { it.copy(colorIndex = i.coerceIn(0, ImageTracer.COLOR_STEPS.lastIndex)) }
 
     fun commit() {
-        if (source == null) return
-        job?.cancel()
-        job = viewModelScope.launch {
-            try {
-                runTrace()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                _state.update { it.copy(running = false) }
-                say(GhText.Res(R.string.tracer_failed, listOf(e.message ?: e.javaClass.simpleName)))
-            }
-        }
+        if (working == null) return
+        val s = _state.value
+        if (s.auto) return
+        // Slider let go where the traced picture already is: nothing to redo.
+        if (s.hasResult && tracedKey == key(s.quality, s.colors)) return
+        schedule { runTrace() }
+    }
+
+    private fun key(quality: Int, colors: Int) = quality * 1000 + colors
+
+    private fun setWorking(bmp: Bitmap) {
+        val old = working
+        working = bmp
+        if (old != null && old !== original && old !== bmp) old.recycle()
+    }
+
+    private fun closeSession() {
+        session?.close()
+        session = null
     }
 
     private suspend fun runTrace() {
-        val bmp = source ?: return
+        val bmp = working ?: return
         val s = _state.value
         _state.update { it.copy(running = true) }
         val t0 = SystemClock.elapsedRealtime()
-        val result = withContext(Dispatchers.Default) {
-            val text = ImageTracer.trace(bmp, s.quality, s.colors)
+        val out = withContext(Dispatchers.Default) {
+            var quality = s.quality
+            var colors = s.colors
+            var kind: ImageAnalyzer.Kind? = null
+            if (s.auto) {
+                val pick = ImageAnalyzer.analyze(bmp)
+                quality = pick.quality
+                colors = pick.colors
+                kind = pick.kind
+            }
+            ensureActive()
+            val sess = session ?: ImageTracer.open(bmp).also { session = it }
+            val text = sess.render(quality, colors)
+            ensureActive()
             val rendered = try {
                 ImageTracer.render(text, bmp.width, bmp.height)
             } catch (e: Exception) {
@@ -132,20 +233,29 @@ class ImageTracerViewModel(private val app: Application) : ViewModel() {
             } catch (e: OutOfMemoryError) {
                 null
             }
-            Triple(text, rendered, ImageTracer.pathCount(text))
+            Traced(text, rendered, ImageTracer.pathCount(text), quality, colors, kind)
         }
-        svg = result.first
+        svg = out.svg
+        tracedKey = key(out.quality, out.colors)
         _state.update {
             it.copy(
                 running = false,
                 hasResult = true,
-                preview = result.second,
-                previewFailed = result.second == null,
-                svgBytes = result.first.length,
-                paths = result.third,
+                preview = out.preview,
+                previewFailed = out.preview == null,
+                svgBytes = out.svg.length,
+                paths = out.paths,
                 elapsedMs = SystemClock.elapsedRealtime() - t0,
+                quality = out.quality,
+                colorIndex = ImageTracer.COLOR_STEPS.indexOf(out.colors).let { i -> if (i < 0) ImageTracer.COLOR_STEPS.lastIndex else i },
+                detected = out.kind,
             )
         }
+    }
+
+    override fun onCleared() {
+        job?.cancel()
+        closeSession()
     }
 
     // ---- exports ----
