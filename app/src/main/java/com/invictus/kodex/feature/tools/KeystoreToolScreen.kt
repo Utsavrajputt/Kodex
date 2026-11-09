@@ -93,6 +93,7 @@ fun KeystoreToolScreen(
 
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-pkcs12")) { uri -> uri?.let(vm::save) }
     val pubSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri -> uri?.let(vm::savePublic) }
+    val morphePubSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri -> uri?.let(vm::saveMorphePublic) }
     val fileLoader = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val name = fileTarget
         if (uri != null && name != null) vm.loadFromFile(name, uri)
@@ -210,6 +211,37 @@ fun KeystoreToolScreen(
                             }
                         } else {
                             SecretValueField(f.name, s.presetValues[f.name].orEmpty(), !s.busy) { vm.setPresetValue(f.name, it) }
+                        }
+                    }
+                    if (p.id == "morphe") {
+                        Text(stringResource(R.string.tools_morphe_hint), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                        OutlinedButton(onClick = vm::generateMorphe, enabled = !s.busy, modifier = Modifier.fillMaxWidth()) {
+                            Icon(XIcons.Key, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.tools_morphe_generate))
+                        }
+                        if (s.morphePublic.isNotBlank()) {
+                            Text(stringResource(R.string.tools_morphe_public), style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
+                            Text(
+                                s.morphePublic, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(cs.surfaceContainerHighest).padding(12.dp),
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = {
+                                    ClipboardHelper.copy(context, "morphe public key", s.morphePublic, sensitive = false)
+                                    scope.launch { snackbar.showSnackbar(context.getString(R.string.tools_public_copied)) }
+                                }) {
+                                    Icon(XIcons.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(stringResource(R.string.tools_morphe_copy))
+                                }
+                                TextButton(onClick = { morphePubSaver.launch("morphe-signing.pub") }) {
+                                    Icon(XIcons.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(stringResource(R.string.tools_morphe_save))
+                                }
+                            }
+                            Text(stringResource(R.string.tools_morphe_warn), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                         }
                     }
                 }

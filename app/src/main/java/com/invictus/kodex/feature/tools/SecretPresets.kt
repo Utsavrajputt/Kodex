@@ -3,6 +3,9 @@ package com.invictus.kodex.feature.tools
 import androidx.annotation.StringRes
 import com.invictus.kodex.R
 
+/** Secret holding the Morphe patches signing key (raw 32-byte Ed25519 seed, base64). */
+const val MORPHE_SECRET = "MORPHE_SIGNING_KEY"
+
 /** One secret of a preset: the GitHub secret name it is saved under. */
 data class PresetField(
     val name: String,
@@ -21,5 +24,6 @@ val SECRET_PRESETS: List<SecretPreset> = listOf(
     SecretPreset("maps", R.string.preset_maps, listOf(PresetField("MAPS_API_KEY"))),
     SecretPreset("pat", R.string.preset_pat, listOf(PresetField("PAT_TOKEN"))),
     SecretPreset("telegram", R.string.preset_telegram, listOf(PresetField("TELEGRAM_BOT_TOKEN"), PresetField("TELEGRAM_CHAT_ID"))),
+    SecretPreset("morphe", R.string.preset_morphe, listOf(PresetField(MORPHE_SECRET))),
     SecretPreset("sentry", R.string.preset_sentry, listOf(PresetField("SENTRY_AUTH_TOKEN"))),
 )

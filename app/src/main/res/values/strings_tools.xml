@@ -109,6 +109,13 @@
     <string name="preset_pat">GitHub token</string>
     <string name="preset_telegram">Telegram</string>
     <string name="preset_sentry">Sentry</string>
+    <string name="preset_morphe">Morphe signing key</string>
+    <string name="tools_morphe_hint">Makes an Ed25519 key pair. The private key is saved as the secret MORPHE_SIGNING_KEY; put the public key in morphe-signing.pub in your patches repo.</string>
+    <string name="tools_morphe_generate">Generate new key pair</string>
+    <string name="tools_morphe_public">Public key (morphe-signing.pub)</string>
+    <string name="tools_morphe_copy">Copy public key</string>
+    <string name="tools_morphe_save">Save morphe-signing.pub</string>
+    <string name="tools_morphe_warn">Generating again makes a different key: sources already added in Morphe Manager must be removed and added again.</string>
     <string name="tools_load_file">Load from file</string>
     <string name="tools_file_read_failed">Could not read that file (text or JSON up to about 40 KB)</string>
     <string name="tools_add_another">Add another</string>

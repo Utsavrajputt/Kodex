@@ -2,6 +2,9 @@ package com.invictus.kodex.feature.tools
 
 import android.app.Application
 import android.net.Uri
+import android.util.Base64
+import com.invictus.kodex.core.crypto.Ed25519
+import java.security.SecureRandom
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
@@ -67,6 +70,8 @@ class KeystoreToolViewModel(
         /** Values of preset secrets, by secret name. */
         val presetValues: Map<String, String> = emptyMap(),
         val customOn: Boolean = false,
+        /** Public key (base64, 44 chars) of the Morphe signing seed currently in the field; blank when it is not a valid seed. */
+        val morphePublic: String = "",
         val repos: List<GhRepoItem> = emptyList(),
         val reposLoading: Boolean = true,
         val reposError: GhText? = null,
@@ -128,7 +133,36 @@ class KeystoreToolViewModel(
         if (!next.keystoreOn && next.presetsOn.isEmpty() && !next.customOn) this else next
     }
 
-    fun setPresetValue(name: String, value: String) = edit { copy(presetValues = presetValues + (name to value)) }
+    fun setPresetValue(name: String, value: String) = edit {
+        copy(
+            presetValues = presetValues + (name to value),
+            morphePublic = if (name == MORPHE_SECRET) morpheDerive(value) else morphePublic,
+        )
+    }
+
+    /** New random Ed25519 key: the private seed goes into the MORPHE_SIGNING_KEY field, the public key is derived. */
+    fun generateMorphe() = edit {
+        val seed = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        val b64 = Base64.encodeToString(seed, Base64.NO_WRAP)
+        copy(presetValues = presetValues + (MORPHE_SECRET to b64), morphePublic = morpheDerive(b64))
+    }
+
+    private fun morpheDerive(seedB64: String): String = runCatching {
+        val seed = Base64.decode(seedB64.trim(), Base64.DEFAULT)
+        if (seed.size != 32) "" else Base64.encodeToString(Ed25519.publicFromSeed(seed), Base64.NO_WRAP)
+    }.getOrDefault("")
+
+    /** Writes the Morphe public key (one line, base64) to the morphe-signing.pub file the user picked. */
+    fun saveMorphePublic(uri: Uri) {
+        val pub = _state.value.morphePublic
+        if (pub.isBlank()) return
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { app.contentResolver.openOutputStream(uri)?.use { it.write((pub + "\n").toByteArray()) } != null }.getOrDefault(false)
+            }
+            message(GhText.Res(if (ok) R.string.tools_saved else R.string.tools_save_failed))
+        }
+    }
 
     /** Fills a preset field from a text file (a service-account or google-services JSON). */
     fun loadFromFile(name: String, uri: Uri) {
