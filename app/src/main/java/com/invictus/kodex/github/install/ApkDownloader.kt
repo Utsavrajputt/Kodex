@@ -1,5 +1,6 @@
 package com.invictus.kodex.github.install
 
+import com.invictus.kodex.R
 import com.invictus.kodex.github.api.GhArtifact
 import com.invictus.kodex.github.api.GitHubError
 import com.invictus.kodex.github.data.GitHubRepository
@@ -7,6 +8,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+
+/** The device does not have enough free space for this download (checked before it starts). */
+class NotEnoughSpaceException(val neededBytes: Long, val freeBytes: Long) : java.io.IOException("not enough space")
 
 /** An APK kept on disk from an earlier download (survives the app being killed, e.g. by a self-install). */
 data class CachedApk(val artifactId: Long, val label: String, val file: File, val sizeBytes: Long, val modifiedAt: Long)
@@ -38,6 +42,12 @@ class ApkDownloader(baseDir: File) {
         withContext(Dispatchers.IO) { dir.mkdirs() }
         val part = partFile(artifact.id)
         val zip = File(dir, "artifact-${artifact.id}.zip")
+        // The zip and the extracted APK sit on disk together for a moment, so ~2x the size must be free.
+        if (artifact.sizeBytes > 0) {
+            val need = (artifact.sizeBytes - partialBytes(artifact.id)).coerceAtLeast(0L) + artifact.sizeBytes + SPACE_MARGIN
+            val free = withContext(Dispatchers.IO) { dir.usableSpace }
+            if (free in 1 until need) throw NotEnoughSpaceException(need, free)
+        }
         try {
             repo.downloadArtifact(artifact, part, keepPartial = true, onProgress = onProgress)
             val ok = withContext(Dispatchers.IO) { zip.delete(); part.renameTo(zip) }
@@ -101,6 +111,23 @@ class ApkDownloader(baseDir: File) {
 
     fun delete(file: File) { file.delete() }
 
+    /** Message for a failed download / extract: only a real "no space" is reported as a full storage. */
+    fun failureMessage(e: java.io.IOException): Int = when {
+        e is NotEnoughSpaceException -> R.string.gh_disk_not_enough
+        isNoSpace(e) -> R.string.gh_disk_error
+        else -> R.string.gh_download_write_failed
+    }
+
+    private fun isNoSpace(e: Throwable?): Boolean {
+        var c = e
+        while (c != null) {
+            val m = c.message.orEmpty()
+            if (m.contains("ENOSPC") || m.contains("No space left", ignoreCase = true)) return true
+            c = c.cause
+        }
+        return false
+    }
+
     fun deleteAllApks() {
         listCached().forEach { it.file.delete() }
     }
@@ -110,6 +137,7 @@ class ApkDownloader(baseDir: File) {
 
     companion object {
         const val KEEP_LAST = 3
+        private const val SPACE_MARGIN = 32L * 1024 * 1024
         const val MAX_AGE_MS = 24L * 60 * 60 * 1000
         private const val STALE_TMP_MS = 15L * 60 * 1000
         private val NAME = Regex("^a(\\d+)__(.+)\\.apk$")

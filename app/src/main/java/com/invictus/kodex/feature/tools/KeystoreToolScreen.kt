@@ -20,7 +20,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -89,6 +91,7 @@ fun KeystoreToolScreen(
 
     var showPassword by remember { mutableStateOf(false) }
     var repoDialog by remember { mutableStateOf(false) }
+    var pubKeySheet by remember { mutableStateOf(false) }
     var fileTarget by remember { mutableStateOf<String?>(null) }
 
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-pkcs12")) { uri -> uri?.let(vm::save) }
@@ -112,7 +115,17 @@ fun KeystoreToolScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack, enabled = !s.busy) { Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back)) }
                 },
+                actions = {
+                    IconButton(onClick = { pubKeySheet = true }, enabled = !s.busy) {
+                        Icon(XIcons.Search, contentDescription = stringResource(R.string.tools_pubkey_title))
+                    }
+                },
             )
+        },
+        bottomBar = {
+            Surface(color = cs.surfaceContainer, tonalElevation = 3.dp) {
+                GenerateButton(s, vm::generate, Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp))
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
@@ -123,7 +136,7 @@ fun KeystoreToolScreen(
             if (s.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
 
             // ---- 1. what to add ----
-            Text(stringResource(R.string.tools_what_to_add), style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
+            StepHeader(1, R.string.tools_step_choose, R.string.tools_chip_hint)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SecretChip(stringResource(R.string.tools_chip_keystore), s.keystoreOn, !s.busy, vm::toggleKeystore) { vm.toggleAlso("keystore") }
                 SECRET_PRESETS.forEach { p ->
@@ -133,6 +146,7 @@ fun KeystoreToolScreen(
             }
 
             // ---- 2. the chosen ones ----
+            if (s.keystoreOn || s.presetsOn.isNotEmpty() || s.customOn) StepHeader(2, R.string.tools_step_fill, null)
             if (s.keystoreOn) {
                 Card(R.string.tools_section_keystore) {
                     Field(s.alias, { vm.edit { copy(alias = it) } }, R.string.tools_alias, !s.busy)
@@ -160,18 +174,6 @@ fun KeystoreToolScreen(
                         },
                         singleLine = true, shape = FIELD, modifier = Modifier.fillMaxWidth(),
                     )
-                    Text(stringResource(R.string.tools_key_size), style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(2048, 3072, 4096).forEach { bits ->
-                            FilterChip(selected = s.keySize == bits, enabled = !s.busy, onClick = { vm.edit { copy(keySize = bits) } }, label = { Text("$bits") })
-                        }
-                    }
-                    Text(stringResource(R.string.tools_validity), style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(10, 25, 30, 50).forEach { y ->
-                            FilterChip(selected = s.years == y, enabled = !s.busy, onClick = { vm.edit { copy(years = y) } }, label = { Text(stringResource(R.string.tools_years, y)) })
-                        }
-                    }
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.edit { copy(moreOpen = !moreOpen) } }.padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -270,6 +272,7 @@ fun KeystoreToolScreen(
             }
 
             // ---- 3. where ----
+            StepHeader(3, R.string.tools_step_apply, null)
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(cs.surfaceContainer)
                     .clickable(enabled = !s.busy) { repoDialog = true }.padding(16.dp),
@@ -286,24 +289,6 @@ fun KeystoreToolScreen(
                     )
                 }
                 Icon(XIcons.ChevronRight, contentDescription = null, tint = cs.onSurfaceVariant)
-            }
-
-            // ---- 4. go ----
-            Button(onClick = vm::generate, enabled = !s.busy, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-                if (s.busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = cs.onPrimary)
-                else Icon(XIcons.Key, contentDescription = null, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
-                val n = s.selected.size
-                Text(
-                    when {
-                        s.generating -> stringResource(R.string.tools_generating)
-                        s.applyBusy -> stringResource(R.string.tools_applying)
-                        s.keystoreOn && n > 0 -> context.resources.getQuantityString(R.plurals.tools_generate_apply, n, n)
-                        s.keystoreOn -> stringResource(R.string.tools_generate)
-                        n > 0 -> context.resources.getQuantityString(R.plurals.tools_save_secrets, n, n)
-                        else -> stringResource(R.string.tools_save_secrets_pick)
-                    },
-                )
             }
 
             // ---- 5. result ----
@@ -346,6 +331,7 @@ fun KeystoreToolScreen(
     }
 
     if (repoDialog) RepoPickerDialog(s, vm) { repoDialog = false }
+    if (pubKeySheet) PublicKeySheet { pubKeySheet = false }
 }
 
 /** "Apply to" dialog: search, tick the repositories, Select all / Clear, Done. */
@@ -460,11 +446,6 @@ private fun ResultCard(
             r.sha256, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = cs.onPrimaryContainer,
             modifier = Modifier.clickable(onClick = onCopyFingerprint),
         )
-        Text(stringResource(R.string.tools_public_key), style = MaterialTheme.typography.labelLarge, color = cs.onPrimaryContainer, modifier = Modifier.padding(top = 4.dp))
-        Text(
-            r.publicKeyPem.lines().drop(1).firstOrNull().orEmpty().take(44) + "\u2026",
-            style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = cs.onPrimaryContainer,
-        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onCopyPublic, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.tools_copy_public)) }
             OutlinedButton(onClick = onSavePublic, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.tools_save_public)) }
@@ -514,4 +495,42 @@ private fun SecretValueField(label: String, value: String, enabled: Boolean, onC
         },
         singleLine = true, shape = FIELD, modifier = Modifier.fillMaxWidth(),
     )
+}
+
+/** Numbered step title so the screen reads top to bottom: choose, fill in, apply. */
+@Composable
+private fun StepHeader(number: Int, title: Int, hint: Int?) {
+    val cs = MaterialTheme.colorScheme
+    Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.size(24.dp).clip(CircleShape).background(cs.primary), contentAlignment = Alignment.Center) {
+                Text("$number", style = MaterialTheme.typography.labelMedium, color = cs.onPrimary, fontWeight = FontWeight.Bold)
+            }
+            Text(stringResource(title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        }
+        if (hint != null) Text(stringResource(hint), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, modifier = Modifier.padding(start = 34.dp))
+    }
+}
+
+/** The one action of the screen, pinned to the bottom so it never scrolls away. */
+@Composable
+private fun GenerateButton(s: KeystoreToolViewModel.UiState, onClick: () -> Unit, modifier: Modifier) {
+    val cs = MaterialTheme.colorScheme
+    val context = LocalContext.current
+    Button(onClick = onClick, enabled = !s.busy, modifier = modifier.height(54.dp)) {
+        if (s.busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = cs.onPrimary)
+        else Icon(XIcons.Key, contentDescription = null, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        val n = s.selected.size
+        Text(
+            when {
+                s.generating -> stringResource(R.string.tools_generating)
+                s.applyBusy -> stringResource(R.string.tools_applying)
+                s.keystoreOn && n > 0 -> context.resources.getQuantityString(R.plurals.tools_generate_apply, n, n)
+                s.keystoreOn -> stringResource(R.string.tools_generate)
+                n > 0 -> context.resources.getQuantityString(R.plurals.tools_save_secrets, n, n)
+                else -> stringResource(R.string.tools_save_secrets_pick)
+            },
+        )
+    }
 }

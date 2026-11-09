@@ -17,6 +17,7 @@ import com.invictus.kodex.github.data.ApkResolver
 import com.invictus.kodex.github.data.GitHubProjectResolver
 import com.invictus.kodex.github.data.GitHubRepository
 import com.invictus.kodex.github.data.GitHubResolution
+import com.invictus.kodex.github.install.ActiveDownloads
 import com.invictus.kodex.github.install.ApkDownloader
 import com.invictus.kodex.github.install.ApkInspector
 import com.invictus.kodex.github.install.ApkInstallInfo
@@ -168,6 +169,22 @@ class AllApksViewModel(
                 }
             }
         }
+        // A download started before this screen was (re)opened keeps running in the background: show it
+        // again instead of offering a second Download, and notice when it ends.
+        viewModelScope.launch {
+            ActiveDownloads.live.collect { map ->
+                if (transferJob?.isActive == true) return@collect // this screen's own job drives the state
+                val cur = _state.value.transfer
+                if (cur?.paused == true) return@collect
+                val l = map.values.firstOrNull { it.owner == ActiveDownloads.OWNER_APKS }
+                if (l != null) {
+                    _state.update { it.copy(transfer = RowTransfer(l.artifactId, l.downloaded, l.total, l.etaSeconds, l.speedBps)) }
+                } else if (cur != null) {
+                    _state.update { it.copy(transfer = null) }
+                    refreshDownloaded()
+                }
+            }
+        }
         load()
     }
 
@@ -254,14 +271,12 @@ class AllApksViewModel(
     private class PausedRow(val row: ApkRow, val installAfter: Boolean)
 
     private var pausedRow: PausedRow? = null
-    private var pauseRequested = false
 
     /** Stop the running download but keep the partial file; [resume] continues it. */
     fun pause() {
         val t = _state.value.transfer ?: return
         if (t.paused || (t.total > 0 && t.downloaded >= t.total)) return
-        pauseRequested = true
-        transferJob?.cancel()
+        ActiveDownloads.pause(t.artifactId)
     }
 
     fun resume() {
@@ -277,8 +292,7 @@ class AllApksViewModel(
             _state.update { it.copy(transfer = null) }
             viewModelScope.launch(Dispatchers.IO) { downloader.discardPartial(t.artifactId) }
         } else {
-            pauseRequested = false
-            transferJob?.cancel()
+            ActiveDownloads.cancel(t.artifactId)
         }
     }
 
@@ -294,13 +308,14 @@ class AllApksViewModel(
         val current = _state.value.transfer
         // A paused download does not block: it is resumed (same row) or simply left with its partial file.
         if ((current != null && !current.paused) || row.expired) return
+        // Already downloading (started before this screen was reopened): never write the same file twice.
+        if (!ActiveDownloads.claim(ActiveDownloads.Live(row.artifact.id, ActiveDownloads.OWNER_APKS, total = row.artifact.sizeBytes))) return
         pausedRow = null
-        pauseRequested = false
         val partial = downloader.partialBytes(row.artifact.id)
         _state.update {
             it.copy(transfer = RowTransfer(row.artifact.id, downloaded = partial.takeIf { p -> p < row.artifact.sizeBytes } ?: 0L, total = row.artifact.sizeBytes))
         }
-        transferJob = GhBackground.scope.launch {
+        val job = GhBackground.scope.launch {
             GhBackground.begin(appContext)
             var paused = false
             var downloadDone = false
@@ -321,6 +336,7 @@ class AllApksViewModel(
                         if (p == null || p - last >= 0.01f || now - lastUiMs >= UI_TICK_MS) {
                             last = p ?: last
                             lastUiMs = now
+                            ActiveDownloads.progress(row.artifact.id, bytes, size, eta, meter.speedBytesPerSec)
                             _state.update { st ->
                                 st.transfer?.takeIf { t -> !t.paused }
                                     ?.let { t -> st.copy(transfer = t.copy(downloaded = bytes, total = size, etaSeconds = eta, speedBps = meter.speedBytesPerSec)) }
@@ -366,7 +382,8 @@ class AllApksViewModel(
                     }
                 }
             } catch (e: CancellationException) {
-                if (pauseRequested && !downloadDone) {
+                val wasPause = ActiveDownloads.takePause(row.artifact.id)
+                if (wasPause && !downloadDone) {
                     // Paused: the .part file stays so Resume continues from there.
                     paused = true
                     pausedRow = PausedRow(row, installAfter)
@@ -374,7 +391,6 @@ class AllApksViewModel(
                 } else {
                     withContext(NonCancellable + Dispatchers.IO) { downloader.discardPartial(row.artifact.id) }
                 }
-                pauseRequested = false
                 throw e
             } catch (e: GitHubError) {
                 _events.tryEmit(AllApksEvent.Snack(R.string.gh_download_incomplete))
@@ -382,16 +398,19 @@ class AllApksViewModel(
             } catch (e: ArtifactZipException) {
                 _events.tryEmit(AllApksEvent.Snack(R.string.gh_apk_invalid))
             } catch (e: IOException) {
-                _events.tryEmit(AllApksEvent.Snack(R.string.gh_disk_error))
+                _events.tryEmit(AllApksEvent.Snack(downloader.failureMessage(e)))
             } catch (e: Exception) {
                 _events.tryEmit(AllApksEvent.Snack(R.string.gh_install_failed, listOf(e.message.orEmpty())))
             } finally {
+                ActiveDownloads.release(row.artifact.id)
                 if (!paused) _state.update { it.copy(transfer = null) }
                 withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) { downloader.cleanOld() }
                 refreshDownloaded()
                 GhBackground.end(appContext)
             }
         }
+        transferJob = job
+        ActiveDownloads.attach(row.artifact.id, job)
     }
 
     companion object {

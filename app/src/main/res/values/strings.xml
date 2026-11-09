@@ -1157,6 +1157,8 @@
     <string name="gh_transfer_preparing_save">Preparing file…</string>
     <string name="gh_download_too_large">The download is larger than the allowed size and was stopped.</string>
     <string name="gh_download_incomplete">The download was cut short. Try again.</string>
+    <string name="gh_disk_not_enough">Not enough free storage for this download. Free up some space and try again.</string>
+    <string name="gh_download_write_failed">The download could not be saved. Try again.</string>
     <string name="gh_disk_error">Could not write the file (is the storage full?).</string>
     <string name="gh_artifact_expired">This artifact has expired and can no longer be downloaded.</string>
 

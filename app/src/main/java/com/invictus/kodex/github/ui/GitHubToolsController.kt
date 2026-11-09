@@ -25,6 +25,7 @@ import com.invictus.kodex.github.data.DispatchInfo
 import com.invictus.kodex.github.data.GitHubRepository
 import com.invictus.kodex.github.data.TagSuggestions
 import com.invictus.kodex.github.data.WorkflowInputParser
+import com.invictus.kodex.github.install.ActiveDownloads
 import com.invictus.kodex.github.install.ApkDownloader
 import com.invictus.kodex.github.notify.ArmBuildWatch
 import com.invictus.kodex.github.notify.GhBackground
@@ -108,6 +109,28 @@ class GitHubToolsController(
         }
         scope.launch {
             InstallEvents.results.collect { onInstallResult(it) }
+        }
+        // A download started before this screen was (re)opened keeps running in the background: show it again
+        // instead of offering a second Download, and notice when it ends.
+        scope.launch {
+            ActiveDownloads.live.collect { map ->
+                if (transferJob?.isActive == true) return@collect // this controller's own job drives the state
+                val cur = _state.value.transfer
+                if (cur?.paused == true) return@collect
+                val l = map.values.firstOrNull { it.owner == projectPath }
+                if (l != null) {
+                    val p = if (l.total > 0) (l.downloaded.toFloat() / l.total).coerceIn(0f, 1f) else null
+                    _state.update {
+                        it.copy(transfer = Transfer(
+                            l.artifactId, if (l.save) TransferPurpose.Save else TransferPurpose.Install, p, l.fromApkCard,
+                            downloaded = l.downloaded, total = l.total, etaSeconds = l.etaSeconds, speedBps = l.speedBps,
+                        ))
+                    }
+                } else if (cur != null) {
+                    _state.update { it.copy(transfer = null) }
+                    scope.launch(Dispatchers.IO) { refreshDownloadedNow() }
+                }
+            }
         }
         // Retention (last 3 APKs + 24 h) and stale temp files; then show what is kept.
         scope.launch(Dispatchers.IO) { downloader.cleanOld(); refreshDownloadedNow() }
@@ -570,14 +593,12 @@ class GitHubToolsController(
     private class PausedTransfer(val artifact: GhArtifact, val purpose: TransferPurpose, val fromApkCard: Boolean)
 
     private var pausedTransfer: PausedTransfer? = null
-    private var pauseRequested = false
 
     /** Stop the running download but keep the partial file; [resumeTransfer] continues it. */
     fun pauseTransfer() {
         val t = _state.value.transfer ?: return
         if (t.paused || (t.progress ?: 0f) >= 1f) return
-        pauseRequested = true
-        transferJob?.cancel()
+        ActiveDownloads.pause(t.artifactId)
     }
 
     fun resumeTransfer() {
@@ -593,8 +614,7 @@ class GitHubToolsController(
             _state.update { it.copy(transfer = null) }
             scope.launch(Dispatchers.IO) { downloader.discardPartial(t.artifactId) }
         } else {
-            pauseRequested = false
-            transferJob?.cancel()
+            ActiveDownloads.cancel(t.artifactId)
         }
     }
 
@@ -603,8 +623,9 @@ class GitHubToolsController(
         val s = _state.value
         // A paused transfer does not block: it is resumed (same artifact) or simply left with its partial file.
         if ((s.transfer != null && !s.transfer.paused) || s.installing || s.pendingSave != null) return
+        // Already downloading (started before this screen was reopened): never write the same file twice.
+        if (!ActiveDownloads.claim(ActiveDownloads.Live(artifact.id, projectPath, total = artifact.sizeBytes, save = purpose == TransferPurpose.Save, fromApkCard = fromApkCard))) return
         pausedTransfer = null
-        pauseRequested = false
         val partial = downloader.partialBytes(artifact.id)
         val startProgress = if (artifact.sizeBytes > 0 && partial in 1 until artifact.sizeBytes) partial.toFloat() / artifact.sizeBytes else 0f
         _state.update {
@@ -615,7 +636,7 @@ class GitHubToolsController(
         }
         // Already on disk (a quick list of one small folder): nothing long-running, so no notification.
         val alreadyDownloaded = downloader.cachedApk(artifact.id) != null
-        transferJob = launchTracked(tracked = !alreadyDownloaded) {
+        val job = launchTracked(tracked = !alreadyDownloaded) {
             var zip: File? = null
             var paused = false
             val meter = DownloadMeter()
@@ -642,6 +663,7 @@ class GitHubToolsController(
                     if (p == null || p - last >= 0.01f || now - lastUiMs >= UI_TICK_MS) {
                         last = p ?: last
                         lastUiMs = now
+                        ActiveDownloads.progress(artifact.id, bytes, artifact.sizeBytes, eta, meter.speedBytesPerSec)
                         _state.update { st ->
                             st.transfer?.takeIf { t -> !t.paused }
                                 ?.let { t -> st.copy(transfer = t.copy(progress = p, downloaded = bytes, total = artifact.sizeBytes, etaSeconds = eta, speedBps = meter.speedBytesPerSec)) }
@@ -661,7 +683,8 @@ class GitHubToolsController(
                     _state.value.ready?.file?.let { notifier.downloadComplete(it, artifact.name) }
                 }
             } catch (e: CancellationException) {
-                if (pauseRequested && zip == null) {
+                val wasPause = ActiveDownloads.takePause(artifact.id)
+                if (wasPause && zip == null) {
                     // Paused: the .part file stays so Resume continues from there.
                     paused = true
                     pausedTransfer = PausedTransfer(artifact, purpose, fromApkCard)
@@ -670,7 +693,6 @@ class GitHubToolsController(
                     zip?.delete()
                     withContext(NonCancellable + Dispatchers.IO) { downloader.discardPartial(artifact.id) }
                 }
-                pauseRequested = false
                 throw e
             } catch (e: GitHubError) {
                 zip?.delete()
@@ -683,13 +705,17 @@ class GitHubToolsController(
                 notifier.result(GhNotifier.KIND_DOWNLOAD, str(R.string.gh_notif_download_failed_title), str(R.string.gh_apk_invalid), ok = false)
             } catch (e: IOException) {
                 zip?.delete()
-                emit(GhEvent.Snack(GhText.Res(R.string.gh_disk_error)))
-                notifier.result(GhNotifier.KIND_DOWNLOAD, str(R.string.gh_notif_download_failed_title), str(R.string.gh_disk_error), ok = false)
+                val msg = downloader.failureMessage(e)
+                emit(GhEvent.Snack(GhText.Res(msg)))
+                notifier.result(GhNotifier.KIND_DOWNLOAD, str(R.string.gh_notif_download_failed_title), str(msg), ok = false)
             } finally {
+                ActiveDownloads.release(artifact.id)
                 if (!paused) _state.update { it.copy(transfer = null) }
                 withContext(NonCancellable + Dispatchers.IO) { downloader.cleanOld(); refreshDownloadedNow() }
             }
         }
+        transferJob = job
+        ActiveDownloads.attach(artifact.id, job)
     }
 
     private fun transferError(e: GitHubError): GhText = when (e) {
