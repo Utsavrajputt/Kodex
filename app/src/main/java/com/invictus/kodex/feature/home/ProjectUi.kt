@@ -94,7 +94,7 @@ internal fun rememberProjectOpener(
             opening = true
             scope.launch {
                 try {
-                    if (fileTreeViewModel.openProjectAndWait(dir)) latestOnOpened()
+                    if (fileTreeViewModel.openProjectAndWait(dir, handoffOnly = true)) latestOnOpened()
                 } finally {
                     opening = false
                 }

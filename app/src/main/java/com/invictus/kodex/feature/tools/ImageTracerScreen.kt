@@ -33,7 +33,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -50,11 +49,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.invictus.kodex.R
-import com.invictus.kodex.core.tracer.ImageAnalyzer
 import com.invictus.kodex.core.tracer.ImageTracer
 import com.invictus.kodex.ui.icons.XIcons
 import kotlinx.coroutines.launch
@@ -123,20 +122,25 @@ fun ImageTracerScreen(
                 )
             }
 
-            // ---- image ----
+            // ---- image + size, one compact card ----
             TracerCard(R.string.tracer_section_image) {
-                OutlinedButton(onClick = { pickImage.launch(arrayOf("image/*")) }, enabled = !s.running, modifier = Modifier.fillMaxWidth()) {
-                    Icon(XIcons.Image, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.tracer_choose))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = { pickImage.launch(arrayOf("image/*")) }, enabled = !s.running) {
+                        Icon(XIcons.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.tracer_choose), maxLines = 1)
+                    }
+                    if (s.hasSource) {
+                        Column(Modifier.weight(1f)) {
+                            Text(s.sourceName.orEmpty(), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${s.origWidth} × ${s.origHeight} px", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                        }
+                    } else {
+                        Text(stringResource(R.string.tracer_nothing), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+                    }
                 }
                 if (s.hasSource) {
-                    Text(s.sourceName.orEmpty(), style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "${s.origWidth} × ${s.origHeight} px",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = cs.onSurfaceVariant,
-                    )
+                    SizeChips(longSide = s.origLongSide, selected = s.targetSide, onSelect = vm::setTargetSide)
                     if (s.scaledDown) {
                         Text(
                             stringResource(R.string.tracer_scaled_down, ImageTracer.MAX_SIDE),
@@ -144,46 +148,12 @@ fun ImageTracerScreen(
                             color = cs.onSurfaceVariant,
                         )
                     }
-                } else {
-                    Text(stringResource(R.string.tracer_nothing), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
-                }
-            }
-
-            // ---- size ----
-            if (s.hasSource) {
-                TracerCard(R.string.tracer_section_size) {
-                    SizeChips(
-                        longSide = s.origLongSide,
-                        selected = s.targetSide,
-                        onSelect = vm::setTargetSide,
-                    )
-                    Text(stringResource(R.string.tracer_size_hint), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                 }
             }
 
             // ---- options ----
-            val manual = s.hasSource && !s.nativeMissing && !s.auto
+            val manual = s.hasSource && !s.nativeMissing
             TracerCard(R.string.tracer_section_options) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.tracer_auto), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            stringResource(R.string.tracer_auto_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = cs.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Switch(checked = s.auto, onCheckedChange = vm::setAuto, enabled = !s.nativeMissing)
-                }
-                val kind = s.detected
-                if (s.auto && kind != null) {
-                    Text(
-                        stringResource(R.string.tracer_auto_detected, stringResource(kindLabel(kind))),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = cs.primary,
-                    )
-                }
                 SliderRow(
                     label = stringResource(R.string.tracer_quality),
                     value = s.quality.toFloat(),
@@ -259,13 +229,6 @@ fun ImageTracerScreen(
             }
         }
     }
-}
-
-private fun kindLabel(kind: ImageAnalyzer.Kind): Int = when (kind) {
-    ImageAnalyzer.Kind.PIXEL_ART -> R.string.tracer_kind_pixel_art
-    ImageAnalyzer.Kind.FLAT -> R.string.tracer_kind_flat
-    ImageAnalyzer.Kind.GRAPHIC -> R.string.tracer_kind_graphic
-    ImageAnalyzer.Kind.PHOTO -> R.string.tracer_kind_photo
 }
 
 /** "Original · N px" (the default, always there) followed by the presets smaller than the picture. */

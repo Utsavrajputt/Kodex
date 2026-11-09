@@ -49,7 +49,7 @@ private class FileReview(val change: FileChange) {
     val hunks: List<DiffHunk> = when (change.kind) {
         ChangeKind.EDIT -> DiffEngine.diff(change.baseText.orEmpty(), change.newText.orEmpty())
         ChangeKind.CREATE -> DiffEngine.diff("", change.newText.orEmpty())
-        ChangeKind.DELETE -> emptyList()
+        else -> emptyList() // DELETE and file operations have no text diff
     }
     var included by mutableStateOf(true)
     var expanded by mutableStateOf(false)
@@ -69,6 +69,7 @@ private class FileReview(val change: FileChange) {
                 val final = DiffEngine.applySelected(base, hunks.mapIndexed { i, h -> h.copy(included = hunkOn[i]) })
                 if (final == base) null else ApprovedChange(change.path, ChangeKind.EDIT, base, final)
             }
+            else -> ApprovedChange(change.path, change.kind, null, null, change.toPath)
         }
     }
 }
@@ -106,7 +107,7 @@ fun ChangeReviewSheet(
             }
             LazyColumn(Modifier.heightIn(max = 480.dp).padding(vertical = 8.dp)) {
                 reviews.forEach { r ->
-                    item(key = "f:${r.change.path}") { FileHeader(r) }
+                    item(key = "f:${r.change.key}") { FileHeader(r) }
                     if (r.expanded) {
                         val rows = rowsFor(r)
                         items(rows.size) { n ->
@@ -133,8 +134,18 @@ fun ChangeReviewSheet(
     }
 }
 
+private fun opSummary(c: FileChange): String = when (c.kind) {
+    ChangeKind.MOVE -> "${c.path} will be moved to ${c.toPath}."
+    ChangeKind.COPY -> "${c.path} will be copied to ${c.toPath}."
+    ChangeKind.MKDIR -> "Folder ${c.path} will be created."
+    ChangeKind.TRASH -> "Folder ${c.path} and everything in it will be deleted (undoable)."
+    ChangeKind.EXTRACT -> "${c.path} will be extracted into ${c.toPath}."
+    else -> c.path
+}
+
 private fun rowsFor(r: FileReview): List<Row2> {
     if (r.change.kind == ChangeKind.DELETE) return listOf(Row2.Note("This file will be deleted."))
+    if (r.change.kind.isFsOp) return listOf(Row2.Note(opSummary(r.change)))
     val out = ArrayList<Row2>()
     var shown = 0
     for ((i, h) in r.hunks.withIndex()) {
@@ -156,11 +167,19 @@ private fun FileHeader(r: FileReview) {
     ) {
         Checkbox(checked = r.included, onCheckedChange = { r.included = it })
         Column(Modifier.weight(1f)) {
-            Text(r.change.path, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                r.change.path + (r.change.toPath?.let { " → $it" } ?: ""),
+                style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
             val label = when (r.change.kind) {
                 ChangeKind.EDIT -> "Modified  +${r.added} −${r.removed}"
                 ChangeKind.CREATE -> "New file  +${r.added}"
                 ChangeKind.DELETE -> "Deleted"
+                ChangeKind.MOVE -> "Move / rename"
+                ChangeKind.COPY -> "Copy"
+                ChangeKind.MKDIR -> "New folder"
+                ChangeKind.TRASH -> "Folder deleted"
+                ChangeKind.EXTRACT -> "Extract archive"
             }
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }

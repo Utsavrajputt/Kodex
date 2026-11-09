@@ -1,5 +1,6 @@
 package com.invictus.kodex.core.fs
 
+import com.invictus.kodex.core.archive.ArchiveReader
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -28,6 +29,8 @@ class FileOpenPolicy(
         val ext = file.extension.lowercase(Locale.ROOT)
         // Media gets a real preview tab in M5, so it is never a "binary" warning.
         if (ext in PREVIEWABLE_MEDIA) return@withContext OpenDecision.Open
+        // zip/7z/rar open in the archive explorer, so there is nothing to warn about.
+        if (ArchiveReader.isArchive(file)) return@withContext OpenDecision.Open
         if (ext in BINARY_EXTENSIONS) return@withContext OpenDecision.Binary
         val size = file.length()
         if (size == 0L) return@withContext OpenDecision.Open

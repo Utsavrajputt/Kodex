@@ -142,18 +142,9 @@
     <string name="tracer_choose">Choose image</string>
     <string name="tracer_nothing">No image chosen</string>
     <string name="tracer_scaled_down">Larger than %1$d px, so it was scaled down before tracing.</string>
-    <string name="tracer_section_size">Size (longer side)</string>
     <string name="tracer_size_original">Original · %1$d px</string>
     <string name="tracer_size_px">%1$d px</string>
-    <string name="tracer_size_hint">Smaller sizes trace faster and give a lighter SVG.</string>
     <string name="tracer_section_options">Options</string>
-    <string name="tracer_auto">Auto</string>
-    <string name="tracer_auto_desc">Picks Quality and Colors to suit the picture</string>
-    <string name="tracer_auto_detected">Detected: %1$s</string>
-    <string name="tracer_kind_pixel_art">Pixel art</string>
-    <string name="tracer_kind_flat">Flat graphic</string>
-    <string name="tracer_kind_graphic">Illustration</string>
-    <string name="tracer_kind_photo">Photo</string>
     <string name="tracer_quality">Quality</string>
     <string name="tracer_colors">Colors</string>
     <string name="tracer_colors_all">All</string>
@@ -203,4 +194,14 @@
     <string name="tools_chip_hint">Tap to pick one, long-press to combine several</string>
     <string name="tools_options_hint">All optional. The defaults work fine.</string>
     <string name="tools_options_row_hint">Certificate details and secret names</string>
+    <string name="archive_extract_all">Extract all (%1$d files)</string>
+    <string name="archive_extract_selected">Extract selected (%1$d)</string>
+    <string name="archive_clear">Clear</string>
+    <string name="archive_close">Close</string>
+    <string name="archive_empty">This folder is empty.</string>
+    <string name="archive_open_failed">Can\'t open this archive: %1$s</string>
+    <string name="archive_failed">Extract failed: %1$s</string>
+    <string name="archive_extracted">Extracted %1$d files to %2$s</string>
+    <string name="archive_preview_truncated">Preview cut off; extract the file to see all of it.</string>
+    <string name="archive_preview_unsupported">No preview for this file type. Extract it to open it.</string>
 </resources>

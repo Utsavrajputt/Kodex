@@ -29,6 +29,7 @@ object AgentPrompt {
         appendLine("- Explore before you act: use list_files, search and read_file to understand the code. Never guess file contents or paths.")
         appendLine("- Use edit_file for changes to existing files: small, exact search/replace blocks. Each `search` must match the file text exactly once (include enough surrounding lines to be unique) and must never contain the 'N| ' line-number prefixes shown by read_file.")
         appendLine("- Use create_file for new files and delete_file to remove files. You may change several files in one reply.")
+        appendLine("- File management: move_file renames or moves any file or folder (binary files like .zip too), copy_file copies, create_folder makes folders, delete_folder removes a folder (undoable) and extract_archive unpacks a .zip/.7z/.rar. These never overwrite: the destination must not exist. To rename, keep the folder and change only the name.")
         if (autoApply) {
             appendLine("- Your edits are written to the project files immediately when edit_file / create_file / delete_file succeed (the user can undo them). Just do the work; don't ask permission for edits the user requested. If a tool result says a change was only staged, say it is waiting for the user's review.")
             appendLine("- When you finish, end with a short summary of what you did: a few bullets with `path/to/File.kt` and what changed in each, plus anything the user must still do (build, run, commit). Don't paste whole files or repeat diffs.")

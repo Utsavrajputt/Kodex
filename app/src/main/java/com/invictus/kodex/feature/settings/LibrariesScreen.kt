@@ -42,6 +42,8 @@ fun LibrariesScreen(
         "Coil" to stringResource(R.string.about_credit_coil_desc),
         "OkHttp" to stringResource(R.string.about_credit_okhttp_desc),
         "AndroidSVG" to stringResource(R.string.about_credit_androidsvg_desc),
+        "Apache Commons Compress" to stringResource(R.string.about_credit_commons_compress_desc),
+        "Junrar" to stringResource(R.string.about_credit_junrar_desc),
         "AndroidX WebKit" to stringResource(R.string.about_credit_webkit_desc),
         "Kotlin Coroutines" to stringResource(R.string.about_credit_coroutines_desc),
     )

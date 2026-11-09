@@ -768,6 +768,8 @@
     <string name="about_credit_coil_desc">Image loading and GitHub avatars</string>
     <string name="about_credit_okhttp_desc">HTTP networking</string>
     <string name="about_credit_androidsvg_desc">SVG rendering for previews</string>
+    <string name="about_credit_commons_compress_desc">Reads 7z archives in the archive explorer</string>
+    <string name="about_credit_junrar_desc">Reads RAR archives in the archive explorer</string>
     <string name="about_credit_webkit_desc">Markdown and HTML preview</string>
     <string name="about_credit_coroutines_desc">Asynchronous work</string>
     <string name="about_developers_title">Developers</string>

@@ -56,3 +56,14 @@
 
 # --- Image tracer: JNI binds these methods by name (Java_com_invictus_kodex_core_tracer_NativeTracer_*).
 -keep class com.invictus.kodex.core.tracer.NativeTracer { *; }
+
+# --- Archive explorer: optional codecs commons-compress probes for (zstd, brotli, ...) are not shipped.
+-dontwarn org.apache.commons.compress.**
+-dontwarn com.github.luben.zstd.**
+-dontwarn org.brotli.dec.**
+-dontwarn org.objectweb.asm.**
+-dontwarn com.github.junrar.**
+-dontwarn org.apache.commons.vfs2.**
+-keep class com.github.junrar.** { *; }
+-keep class org.apache.commons.compress.archivers.sevenz.** { *; }
+-keep class org.tukaani.xz.** { *; }

@@ -1,5 +1,6 @@
 package com.invictus.kodex.ui.navigation
 
+import java.io.File
 import androidx.compose.animation.core.tween
 import com.invictus.kodex.feature.diagnostics.GitLogsScreen
 import com.invictus.kodex.feature.settings.SettingsDiagnosticsScreen
@@ -40,6 +41,8 @@ import com.invictus.kodex.feature.git.GitCredentialsScreen
 import com.invictus.kodex.feature.git.GitHistoryScreen
 import com.invictus.kodex.feature.git.GitOnboardingScreen
 import com.invictus.kodex.feature.git.GitRemotesScreen
+import com.invictus.kodex.core.archive.ArchiveReader
+import com.invictus.kodex.feature.archive.ArchiveExplorerScreen
 import com.invictus.kodex.feature.git.GitScreen
 import com.invictus.kodex.feature.git.GitStashScreen
 import com.invictus.kodex.feature.git.GitTagsScreen
@@ -160,7 +163,11 @@ fun KodexNavHost(
         }
         composable(Routes.WORKSPACE) {
             WorkspaceScreen(
-                onOpenFile = { editorViewModel.onEvent(EditorEvent.Open(it)) },
+                onOpenFile = { file ->
+                    // zip / 7z / rar open as a browsable folder, not as a (binary) editor tab.
+                    if (ArchiveReader.isArchive(file)) navController.navigate(Routes.archive(file.absolutePath))
+                    else editorViewModel.onEvent(EditorEvent.Open(file))
+                },
                 externalMessages = editorViewModel.messages,
                 onProjectRoot = { editorViewModel.onProjectOpened(it.path) },
                 onOpenGit = { root -> navController.navigate(Routes.git(root.path)) },
@@ -277,6 +284,15 @@ fun KodexNavHost(
                             navController.popBackStack()
                         }
                     },
+                )
+            }
+        }
+        composable(Routes.ARCHIVE) { entry ->
+            val path = entry.arguments?.getString("archivePath")
+            if (path != null) {
+                ArchiveExplorerScreen(
+                    archive = File(path),
+                    onBack = { navController.popBackStack() },
                 )
             }
         }

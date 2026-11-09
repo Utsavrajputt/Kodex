@@ -111,6 +111,10 @@ dependencies {
     // dropped; real errors surface through GitErrorDetails dialogs).
     implementation(libs.org.eclipse.jgit)
     implementation(libs.slf4j.nop)
+    // Archive explorer: 7z (+ LZMA via xz) and RAR; zip/jar/aar/apk use java.util.zip.
+    implementation(libs.commons.compress)
+    implementation(libs.tukaani.xz)
+    implementation(libs.junrar)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)

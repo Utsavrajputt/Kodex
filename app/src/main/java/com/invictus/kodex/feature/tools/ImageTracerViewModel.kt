@@ -12,7 +12,6 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.invictus.kodex.R
 import com.invictus.kodex.core.preview.VectorExport
-import com.invictus.kodex.core.tracer.ImageAnalyzer
 import com.invictus.kodex.core.tracer.ImageTracer
 import com.invictus.kodex.core.tracer.NativeTracer
 import com.invictus.kodex.core.tracer.TraceSession
@@ -31,9 +30,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Image tracer: pick a picture, choose its size, let Auto pick Quality and Colors (or set them
- * by hand), see the traced SVG, then download the preview PNG, the SVG or an Android vector XML.
- * Tracing re-runs when a slider is released, a size chip is tapped or Auto is switched on.
+ * Image tracer: pick a picture, choose its size, set Quality and Colors, see the traced SVG, then download the preview PNG, the SVG or an Android vector XML.
+ * Tracing re-runs when a slider is released, or a size chip is tapped.
  *
  * Runs are serialized: a new one cancels the one in flight (natively, so it stops quickly) and
  * waits for it before starting. The native session keeps the clustering between runs, so a
@@ -52,9 +50,6 @@ class ImageTracerViewModel(private val app: Application) : ViewModel() {
         val scaledDown: Boolean = false,
         /** Longer side to trace at; 0 = Original. */
         val targetSide: Int = 0,
-        val auto: Boolean = true,
-        /** What Auto saw in the last traced picture; null when Auto is off. */
-        val detected: ImageAnalyzer.Kind? = null,
         val quality: Int = ImageTracer.DEFAULT_QUALITY,
         val colorIndex: Int = ImageTracer.COLOR_STEPS.lastIndex,
         val running: Boolean = false,
@@ -80,7 +75,6 @@ class ImageTracerViewModel(private val app: Application) : ViewModel() {
         val paths: Int,
         val quality: Int,
         val colors: Int,
-        val kind: ImageAnalyzer.Kind?,
     )
 
     sealed interface Effect { data class Message(val text: GhText) : Effect }
@@ -147,7 +141,6 @@ class ImageTracerViewModel(private val app: Application) : ViewModel() {
                     height = decoded.bitmap.height,
                     scaledDown = decoded.scaledDown,
                     targetSide = 0,
-                    detected = null,
                     hasResult = false,
                     preview = null,
                     previewFailed = false,
@@ -173,13 +166,6 @@ class ImageTracerViewModel(private val app: Application) : ViewModel() {
         }
     }
 
-    /** Auto picks Quality and Colors from the picture; off hands the sliders back at their current values. */
-    fun setAuto(on: Boolean) {
-        if (_state.value.auto == on) return
-        _state.update { it.copy(auto = on, detected = if (on) it.detected else null) }
-        if (on && working != null) schedule { runTrace() }
-    }
-
     /** Slider moves only update the label; [commit] (on release) re-traces. */
     fun setQuality(q: Int) = _state.update { it.copy(quality = q.coerceIn(ImageTracer.QUALITY_MIN, ImageTracer.QUALITY_MAX)) }
 
@@ -188,7 +174,6 @@ class ImageTracerViewModel(private val app: Application) : ViewModel() {
     fun commit() {
         if (working == null) return
         val s = _state.value
-        if (s.auto) return
         // Slider let go where the traced picture already is: nothing to redo.
         if (s.hasResult && tracedKey == key(s.quality, s.colors)) return
         schedule { runTrace() }
@@ -213,15 +198,8 @@ class ImageTracerViewModel(private val app: Application) : ViewModel() {
         _state.update { it.copy(running = true) }
         val t0 = SystemClock.elapsedRealtime()
         val out = withContext(Dispatchers.Default) {
-            var quality = s.quality
-            var colors = s.colors
-            var kind: ImageAnalyzer.Kind? = null
-            if (s.auto) {
-                val pick = ImageAnalyzer.analyze(bmp)
-                quality = pick.quality
-                colors = pick.colors
-                kind = pick.kind
-            }
+            val quality = s.quality
+            val colors = s.colors
             ensureActive()
             val sess = session ?: ImageTracer.open(bmp).also { session = it }
             val text = sess.render(quality, colors)
@@ -233,7 +211,7 @@ class ImageTracerViewModel(private val app: Application) : ViewModel() {
             } catch (e: OutOfMemoryError) {
                 null
             }
-            Traced(text, rendered, ImageTracer.pathCount(text), quality, colors, kind)
+            Traced(text, rendered, ImageTracer.pathCount(text), quality, colors)
         }
         svg = out.svg
         tracedKey = key(out.quality, out.colors)
@@ -248,7 +226,6 @@ class ImageTracerViewModel(private val app: Application) : ViewModel() {
                 elapsedMs = SystemClock.elapsedRealtime() - t0,
                 quality = out.quality,
                 colorIndex = ImageTracer.COLOR_STEPS.indexOf(out.colors).let { i -> if (i < 0) ImageTracer.COLOR_STEPS.lastIndex else i },
-                detected = out.kind,
             )
         }
     }

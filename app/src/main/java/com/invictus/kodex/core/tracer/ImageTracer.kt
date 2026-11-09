@@ -24,7 +24,7 @@ object ImageTracer {
     val COLOR_STEPS = intArrayOf(2, 4, 8, 16, 32, 64, 128, 0)
 
     /** Longer-side presets offered next to "Original". Only those smaller than the picture show. */
-    val SIZE_PRESETS = intArrayOf(512, 1024, 2048)
+    val SIZE_PRESETS = intArrayOf(256, 512, 1024, 2048)
 
     fun sizeOptions(longSide: Int): List<Int> = SIZE_PRESETS.filter { it < longSide }
 

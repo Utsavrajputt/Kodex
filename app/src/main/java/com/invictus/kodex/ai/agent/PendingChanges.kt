@@ -1,15 +1,30 @@
 package com.invictus.kodex.ai.agent
 
-enum class ChangeKind { EDIT, CREATE, DELETE }
+/**
+ * Text changes (EDIT/CREATE/DELETE) carry file contents; the rest are filesystem operations
+ * ([FsOps]): MOVE (also rename), COPY, MKDIR, TRASH (delete a folder) and EXTRACT (an archive).
+ */
+enum class ChangeKind {
+    EDIT, CREATE, DELETE, MOVE, COPY, MKDIR, TRASH, EXTRACT;
 
-/** One staged file change. [path] is project-relative. Nothing here has touched disk. */
+    val isFsOp: Boolean get() = this != EDIT && this != CREATE && this != DELETE
+}
+
+/**
+ * One staged file change. [path] is project-relative; for MOVE / COPY / EXTRACT [toPath] is the
+ * destination. Nothing here has touched disk.
+ */
 data class FileChange(
     val path: String,
     val kind: ChangeKind,
     val baseText: String?,
     val newText: String?,
     val note: String = "",
-)
+    val toPath: String? = null,
+) {
+    /** Text changes are one per path; operations are keyed by what they do so they never overwrite a text change. */
+    val key: String get() = if (kind.isFsOp) "${kind.name}:$path>${toPath.orEmpty()}" else path
+}
 
 sealed interface Effective {
     data object None : Effective
@@ -56,6 +71,17 @@ class PendingChanges(private val onChange: (List<FileChange>) -> Unit = {}) {
         notifyChanged()
     }
 
+    /** Stages a filesystem operation (see [FsOps]). */
+    @Synchronized fun stageOp(change: FileChange) {
+        map[change.key] = change
+        notifyChanged()
+    }
+
+    /** Drops one staged operation (after it was applied straight away). */
+    @Synchronized fun removeChange(change: FileChange) {
+        if (map.remove(change.key) != null) notifyChanged()
+    }
+
     /** Drops one staged change (after it was written straight to disk). */
     @Synchronized fun remove(path: String) {
         if (map.remove(path) != null) notifyChanged()
@@ -70,4 +96,10 @@ class PendingChanges(private val onChange: (List<FileChange>) -> Unit = {}) {
 }
 
 /** What the user approved in the review sheet: [finalText] already reflects any unchecked hunks. */
-data class ApprovedChange(val path: String, val kind: ChangeKind, val baseText: String?, val finalText: String?)
+data class ApprovedChange(
+    val path: String,
+    val kind: ChangeKind,
+    val baseText: String?,
+    val finalText: String?,
+    val toPath: String? = null,
+)

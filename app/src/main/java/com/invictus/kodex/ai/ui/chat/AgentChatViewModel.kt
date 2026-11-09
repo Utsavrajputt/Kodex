@@ -24,6 +24,7 @@ import com.invictus.kodex.ai.agent.ImageImporter
 import com.invictus.kodex.ai.agent.RateLimitInfo
 import com.invictus.kodex.ai.agent.ApprovedChange
 import com.invictus.kodex.ai.agent.ChangeKind
+import com.invictus.kodex.ai.agent.FsOps
 import com.invictus.kodex.ai.agent.ChatMeta
 import com.invictus.kodex.ai.agent.ChatStore
 import com.invictus.kodex.ai.agent.DiskIo
@@ -93,7 +94,8 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     /** What "Edit" on a user message hands back to the input box. */
     data class EditDraft(val text: String, val files: List<String>, val images: List<ChatImage>)
     data class EditorContext(val absPath: String, val fileText: String?, val selection: String?)
-    data class UndoEntry(val path: String, val before: String?, val after: String?)
+    /** One reversible write. Text writes use [before]/[after]; file operations (move, copy, folders) carry [fs]. */
+    data class UndoEntry(val path: String, val before: String?, val after: String?, val fs: FsOps.Undo? = null)
     data class UndoInfo(val entries: List<UndoEntry>)
 
     /** Provider / model / readiness shown in the chat header and the first-run setup card. */
@@ -152,6 +154,18 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         turnUndo[path] = UndoEntry(path, if (first != null) first.before else before, after)
     }
 
+    /** Deleted folders wait here (outside the project) so the delete can be undone. */
+    private val trashDir: File get() = File(app.filesDir, "ai-trash")
+
+    /** Runs one file operation and records how to undo it. Throws when it fails. */
+    private fun applyFsOp(c: FileChange): List<String> {
+        val applied = FsOps.apply(root, trashDir, c)
+        synchronized(turnUndo) {
+            turnUndo["fs:${c.key}"] = UndoEntry(c.path, null, null, applied.undo)
+        }
+        return applied.touched
+    }
+
     /** Tells Source Control which files the AI just wrote, so they show up at once instead of after a whole-repo status walk. */
     private fun notifyGit(rels: Collection<String>) {
         if (rels.isEmpty()) return
@@ -162,6 +176,18 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
 
     /** Writes one staged change to disk (through the editor's open buffer if any). False = left staged for review. */
     private suspend fun writeThrough(c: FileChange): Boolean {
+        if (c.kind.isFsOp) {
+            return try {
+                if (FsOps.check(root, c) != null) return false
+                val touched = withContext(Dispatchers.IO) { applyFsOp(c) }
+                notifyGit(touched)
+                true
+            } catch (ce: CancellationException) {
+                throw ce
+            } catch (e: Exception) {
+                false
+            }
+        }
         val f = File(root, c.path)
         return try {
             val disk = if (f.exists()) io.read(f) else null
@@ -181,6 +207,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                     io.delete(f)
                     recordApplied(c.path, c.baseText, null)
                 }
+                else -> return false // file operations were handled above
             }
             notifyGit(listOf(c.path))
             true
@@ -762,6 +789,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                 val ok = when (a.kind) {
                     ChangeKind.CREATE -> !f.exists()
                     ChangeKind.EDIT, ChangeKind.DELETE -> (if (f.exists()) io.read(f) else null) == a.baseText
+                    else -> FsOps.check(root, FileChange(a.path, a.kind, null, null, "", a.toPath)) == null
                 }
                 if (!ok) stale += a.path
             }
@@ -777,6 +805,10 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                         ChangeKind.CREATE -> { io.write(f, a.finalText.orEmpty()); done += UndoEntry(a.path, null, a.finalText) }
                         ChangeKind.EDIT -> { io.write(f, a.finalText.orEmpty()); done += UndoEntry(a.path, a.baseText, a.finalText) }
                         ChangeKind.DELETE -> { io.delete(f); done += UndoEntry(a.path, a.baseText, null) }
+                        else -> {
+                            val applied = withContext(Dispatchers.IO) { FsOps.apply(root, trashDir, FileChange(a.path, a.kind, null, null, "", a.toPath)) }
+                            done += UndoEntry(a.path, null, null, applied.undo)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -794,6 +826,11 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     }
 
     private suspend fun restore(u: UndoEntry) {
+        u.fs?.let { fs ->
+            withContext(Dispatchers.IO) { FsOps.undo(root, fs) }
+            notifyGit(listOf(u.path))
+            return
+        }
         val f = File(root, u.path)
         val before = u.before
         if (before == null) io.delete(f) else io.write(f, before)
@@ -805,6 +842,12 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
         viewModelScope.launch {
             val skipped = ArrayList<String>()
             for (e in info.entries.asReversed()) {
+                val fs = e.fs
+                if (fs != null) {
+                    // Operations know for themselves whether the files are still as they left them.
+                    if (withContext(Dispatchers.IO) { FsOps.undo(root, fs) }) notifyGit(listOf(e.path)) else skipped += e.path
+                    continue
+                }
                 val f = File(root, e.path)
                 val current = if (f.exists()) io.read(f) else null
                 if (current != e.after) { skipped += e.path; continue }

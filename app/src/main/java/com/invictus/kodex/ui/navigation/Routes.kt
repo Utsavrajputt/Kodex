@@ -23,6 +23,7 @@ object Routes {
     const val SETTINGS_LIBRARIES = "settings/libraries"
     const val MEDIA_PREVIEW = "media_preview"
     const val GIT = "git/{projectPath}"
+    const val ARCHIVE = "archive/{archivePath}"
     const val GIT_CLONE = "git_clone"
     const val GIT_NEW_REPO = "git_new_repo"
     const val GIT_BRANCHES = "git_branches/{projectPath}"
@@ -38,6 +39,8 @@ object Routes {
     const val GITHUB_RUN_LOG = "github_run_log/{projectPath}/{runId}"
 
     /** Encoded deep-link style route for a project's Source Control screen. */
+    fun archive(path: String) = "archive/${android.net.Uri.encode(path)}"
+
     fun git(projectPath: String): String =
         "git/${android.net.Uri.encode(projectPath)}"
 

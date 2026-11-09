@@ -29,7 +29,7 @@ class AgentTools(
 
     data class Outcome(val text: String, val isError: Boolean = false)
 
-    val specs: List<ToolSpec> get() = baseSpecs + memorySpecs() + gitSpecs() + imageSpecs()
+    val specs: List<ToolSpec> get() = baseSpecs + fsSpecs() + memorySpecs() + gitSpecs() + imageSpecs()
 
     private val baseSpecs: List<ToolSpec> = listOf(
         ToolSpec(
@@ -102,6 +102,48 @@ class AgentTools(
             "delete_file",
             "Delete a text file. Done right away or staged for review, depending on the user's setting; the tool result says which.",
             schema("path" to str("File path relative to the project root."), required = listOf("path")),
+        ),
+    )
+
+    /** Rename/move, copy, folders and archives: work on any file type, binary included. */
+    private fun fsSpecs(): List<ToolSpec> = listOf(
+        ToolSpec(
+            "move_file",
+            "Rename or move a file or folder (binary files such as .zip included). The destination must not exist; missing parent folders are created. " +
+                "To rename, keep the folder and change only the name. Done right away or staged for review, depending on the user's setting; the tool result says which.",
+            schema(
+                "from" to str("Existing path relative to the project root."),
+                "to" to str("New path relative to the project root."),
+                required = listOf("from", "to"),
+            ),
+        ),
+        ToolSpec(
+            "copy_file",
+            "Copy a file or folder (recursively) to a new path that must not exist yet.",
+            schema(
+                "from" to str("Existing path relative to the project root."),
+                "to" to str("New path relative to the project root."),
+                required = listOf("from", "to"),
+            ),
+        ),
+        ToolSpec(
+            "create_folder",
+            "Create a folder (and any missing parents). Fails if it already exists.",
+            schema("path" to str("Folder path relative to the project root."), required = listOf("path")),
+        ),
+        ToolSpec(
+            "delete_folder",
+            "Delete a folder and everything in it. It is moved to a trash folder, so the user can undo it. Use delete_file for single files.",
+            schema("path" to str("Folder path relative to the project root."), required = listOf("path")),
+        ),
+        ToolSpec(
+            "extract_archive",
+            "Extract a .zip, .jar, .aar, .apk, .7z or .rar file into a new folder (it never overwrites). Default destination: a folder named after the archive, next to it.",
+            schema(
+                "path" to str("Archive path relative to the project root."),
+                "to" to str("Optional destination folder (must not exist yet)."),
+                required = listOf("path"),
+            ),
         ),
     )
 
@@ -224,6 +266,11 @@ class AgentTools(
             "edit_file" -> "Editing $path"
             "create_file" -> "Creating $path"
             "delete_file" -> "Deleting $path"
+            "move_file" -> "Moving ${a.optString("from")} → ${a.optString("to")}"
+            "copy_file" -> "Copying ${a.optString("from")} → ${a.optString("to")}"
+            "create_folder" -> "Creating folder $path"
+            "delete_folder" -> "Deleting folder $path"
+            "extract_archive" -> "Extracting $path"
             "save_memory" -> if ((a.optJSONArray("add")?.length() ?: 0) > 0) "Saving to memory" else "Updating memory"
             "git_status" -> "Checking git status"
             "git_log" -> "Reading git history"
@@ -255,6 +302,11 @@ class AgentTools(
         "edit_file" -> editFile(call.args)
         "create_file" -> createFile(call.args)
         "delete_file" -> deleteFile(call.args)
+        "move_file" -> stageFsOp(ChangeKind.MOVE, call.args.optString("from"), call.args.optString("to"))
+        "copy_file" -> stageFsOp(ChangeKind.COPY, call.args.optString("from"), call.args.optString("to"))
+        "create_folder" -> stageFsOp(ChangeKind.MKDIR, call.args.optString("path"), null)
+        "delete_folder" -> stageFsOp(ChangeKind.TRASH, call.args.optString("path"), null)
+        "extract_archive" -> stageFsOp(ChangeKind.EXTRACT, call.args.optString("path"), call.args.optString("to").takeIf { it.isNotBlank() })
         "save_memory" -> saveMemory(call.args)
         "git_status" -> git?.status() ?: err("This project is not a git repository")
         "git_log" -> git?.log(call.args.optInt("max", 30), call.args.optString("path"), call.args.optString("since")) ?: err("This project is not a git repository")
@@ -464,10 +516,67 @@ class AgentTools(
         return Outcome("Staged deletion of $rel. Not deleted yet; the user will review it.")
     }
 
+    /**
+     * Stages a filesystem operation (move/copy/folder/extract) after sandbox and safety checks, then
+     * applies it at once in auto-apply mode. [from] is the (first) path, [to] the destination if any.
+     */
+    private suspend fun stageFsOp(kind: ChangeKind, from: String, to: String?): Outcome {
+        if (from.isBlank()) return err("Missing path")
+        val src = files.resolve(from) ?: return err("Path is outside the project: $from")
+        val srcRel = files.relOf(src)
+        if (files.isBlocked(srcRel)) return err("Blocked by the user's never-send list: $srcRel")
+        val needsTo = kind == ChangeKind.MOVE || kind == ChangeKind.COPY
+        val dstRel = when {
+            needsTo -> {
+                if (to.isNullOrBlank()) return err("Missing destination")
+                val dst = files.resolve(to) ?: return err("Path is outside the project: $to")
+                files.relOf(dst)
+            }
+            kind == ChangeKind.EXTRACT -> files.relOf(files.resolve(to?.takeIf { it.isNotBlank() } ?: freeFolderFor(srcRel)) ?: return err("Path is outside the project: $to"))
+            else -> null
+        }
+        if (dstRel != null && files.isBlocked(dstRel)) return err("Blocked by the user's never-send list: $dstRel")
+        val change = FileChange(srcRel, kind, null, null, "", dstRel)
+        FsOps.check(files.root, change)?.let { return err(it) }
+        pending.stageOp(change)
+        val what = describe(change)
+        if (commitOp(change)) return Outcome("Done: $what.")
+        return Outcome("Staged: $what. Not done yet; the user will review it. Until then keep using the current paths.")
+    }
+
+    /** "archive.zip" -> "archive" next to it, or "archive (1)" … when taken. */
+    private fun freeFolderFor(archiveRel: String): String {
+        val dir = archiveRel.substringBeforeLast('/', "")
+        val base = archiveRel.substringAfterLast('/').substringBeforeLast('.')
+        fun at(name: String) = if (dir.isEmpty()) name else "$dir/$name"
+        var n = 0
+        while (true) {
+            val name = if (n == 0) base else "$base ($n)"
+            if (files.resolve(at(name))?.exists() != true) return at(name)
+            n++
+        }
+    }
+
+    private fun describe(c: FileChange): String = when (c.kind) {
+        ChangeKind.MOVE -> "move ${c.path} → ${c.toPath}"
+        ChangeKind.COPY -> "copy ${c.path} → ${c.toPath}"
+        ChangeKind.MKDIR -> "create folder ${c.path}"
+        ChangeKind.TRASH -> "delete folder ${c.path}"
+        ChangeKind.EXTRACT -> "extract ${c.path} → ${c.toPath}"
+        else -> c.path
+    }
+
+    private suspend fun commitOp(change: FileChange): Boolean {
+        val write = autoCommit ?: return false
+        if (!write(change)) return false
+        pending.removeChange(change)
+        return true
+    }
+
     /** In auto-apply mode, writes the change just staged for [rel] to disk and unstages it; false = it stays staged. */
     private suspend fun commit(rel: String): Boolean {
         val write = autoCommit ?: return false
-        val change = pending.snapshot().firstOrNull { it.path == rel } ?: return false
+        val change = pending.snapshot().firstOrNull { it.path == rel && !it.kind.isFsOp } ?: return false
         if (!write(change)) return false
         pending.remove(rel)
         return true

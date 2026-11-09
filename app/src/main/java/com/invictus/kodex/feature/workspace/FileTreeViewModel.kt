@@ -95,6 +95,9 @@ class FileTreeViewModel(
     /** Mirrors the Settings "Git status detection" toggle for use in non-suspend call sites. */
     private var gitStatusPollingEnabled: Boolean = false
 
+    /** Starts the file watcher and git status a moment after a project switch (see [switchRoot]). */
+    private var settleJob: Job? = null
+
     init {
         viewModelScope.launch { debounceWatcherEvents() }
         viewModelScope.launch { debounceGitEvents() }
@@ -196,15 +199,19 @@ class FileTreeViewModel(
      * restores the project from [handoffPath] (set here, instantly) so it never reopens the previously opened
      * project while the recents write is still running; the write itself stays in the background.
      * False when the folder is not available.
+     *
+     * [handoffOnly]: only hand the project over and record it. Home / All Projects pass it, because the
+     * tree of their own (soon hidden) instance is never shown; switching it would list the folder and
+     * start watchers on the main thread exactly while the screen transition runs.
      */
-    suspend fun openProjectAndWait(dir: File): Boolean {
+    suspend fun openProjectAndWait(dir: File, handoffOnly: Boolean = false): Boolean {
         val ok = withContext(io) { dir.isDirectory && dir.canRead() }
         if (!ok) {
             _effects.send(FileTreeEffect.Message(UiText(R.string.msg_folder_unavailable)))
             return false
         }
         handoffPath = dir.path
-        if (dir.path != root.path) switchRoot(dir, record = true) else viewModelScope.launch { projects.recordOpened(dir) }
+        if (!handoffOnly && dir.path != root.path) switchRoot(dir, record = true) else viewModelScope.launch { projects.recordOpened(dir) }
         return true
     }
 
@@ -240,13 +247,19 @@ class FileTreeViewModel(
             )
         }
         loadDir(newRoot)
-        syncWatcher()
         gitSession = null
-        if (gitStatusPollingEnabled) {
-            gitRepoWatcher.start(File(newRoot, GIT_DIR))
-            refreshGitDecorations()
-        } else {
-            gitRepoWatcher.stop()
+        // Watchers and git status are not needed for the first frame; starting them after the screen
+        // transition keeps opening a project smooth. A newer switch replaces this one.
+        settleJob?.cancel()
+        settleJob = viewModelScope.launch {
+            delay(SETTLE_AFTER_SWITCH_MS)
+            syncWatcher()
+            if (gitStatusPollingEnabled) {
+                gitRepoWatcher.start(File(newRoot, GIT_DIR))
+                refreshGitDecorations()
+            } else {
+                gitRepoWatcher.stop()
+            }
         }
         if (record) viewModelScope.launch { projects.recordOpened(newRoot) }
     }
@@ -708,6 +721,9 @@ class FileTreeViewModel(
 
         private const val GIT_DIR = ".git"
         private const val WATCH_DEBOUNCE_MS = 250L
+
+        /** About one screen transition: keeps watcher / git startup out of the animation. */
+        private const val SETTLE_AFTER_SWITCH_MS = 350L
 
         val Factory = viewModelFactory {
             initializer {
