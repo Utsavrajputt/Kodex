@@ -8,6 +8,7 @@ object Routes {
     const val TOOLS = "tools"
     const val TOOLS_KEYSTORE = "tools/keystore"
     const val TOOLS_SPLITTER = "tools/splitter"
+    const val TOOLS_TRACER = "tools/tracer"
     const val EDITOR = "editor"
     const val SETTINGS = "settings"
     const val SETTINGS_APPEARANCE = "settings/appearance"

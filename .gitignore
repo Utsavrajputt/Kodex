@@ -13,3 +13,7 @@ captures/
 *.keystore
 release.jks
 .DS_Store
+
+# Image tracer native core
+native/target/
+app/src/main/jniLibs/

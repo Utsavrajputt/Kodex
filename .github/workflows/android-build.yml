@@ -36,6 +36,25 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Image tracer: the native VTracer core (Rust) is compiled for each ABI into app/src/main/jniLibs.
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      - name: Build native image tracer
+        run: bash .github/scripts/build-native.sh
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:

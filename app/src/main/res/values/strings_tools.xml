@@ -99,7 +99,7 @@
     <string name="split_err_too_many">That would be more than 999 parts. Choose a bigger part size</string>
     <string name="split_err_failed">Splitting failed: %1$s</string>
     <string name="split_cancelled">Cancelled</string>
-    <string name="tools_what_to_add">What to add \u00b7 tap to choose one, long-press to add more</string>
+    <string name="tools_what_to_add">What to add</string>
     <string name="tools_chip_keystore">Keystore</string>
     <string name="tools_chip_custom">Custom</string>
     <string name="preset_play">Play Store</string>
@@ -131,4 +131,36 @@
         <item quantity="one">Generate &amp; apply to %d repository</item>
         <item quantity="other">Generate &amp; apply to %d repositories</item>
     </plurals>
+
+    <!-- Image tracer -->
+    <string name="tools_tracer_title">Image tracer</string>
+    <string name="tools_tracer_desc">Turn a picture into SVG or an Android vector, all the way up to pixel-exact</string>
+    <string name="tracer_section_image">Image</string>
+    <string name="tracer_choose">Choose image</string>
+    <string name="tracer_nothing">No image chosen</string>
+    <string name="tracer_scaled_down">Larger than %1$d px, so it was scaled down before tracing.</string>
+    <string name="tracer_section_options">Options</string>
+    <string name="tracer_quality">Quality</string>
+    <string name="tracer_colors">Colors</string>
+    <string name="tracer_colors_all">All</string>
+    <string name="tracer_quality_1">Draft</string>
+    <string name="tracer_quality_2">Low</string>
+    <string name="tracer_quality_3">Balanced</string>
+    <string name="tracer_quality_4">High</string>
+    <string name="tracer_quality_5">Pixel-exact</string>
+    <string name="tracer_exact_hint">Pixel-exact needs Quality at the maximum and Colors on All. It can take a while and gives a very large SVG.</string>
+    <string name="tracer_section_preview">Preview</string>
+    <string name="tracer_preview_empty">The traced SVG shows up here</string>
+    <string name="tracer_preview_failed">This SVG is too heavy to draw here, but it is fine to download.</string>
+    <string name="tracer_tracing">Tracing…</string>
+    <string name="tracer_stats">%1$d × %2$d px · %3$s paths · %4$s · %5$.1f s</string>
+    <string name="tracer_btn_preview">Preview</string>
+    <string name="tracer_btn_svg">SVG</string>
+    <string name="tracer_btn_xml">XML</string>
+    <string name="tracer_saved">Saved %1$s to Downloads</string>
+    <string name="tracer_failed">Tracing failed: %1$s</string>
+    <string name="tracer_native_missing">The native tracer is not part of this build. Build through the GitHub workflow, or run ./gradlew buildNative (needs Rust and cargo-ndk).</string>
+    <string name="tracer_heavy_title">Heavy vector</string>
+    <string name="tracer_heavy_body">This vector has about %1$s of path data. Android can be slow or fail to compile vectors this large. Export it anyway?</string>
+    <string name="tracer_heavy_export">Export anyway</string>
 </resources>

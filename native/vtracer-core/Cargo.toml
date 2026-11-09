@@ -1,0 +1,22 @@
+[package]
+name = "vtracer"
+description = "VTracer core (visioncortex), vendored for Kodex. Adds a pixel-exact preset."
+version = "1.0.0-alpha.4"
+authors = ["Chris Tsang <chris.2y3@outlook.com>"]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+homepage = "http://www.visioncortex.org/vtracer"
+repository = "https://github.com/visioncortex/vtracer/"
+publish = false
+
+[lib]
+name = "vtracer"
+path = "src/lib.rs"
+
+[dependencies]
+visioncortex = "0.9.3"
+# Schneider curve fitting for the simplify pass.
+flo_curves = "0.8"
+
+[dev-dependencies]
+resvg = "0.45"

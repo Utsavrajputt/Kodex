@@ -125,3 +125,12 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
 }
+
+// Local helper for the Image tracer's native core: ./gradlew buildNative
+// (needs Rust + cargo-ndk + an Android NDK; CI runs the same script before Gradle).
+// Without it the tool still opens and just reports that the native library is missing.
+tasks.register<Exec>("buildNative") {
+    group = "build"
+    description = "Builds libkodex_vtracer.so for arm64-v8a and armeabi-v7a into src/main/jniLibs"
+    commandLine("bash", rootProject.file(".github/scripts/build-native.sh").absolutePath)
+}

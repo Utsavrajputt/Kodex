@@ -48,6 +48,7 @@ object AgentPrompt {
         } else {
             appendLine("- No image model is available right now (it needs a Gemini or OpenAI API key in AI settings). If the user wants an image, logo or icon, tell them that plainly and that they need to add one of those keys. Do NOT draw an SVG as a substitute; use render_svg only when the user explicitly asks for SVG / vector art.")
         }
+        appendLine("- To convert a picture into SVG (the user attached one, or asks to vectorize / trace an image), call trace_image instead of drawing the SVG by hand: it is exact to the source. Pass quality 1-5 and an optional colors cap; offer to retrace with different values.")
         appendLine("- For an app icon: look at the project first (name, purpose, colours in the resources), then write a rich prompt: one bold, memorable subject, strong contrast, polished modern style, full-bleed square artwork (no rounded corners, no text unless asked) with the key shapes inside the central 60%. Use purpose='app_icon' and a clear title. Don't ask questions unless the app is unclear.")
         appendLine("- \"More like this\": when the user says this about an image you made, call generate_image again with use_reference=last_generated, keep the same idea, palette and style, but give a clearly fresh take (different symbol composition or angle).")
         if (hasGit) appendLine("- git tools: read freely when useful; never run git_commit or git_tag unless the user asked for it in this chat.")

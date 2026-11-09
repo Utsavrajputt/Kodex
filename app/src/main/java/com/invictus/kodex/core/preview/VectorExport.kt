@@ -45,6 +45,20 @@ object VectorExport {
         }
     }
 
+    /** Android vector drawable (or any text) as Downloads/<base>.xml. */
+    suspend fun saveXml(xmlText: String, baseName: String): File = withContext(Dispatchers.IO) {
+        val target = uniqueTarget(baseName, "xml")
+        target.writeText(xmlText, Charsets.UTF_8)
+        target
+    }
+
+    /** Writes an already rendered [bitmap] as Downloads/<base>.png, at its own pixel size. */
+    suspend fun savePng(bitmap: Bitmap, baseName: String): File = withContext(Dispatchers.IO) {
+        val target = uniqueTarget(baseName, "png")
+        target.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        target
+    }
+
     /** Downloads/<base>.<ext>, or "<base> (1).<ext>", "(2)"... so nothing is ever overwritten. */
     private fun uniqueTarget(baseName: String, extension: String): File {
         val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)

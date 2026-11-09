@@ -1,0 +1,17 @@
+[package]
+name = "kodex-vtracer"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "kodex_vtracer"
+# cdylib → libkodex_vtracer.so for Android; rlib lets the tests run on the host.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+vtracer = { path = "../vtracer-core" }
+jni = "0.21"
+
+[dev-dependencies]
+resvg = "0.45"

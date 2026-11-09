@@ -7,6 +7,10 @@ import com.caverock.androidsvg.SVG
 import com.caverock.androidsvg.SVGParseException
 import com.invictus.kodex.ai.provider.AiException
 import com.invictus.kodex.ai.provider.ImageGen
+import com.invictus.kodex.core.tracer.ImageTracer
+import com.invictus.kodex.core.tracer.NativeTracer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 import org.json.JSONObject
@@ -109,6 +113,45 @@ class ImageToolbox(
         return AgentTools.Outcome(DONE_NOTE)
     }
 
+    /** Converts the user's attached photo (or the last generated image) into an SVG with the native tracer. */
+    suspend fun traceImage(a: JSONObject): AgentTools.Outcome {
+        if (!NativeTracer.available) {
+            return err("The native image tracer is not part of this build. Tell the user that, and that the Image tracer tool is available in Tools once the app is built with it.")
+        }
+        val src: File = when (a.optString("source")) {
+            "last_generated" -> lastGenerated() ?: return err("There is no earlier generated image in this chat")
+            "attached" -> attachedImage() ?: return err("The user has not attached an image in this chat")
+            else -> attachedImage() ?: lastGenerated() ?: return err("There is no image to trace: ask the user to attach one")
+        }
+        val quality = a.optInt("quality", 4).coerceIn(ImageTracer.QUALITY_MIN, ImageTracer.QUALITY_MAX)
+        val colors = a.optInt("colors", 0).coerceAtLeast(0)
+        val title = a.optString("title").trim().take(60).ifEmpty { "Traced SVG" }
+        return try {
+            val (bmp, svgText) = withContext(Dispatchers.Default) {
+                val decoded = ImageTracer.decode(src)
+                decoded.bitmap to ImageTracer.trace(decoded.bitmap, quality, colors)
+            }
+            // The PNG shown in the chat is the SVG drawn back; a very heavy SVG falls back to the source picture.
+            val preview = withContext(Dispatchers.Default) {
+                try {
+                    ImageTracer.render(svgText, bmp.width, bmp.height)
+                } catch (e: Exception) {
+                    null
+                } catch (e: OutOfMemoryError) {
+                    null
+                }
+            } ?: bmp
+            val png = writePng(preview)
+            val svgFile = File(png.parentFile, png.nameWithoutExtension + ".svg").also { it.writeText(svgText, Charsets.UTF_8) }
+            onImage(GeneratedImage(png.absolutePath, svgFile.absolutePath, title, GeneratedImage.PURPOSE_IMAGE))
+            AgentTools.Outcome(TRACE_NOTE)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            err("Tracing failed: ${e.message}. Tell the user this exact reason.")
+        }
+    }
+
     private fun purposeOf(a: JSONObject) =
         if (a.optString("purpose") == GeneratedImage.PURPOSE_ICON) GeneratedImage.PURPOSE_ICON else GeneratedImage.PURPOSE_IMAGE
 
@@ -134,6 +177,9 @@ class ImageToolbox(
 
     companion object {
         const val SIZE = 1024
+        private const val TRACE_NOTE =
+            "Done. The traced SVG is now shown to the user in the chat with Save buttons for the PNG preview and the SVG. " +
+                "Mention the quality and colors you used and offer to retrace with different values; do not paste any SVG."
         private const val DONE_NOTE =
             "Done. The image is now shown to the user in the chat with Save and \"Use as app icon\" buttons. " +
                 "Do not describe it at length; offer one or two ways to refine it."

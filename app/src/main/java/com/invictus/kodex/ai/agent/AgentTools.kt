@@ -198,6 +198,18 @@ class AgentTools(
                 required = listOf("svg"),
             ),
         )
+        out += ToolSpec(
+            "trace_image",
+            "Convert a raster picture (the photo the user attached, or the last generated image) into an SVG with the on-device VTracer. " +
+                "Use it when the user asks to vectorize, trace or convert an image to SVG; it is exact to the source, unlike drawing an SVG by hand. " +
+                "quality 1-5 (5 = pixel-exact but a very large SVG, 4 = high detail, 3 = balanced, 1-2 = simplified); colors = palette cap (0 = all colors).",
+            schema(
+                "source" to str("'attached' = the user's attached image; 'last_generated' = your previous image. Default: attached, else last_generated."),
+                "quality" to int("1 to 5, default 4."),
+                "colors" to int("Maximum number of colors, e.g. 8 or 16; 0 (default) keeps all colors."),
+                "title" to str("Short title for the result card."),
+            ),
+        )
         return out
     }
 
@@ -222,6 +234,7 @@ class AgentTools(
             "git_tag" -> "Tagging ${a.optString("name")}"
             "generate_image" -> "Generating image" + a.optString("title").takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
             "render_svg" -> "Drawing SVG" + a.optString("title").takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
+            "trace_image" -> "Tracing image" + a.optString("title").takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
             else -> call.name
         }
     }
@@ -256,6 +269,7 @@ class AgentTools(
         "git_tag" -> git?.tag(call.args.optString("name"), call.args.optString("message")) ?: err("This project is not a git repository")
         "generate_image" -> images?.generate(call.args) ?: err("Image tools are not available")
         "render_svg" -> images?.renderSvg(call.args) ?: err("Image tools are not available")
+        "trace_image" -> images?.traceImage(call.args) ?: err("Image tools are not available")
         else -> err("Unknown tool: ${call.name}")
     }
 
