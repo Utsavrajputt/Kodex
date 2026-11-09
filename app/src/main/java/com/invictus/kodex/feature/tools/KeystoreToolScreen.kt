@@ -92,6 +92,7 @@ fun KeystoreToolScreen(
     var fileTarget by remember { mutableStateOf<String?>(null) }
 
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-pkcs12")) { uri -> uri?.let(vm::save) }
+    val pubSaver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri -> uri?.let(vm::savePublic) }
     val fileLoader = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val name = fileTarget
         if (uri != null && name != null) vm.loadFromFile(name, uri)
@@ -279,6 +280,11 @@ fun KeystoreToolScreen(
                     r = r, canApply = s.selected.isNotEmpty() && !s.busy,
                     onApply = vm::applyToSelected,
                     onSave = { saver.launch("${r.alias}.p12") },
+                    onCopyPublic = {
+                        ClipboardHelper.copy(context, "public key", r.publicKeyPem, sensitive = false)
+                        scope.launch { snackbar.showSnackbar(context.getString(R.string.tools_public_copied)) }
+                    },
+                    onSavePublic = { pubSaver.launch("${r.alias}.pub") },
                     onCopyFingerprint = {
                         ClipboardHelper.copy(context, "SHA-256", r.sha256, sensitive = false)
                         scope.launch { snackbar.showSnackbar(context.getString(R.string.tools_fingerprint_copied)) }
@@ -403,7 +409,10 @@ private fun SecretChip(label: String, selected: Boolean, enabled: Boolean, onCli
 }
 
 @Composable
-private fun ResultCard(r: GeneratedKeystore, canApply: Boolean, onApply: () -> Unit, onSave: () -> Unit, onCopyFingerprint: () -> Unit) {
+private fun ResultCard(
+    r: GeneratedKeystore, canApply: Boolean, onApply: () -> Unit, onSave: () -> Unit,
+    onCopyPublic: () -> Unit, onSavePublic: () -> Unit, onCopyFingerprint: () -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(cs.primaryContainer).padding(16.dp),
@@ -419,6 +428,15 @@ private fun ResultCard(r: GeneratedKeystore, canApply: Boolean, onApply: () -> U
             r.sha256, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = cs.onPrimaryContainer,
             modifier = Modifier.clickable(onClick = onCopyFingerprint),
         )
+        Text(stringResource(R.string.tools_public_key), style = MaterialTheme.typography.labelLarge, color = cs.onPrimaryContainer, modifier = Modifier.padding(top = 4.dp))
+        Text(
+            r.publicKeyPem.lines().drop(1).firstOrNull().orEmpty().take(44) + "\u2026",
+            style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace, color = cs.onPrimaryContainer,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onCopyPublic, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.tools_copy_public)) }
+            OutlinedButton(onClick = onSavePublic, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.tools_save_public)) }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
             OutlinedButton(onClick = onSave, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.tools_save_file)) }
             Button(onClick = onApply, enabled = canApply, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.tools_apply_again)) }

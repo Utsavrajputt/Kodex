@@ -287,6 +287,17 @@ class KeystoreToolViewModel(
         }
     }
 
+    /** Writes the generated certificate's public key (PEM) to a .pub file the user picked. */
+    fun savePublic(uri: Uri) {
+        val r = _state.value.result ?: return
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { app.contentResolver.openOutputStream(uri)?.use { it.write((r.publicKeyPem + "\n").toByteArray()) } != null }.getOrDefault(false)
+            }
+            message(GhText.Res(if (ok) R.string.tools_saved else R.string.tools_save_failed))
+        }
+    }
+
     private fun message(text: GhText) { _effects.trySend(Effect.Message(text)) }
 
     companion object {

@@ -43,6 +43,8 @@ class GeneratedKeystore(
     val validUntil: String,
     /** SHA-256 certificate fingerprint, `AA:BB:..`. */
     val sha256: String,
+    /** The certificate's public key as a PEM block (safe to share). */
+    val publicKeyPem: String,
 ) {
     fun secrets(names: SecretNames): Map<String, String> = linkedMapOf(
         names.keystore to Base64.encodeToString(bytes, Base64.NO_WRAP),
@@ -68,6 +70,7 @@ object KeystoreTool {
             subject = cert.subjectX500Principal.name,
             validUntil = SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(cert.notAfter),
             sha256 = fp,
+            publicKeyPem = com.invictus.kodex.core.crypto.PublicKeyDeriver.pem(cert.publicKey.encoded),
         )
     }
 

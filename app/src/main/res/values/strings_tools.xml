@@ -163,4 +163,26 @@
     <string name="tracer_heavy_title">Heavy vector</string>
     <string name="tracer_heavy_body">This vector has about %1$s of path data. Android can be slow or fail to compile vectors this large. Export it anyway?</string>
     <string name="tracer_heavy_export">Export anyway</string>
+
+    <!-- Public key finder -->
+    <string name="tools_public_key">Public key</string>
+    <string name="tools_copy_public">Copy public key</string>
+    <string name="tools_save_public">Save .pub</string>
+    <string name="tools_public_copied">Copied</string>
+    <string name="tools_pubkey_title">Public key finder</string>
+    <string name="tools_pubkey_desc">Paste a private key (RSA or Ed25519) and get its public key</string>
+    <string name="pk_intro">Paste a private key as PEM, OpenSSH, base64 or hex. The public key is worked out on this phone; the private key is never saved or sent anywhere.</string>
+    <string name="pk_input_label">Private key</string>
+    <string name="pk_paste">Paste</string>
+    <string name="pk_show">Show public key</string>
+    <string name="pk_found">Found: %1$s</string>
+    <string name="pk_fmt_base64">Base64</string>
+    <string name="pk_fmt_hex">Hex</string>
+    <string name="pk_fmt_pem">PEM (X.509)</string>
+    <string name="pk_fmt_openssh">OpenSSH</string>
+    <string name="pk_copy">Copy</string>
+    <string name="pk_err_empty">Paste a private key first</string>
+    <string name="pk_err_encrypted">This key is protected by a password. Remove the password first, then paste it again</string>
+    <string name="pk_err_unsupported">Only RSA and Ed25519 keys are supported</string>
+    <string name="pk_err_unrecognized">That does not look like a key I can read (PEM, OpenSSH, base64 or hex)</string>
 </resources>

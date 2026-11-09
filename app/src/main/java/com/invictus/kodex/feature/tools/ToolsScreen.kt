@@ -31,7 +31,7 @@ import com.invictus.kodex.ui.icons.XIcons
 /** Home for small utilities. First tool: the signing keystore + GitHub secrets generator. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ToolsScreen(onBack: () -> Unit, onOpenKeystore: () -> Unit, onOpenSplitter: () -> Unit, onOpenTracer: () -> Unit) {
+fun ToolsScreen(onBack: () -> Unit, onOpenKeystore: () -> Unit, onOpenSplitter: () -> Unit, onOpenTracer: () -> Unit, onOpenPublicKey: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -49,6 +49,7 @@ fun ToolsScreen(onBack: () -> Unit, onOpenKeystore: () -> Unit, onOpenSplitter: 
             ToolCard(XIcons.Key, R.string.tools_keystore_title, R.string.tools_keystore_desc, onOpenKeystore)
             ToolCard(XIcons.Scissors, R.string.tools_split_title, R.string.tools_split_desc, onOpenSplitter)
             ToolCard(XIcons.Image, R.string.tools_tracer_title, R.string.tools_tracer_desc, onOpenTracer)
+            ToolCard(XIcons.Visibility, R.string.tools_pubkey_title, R.string.tools_pubkey_desc, onOpenPublicKey)
         }
     }
 }
