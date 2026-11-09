@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -74,9 +75,9 @@ internal fun RecentItem.matches(query: String): Boolean {
 }
 
 /**
- * Returns a function that opens a project and navigates to the workspace only once the tree has
- * actually switched to it, so the workspace (a fresh ViewModel there) restores this same project
- * as its latest recent.
+ * Returns a function that opens a project and navigates to the workspace only once the project is the
+ * tree's root and saved as the latest recent: the workspace (a fresh ViewModel there) restores the latest
+ * recent, so navigating earlier could open the previously opened project instead.
  */
 @Composable
 internal fun rememberProjectOpener(
@@ -84,25 +85,20 @@ internal fun rememberProjectOpener(
     fileTreeViewModel: FileTreeViewModel = viewModel(factory = FileTreeViewModel.Factory),
     beforeOpen: () -> Unit = {},
 ): (File) -> Unit {
-    val treeState by fileTreeViewModel.uiState.collectAsStateWithLifecycle()
-    var pendingOpen by rememberSaveable { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(treeState.root) {
-        val pending = pendingOpen
-        if (pending != null && treeState.root.path == pending) {
-            pendingOpen = null
-            onProjectOpened()
-        }
-    }
-
-    val rootPath = treeState.root.path
+    val scope = rememberCoroutineScope()
+    var opening by remember { mutableStateOf(false) }
+    val latestOnOpened by rememberUpdatedState(onProjectOpened)
     return { dir ->
-        beforeOpen()
-        if (dir.path == rootPath) {
-            onProjectOpened()
-        } else {
-            pendingOpen = dir.path
-            fileTreeViewModel.onEvent(FileTreeEvent.OpenProject(dir))
+        if (!opening) {
+            beforeOpen()
+            opening = true
+            scope.launch {
+                try {
+                    if (fileTreeViewModel.openProjectAndWait(dir)) latestOnOpened()
+                } finally {
+                    opening = false
+                }
+            }
         }
     }
 }

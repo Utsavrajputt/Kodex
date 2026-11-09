@@ -13,11 +13,11 @@
     <string name="tools_password_copied">Password copied</string>
     <string name="tools_more_options">More options</string>
     <string name="tools_section_cert">Certificate details</string>
-    <string name="tools_ou">Organizational unit (optional)</string>
-    <string name="tools_org">Organization (optional)</string>
-    <string name="tools_locality">City / locality (optional)</string>
-    <string name="tools_state">State / province (optional)</string>
-    <string name="tools_country">Country code, e.g. IN (optional)</string>
+    <string name="tools_ou">Org. unit</string>
+    <string name="tools_org">Organization</string>
+    <string name="tools_locality">City</string>
+    <string name="tools_state">State</string>
+    <string name="tools_country">Country (e.g. IN)</string>
     <string name="tools_section_names">Secret names</string>
     <string name="tools_name_keystore">Keystore (base64)</string>
     <string name="tools_name_store_password">Keystore password</string>
@@ -190,4 +190,6 @@
     <string name="tools_step_fill">Fill in the details</string>
     <string name="tools_step_apply">Apply to GitHub</string>
     <string name="tools_chip_hint">Tap to pick one, long-press to combine several</string>
+    <string name="tools_options_hint">All optional. The defaults work fine.</string>
+    <string name="tools_options_row_hint">Certificate details and secret names</string>
 </resources>

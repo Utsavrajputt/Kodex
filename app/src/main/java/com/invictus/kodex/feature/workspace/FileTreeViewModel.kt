@@ -181,20 +181,31 @@ class FileTreeViewModel(
     // region project / pins
 
     private suspend fun restoreLastProject() {
-        val last = projects.latestRecent()?.takeIf { withContext(io) { it.isDirectory && it.canRead() } }
+        // A project just opened from Home / All Projects is handed over directly (no wait for the recents write).
+        val handed = handoffPath?.also { handoffPath = null }?.let(::File)?.takeIf { withContext(io) { it.isDirectory && it.canRead() } }
+        val last = handed ?: projects.latestRecent()?.takeIf { withContext(io) { it.isDirectory && it.canRead() } }
         switchRoot(last ?: storageRoot, record = false)
     }
 
     private fun openProject(dir: File) {
-        viewModelScope.launch {
-            val ok = withContext(io) { dir.isDirectory && dir.canRead() }
-            if (!ok) {
-                _effects.send(FileTreeEffect.Message(UiText(R.string.msg_folder_unavailable)))
-                return@launch
-            }
-            // Already open: nothing to reload, just bump it to the top of recents.
-            if (dir.path == root.path) projects.recordOpened(dir) else switchRoot(dir, record = true)
+        viewModelScope.launch { openProjectAndWait(dir) }
+    }
+
+    /**
+     * Opens [dir] and returns true once it is the tree's root. The workspace screen builds a fresh tree and
+     * restores the project from [handoffPath] (set here, instantly) so it never reopens the previously opened
+     * project while the recents write is still running; the write itself stays in the background.
+     * False when the folder is not available.
+     */
+    suspend fun openProjectAndWait(dir: File): Boolean {
+        val ok = withContext(io) { dir.isDirectory && dir.canRead() }
+        if (!ok) {
+            _effects.send(FileTreeEffect.Message(UiText(R.string.msg_folder_unavailable)))
+            return false
         }
+        handoffPath = dir.path
+        if (dir.path != root.path) switchRoot(dir, record = true) else viewModelScope.launch { projects.recordOpened(dir) }
+        return true
     }
 
     private fun onProjectMoved(old: File, new: File) {
@@ -692,6 +703,9 @@ class FileTreeViewModel(
     }
 
     companion object {
+        /** Project the next workspace tree should open first (see [openProjectAndWait]). */
+        @Volatile private var handoffPath: String? = null
+
         private const val GIT_DIR = ".git"
         private const val WATCH_DEBOUNCE_MS = 250L
 

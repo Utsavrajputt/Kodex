@@ -92,6 +92,7 @@ fun KeystoreToolScreen(
     var showPassword by remember { mutableStateOf(false) }
     var repoDialog by remember { mutableStateOf(false) }
     var pubKeySheet by remember { mutableStateOf(false) }
+    var optionsDialog by remember { mutableStateOf(false) }
     var fileTarget by remember { mutableStateOf<String?>(null) }
 
     val saver = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-pkcs12")) { uri -> uri?.let(vm::save) }
@@ -174,26 +175,7 @@ fun KeystoreToolScreen(
                         },
                         singleLine = true, shape = FIELD, modifier = Modifier.fillMaxWidth(),
                     )
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.edit { copy(moreOpen = !moreOpen) } }.padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(stringResource(R.string.tools_more_options), style = MaterialTheme.typography.titleSmall, color = cs.primary, modifier = Modifier.weight(1f))
-                        Icon(if (s.moreOpen) XIcons.ExpandLess else XIcons.ExpandMore, contentDescription = null, tint = cs.primary)
-                    }
-                    if (s.moreOpen) {
-                        Text(stringResource(R.string.tools_section_cert), style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
-                        Field(s.orgUnit, { vm.edit { copy(orgUnit = it) } }, R.string.tools_ou, !s.busy)
-                        Field(s.org, { vm.edit { copy(org = it) } }, R.string.tools_org, !s.busy)
-                        Field(s.locality, { vm.edit { copy(locality = it) } }, R.string.tools_locality, !s.busy)
-                        Field(s.province, { vm.edit { copy(province = it) } }, R.string.tools_state, !s.busy)
-                        Field(s.country, { vm.edit { copy(country = it.take(2).uppercase()) } }, R.string.tools_country, !s.busy)
-                        Text(stringResource(R.string.tools_section_names), style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
-                        Field(s.names.keystore, { vm.edit { copy(names = names.copy(keystore = it.uppercase())) } }, R.string.tools_name_keystore, !s.busy)
-                        Field(s.names.storePassword, { vm.edit { copy(names = names.copy(storePassword = it.uppercase())) } }, R.string.tools_name_store_password, !s.busy)
-                        Field(s.names.alias, { vm.edit { copy(names = names.copy(alias = it.uppercase())) } }, R.string.tools_name_alias, !s.busy)
-                        Field(s.names.keyPassword, { vm.edit { copy(names = names.copy(keyPassword = it.uppercase())) } }, R.string.tools_name_key_password, !s.busy)
-                    }
+                    MoreOptionsRow { optionsDialog = true }
                 }
             }
 
@@ -331,69 +313,8 @@ fun KeystoreToolScreen(
     }
 
     if (repoDialog) RepoPickerDialog(s, vm) { repoDialog = false }
+    if (optionsDialog) KeystoreOptionsDialog(s, vm::edit) { optionsDialog = false }
     if (pubKeySheet) PublicKeySheet { pubKeySheet = false }
-}
-
-/** "Apply to" dialog: search, tick the repositories, Select all / Clear, Done. */
-@Composable
-private fun RepoPickerDialog(s: KeystoreToolViewModel.UiState, vm: KeystoreToolViewModel, onDismiss: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val context = LocalContext.current
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(
-            shape = RoundedCornerShape(28.dp), color = cs.surfaceContainerHigh,
-            modifier = Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.82f),
-        ) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(stringResource(R.string.tools_apply_row_title), style = MaterialTheme.typography.titleLarge)
-                OutlinedTextField(
-                    value = s.query, onValueChange = { vm.edit { copy(query = it) } },
-                    placeholder = { Text(stringResource(R.string.tools_search_repos)) },
-                    leadingIcon = { Icon(XIcons.Search, contentDescription = null) },
-                    singleLine = true, shape = FIELD, modifier = Modifier.fillMaxWidth(),
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        context.resources.getQuantityString(R.plurals.tools_selected_count, s.selected.size, s.selected.size),
-                        style = MaterialTheme.typography.labelLarge, color = cs.primary, modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = vm::selectAllVisible, enabled = s.visibleRepos.isNotEmpty()) { Text(stringResource(R.string.tools_select_all)) }
-                    TextButton(onClick = vm::clearSelection, enabled = s.selected.isNotEmpty()) { Text(stringResource(R.string.tools_clear)) }
-                }
-                Column(Modifier.weight(1f)) {
-                    when {
-                        s.reposLoading -> Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.Center) {
-                            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                        }
-                        s.reposError != null -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(s.reposError!!.resolve(context), color = cs.error, style = MaterialTheme.typography.bodyMedium)
-                            TextButton(onClick = vm::loadRepos) { Text(stringResource(R.string.gh_retry)) }
-                        }
-                        s.visibleRepos.isEmpty() -> Text(stringResource(R.string.tools_no_repos), color = cs.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-                        else -> LazyColumn(Modifier.fillMaxSize()) {
-                            items(s.visibleRepos, key = { it.fullName }) { r ->
-                                Row(
-                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.toggleRepo(r.fullName) },
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Checkbox(checked = r.fullName in s.selected, onCheckedChange = { vm.toggleRepo(r.fullName) })
-                                    Column(Modifier.weight(1f)) {
-                                        Text(r.fullName, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-                                        val tags = listOfNotNull(
-                                            if (r.isPrivate) stringResource(R.string.tools_tag_private) else null,
-                                            if (r.isFork) stringResource(R.string.tools_tag_fork) else null,
-                                        )
-                                        if (tags.isNotEmpty()) Text(tags.joinToString(" \u2022 "), style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.tools_done)) }
-            }
-        }
-    }
 }
 
 /**

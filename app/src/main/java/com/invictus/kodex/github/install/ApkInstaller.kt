@@ -38,7 +38,7 @@ object InstallEvents {
 /**
  * Installs through the PackageInstaller session API (update-in-place, status callbacks). Never
  * installs on its own: [install] is only called after the user taps Install, and the system
- * still shows its own confirmation. Falls back to ACTION_VIEW + FileProvider if a session
+ * always shows its own confirmation. Falls back to ACTION_VIEW + FileProvider if a session
  * cannot be created.
  */
 class ApkInstaller(private val context: Context) {
@@ -65,17 +65,16 @@ class ApkInstaller(private val context: Context) {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setSize(apk.length())
-        // Same session setup the dedicated installer apps use: a user-initiated install of a known package.
+        // A user-initiated install of a known package.
         params.setInstallReason(PackageManager.INSTALL_REASON_USER)
         context.packageManager.getPackageArchiveInfo(apk.absolutePath, 0)?.packageName?.let { params.setAppPackageName(it) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             params.setPackageSource(PackageInstaller.PACKAGE_SOURCE_OTHER)
         }
-        // Android 12+: when this app is the installer of record, an update of an installed app can complete without
-        // another confirmation tap. New installs (and anything the system doesn't consider eligible) still show the
-        // system confirmation, which our receiver launches below. Always started by the user's tap on Install.
+        // The system always asks the user to confirm. Asking for "no user action" (USER_ACTION_NOT_REQUIRED) is
+        // what Play Protect reads as "can install apps without your permission", so it is deliberately not set.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
         }
         val id = installer.createSession(params)
         var session: PackageInstaller.Session? = null
