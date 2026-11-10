@@ -357,7 +357,11 @@ fun KodexNavHost(
         composable(Routes.GIT_STASH) { entry ->
             val path = entry.arguments?.getString("projectPath")
             if (path != null) {
-                GitStashScreen(projectPath = path, onBack = { navController.popBackStack() })
+                GitStashScreen(
+                    projectPath = path,
+                    onOpenReflog = { navController.navigate(Routes.gitReflog(path)) },
+                    onBack = { navController.popBackStack() },
+                )
             }
         }
         composable(Routes.GIT_TAGS) { entry ->

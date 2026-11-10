@@ -1141,6 +1141,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Git push/pull/fetch: keeps them running when the screen is closed or the app is minimized. -->
+        <service
+            android:name=".core.git.GitWorkService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- Git clone: the notification's Cancel action. -->
         <receiver
             android:name=".core.git.GitCloneCancelReceiver"

@@ -95,7 +95,7 @@
     <!-- strings_m2_part2.xml -->
     <string name="menu_open_project">Open project</string>
     <string name="menu_backup_project">Back up as ZIP</string>
-    <string name="sheet_title">Open project</string>
+    <string name="sheet_title">Recent projects</string>
     <string name="sheet_subtitle">Choose a folder or search for a path.</string>
     <string name="sheet_search_hint">Search, or type a path (/storage/…)</string>
     <string name="sheet_open_path">Open this path</string>
@@ -441,6 +441,19 @@
     <string name="git_history_mode_author">Author</string>
     <string name="git_history_mode_hash">Hash</string>
     <string name="git_history_empty">No commits found.</string>
+
+    <!-- Git background work -->
+    <string name="git_work_channel">Git in the background</string>
+    <string name="git_work_channel_result">Git results</string>
+    <string name="git_work_title">Kodex Git</string>
+    <string name="git_work_multi">%1$d Git operations running</string>
+    <string name="git_work_push">Pushing %1$s…</string>
+    <string name="git_work_pull">Pulling %1$s…</string>
+    <string name="git_work_fetch">Fetching %1$s…</string>
+    <string name="git_work_done_push">Pushed %1$s</string>
+    <string name="git_work_done_pull">Pulled %1$s</string>
+    <string name="git_work_done_fetch">Fetched %1$s</string>
+    <string name="git_work_failed">%1$s: Git didn\'t finish — open Kodex to see why</string>
 
     <!-- Reflog -->
     <string name="git_reflog_title">Reflog</string>

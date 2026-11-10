@@ -309,6 +309,8 @@ internal fun GitFileDiffDialog(
     var added by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var confirmDiscard by remember { mutableStateOf(false) }
     var fontSize by rememberSaveable { mutableStateOf(DIFF_FONT_DEFAULT) }
+    // 0-based lines of the file at a change, so the editor can show just the changes (like the diff does).
+    var anchors by remember { mutableStateOf<Set<Int>>(emptySet()) }
     val dirty = editing && original != null && text != original
 
     // Tints come from the diff; refresh them whenever a (re)loaded diff arrives and nothing is unsaved.
@@ -317,6 +319,7 @@ internal fun GitFileDiffDialog(
             added = diff.rows.mapNotNull { r ->
                 if (r.rightType == GitDiffLineType.ADDED) r.rightNumber?.minus(1) else null
             }.toSet()
+            anchors = changeAnchors(diff.rows.map { it.rightNumber }, added)
         }
     }
     LaunchedEffect(editing, workFile) {
@@ -393,11 +396,12 @@ internal fun GitFileDiffDialog(
                 }
                 HorizontalDivider()
                 when {
-                    editing && original != null -> GitDiffEditor(
+                    editing && original != null -> GitDiffHunkEditor(
                         text = text,
                         onTextChange = { text = it },
                         addedLines = added,
                         onAddedLinesChange = { added = it },
+                        anchors = anchors,
                         fontSize = fontSize,
                         modifier = Modifier.weight(1f).pinchZoom { fontSize = clampDiffFont(fontSize * it) },
                     )
@@ -432,3 +436,29 @@ internal fun GitFileDiffDialog(
 }
 
 private const val MAX_EDIT_BYTES = 400_000L
+
+/**
+ * Lines of the new file where something changed: the added ones, plus the lines either side of a row that only
+ * has an old side (a deletion), so a pure removal still gets a place in the hunk view.
+ * [rightNumbers] is each diff row's 1-based new-file line number, null for a removed row.
+ */
+internal fun changeAnchors(rightNumbers: List<Int?>, added: Set<Int>): Set<Int> {
+    val out = HashSet<Int>(added)
+    var nextRight: Int? = null
+    val next = arrayOfNulls<Int>(rightNumbers.size)
+    for (i in rightNumbers.indices.reversed()) {
+        next[i] = nextRight
+        rightNumbers[i]?.let { nextRight = it }
+    }
+    var prevRight: Int? = null
+    for (i in rightNumbers.indices) {
+        val n = rightNumbers[i]
+        if (n == null) {
+            prevRight?.let { out.add(it - 1) }
+            next[i]?.let { out.add(it - 1) }
+        } else {
+            prevRight = n
+        }
+    }
+    return out
+}

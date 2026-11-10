@@ -14,6 +14,7 @@ import com.invictus.kodex.core.git.GitCredential
 import com.invictus.kodex.core.editor.EditorSettingsStore
 import com.invictus.kodex.core.git.GitRepoWatcher
 import com.invictus.kodex.core.git.GitResult
+import com.invictus.kodex.core.git.GitRemoteWork
 import com.invictus.kodex.core.git.GitSessionRegistry
 import com.invictus.kodex.core.git.GitTokenCredentialsProvider
 import com.invictus.kodex.core.git.normalizeHost
@@ -824,7 +825,8 @@ class GitViewModel(
             return
         }
         val mode = if (force) PendingNetworkMode.Force else PendingNetworkMode.Plain
-        viewModelScope.launch(io) {
+        // App-wide scope + foreground service: leaving this screen or minimizing the app must not stop the push.
+        GitRemoteWork.launch(R.string.git_work_push, File(projectPath)) {
             runNetwork(GitPendingAction.PUSH, remote, mode) { cp ->
                 session.push(remote, cp, force = force) { p -> _uiState.update { it.copy(progressTask = p.task) } }
             }
@@ -853,7 +855,7 @@ class GitViewModel(
             rebase -> PendingNetworkMode.Rebase
             else -> PendingNetworkMode.Plain
         }
-        viewModelScope.launch(io) {
+        GitRemoteWork.launch(R.string.git_work_pull, File(projectPath)) {
             val pulled = runNetwork(GitPendingAction.PULL, remote, mode) { cp ->
                 session.pull(remote, branch, cp, rebase = rebase) { p -> _uiState.update { it.copy(progressTask = p.task) } }
             }
@@ -874,7 +876,7 @@ class GitViewModel(
             message(R.string.git_err_no_remote)
             return
         }
-        viewModelScope.launch(io) {
+        GitRemoteWork.launch(R.string.git_work_fetch, File(projectPath)) {
             var allOk = true
             for (remote in remotes) {
                 val ok = runNetwork(GitPendingAction.FETCH, remote, PendingNetworkMode.Plain, announce = false) { cp ->
@@ -949,6 +951,19 @@ class GitViewModel(
             }
         }
         _uiState.update { it.copy(networkOp = null, progressTask = "") }
+        // Finished while the app was not on screen: say so (GitRemoteWork skips it when the app is visible).
+        if (announce || !ok) {
+            GitRemoteWork.notifyDone(
+                text = when {
+                    !ok -> R.string.git_work_failed
+                    action == GitPendingAction.PUSH -> R.string.git_work_done_push
+                    action == GitPendingAction.PULL -> R.string.git_work_done_pull
+                    else -> R.string.git_work_done_fetch
+                },
+                project = File(projectPath).name,
+                ok = ok,
+            )
+        }
         touchOwnActivity()
         return ok
     }

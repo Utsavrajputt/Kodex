@@ -224,7 +224,6 @@ fun OpenProjectSheet(
                     }
                 }
                 if (recents.isNotEmpty() && showRecent && (showBrowse || state.browseDir == null)) {
-                    item(key = "h-recent") { SectionLabel(R.string.sheet_recent) }
                     items(items = recents, key = { "r:" + it.file.path }) { item ->
                         RecentRow(
                             item = item,

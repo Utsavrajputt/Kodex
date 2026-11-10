@@ -131,15 +131,14 @@ fun ImageTracerScreen(
                         Text(stringResource(R.string.tracer_choose), maxLines = 1)
                     }
                     if (s.hasSource) {
-                        Column(Modifier.weight(1f)) {
-                            Text(s.sourceName.orEmpty(), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${s.origWidth} × ${s.origHeight} px", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
-                        }
+                        Text("${s.origWidth} × ${s.origHeight} px", style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
                     } else {
                         Text(stringResource(R.string.tracer_nothing), style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
                     }
                 }
                 if (s.hasSource) {
+                    // The name gets its own full-width line, so a long one wraps instead of being cut off.
+                    Text(s.sourceName.orEmpty(), style = MaterialTheme.typography.titleSmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     SizeChips(longSide = s.origLongSide, selected = s.targetSide, onSelect = vm::setTargetSide)
                     if (s.scaledDown) {
                         Text(

@@ -152,7 +152,7 @@ private val stashTimeFormat = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GitStashScreen(projectPath: String, onBack: () -> Unit) {
+fun GitStashScreen(projectPath: String, onOpenReflog: (() -> Unit)? = null, onBack: () -> Unit) {
     val vm: GitStashViewModel = viewModel(
         key = "stash:$projectPath",
         factory = GitStashViewModel.factory(projectPath),
@@ -174,6 +174,11 @@ fun GitStashScreen(projectPath: String, onBack: () -> Unit) {
                     }
                 },
                 actions = {
+                    if (onOpenReflog != null) {
+                        IconButton(onClick = onOpenReflog) {
+                            Icon(XIcons.Schedule, contentDescription = stringResource(R.string.git_reflog_open))
+                        }
+                    }
                     TextButton(onClick = { vm.openCreate() }) {
                         Text(stringResource(R.string.git_stash_create))
                     }

@@ -44,6 +44,13 @@ class TabBuffer(
     var pendingFlashColumn: Int = -1
     var pendingFlashLength: Int = 0
 
+    /**
+     * 0-based line a code-search hit wants this tab to scroll to once its view is on screen, -1 = none.
+     * A tab that is already open may have no view at that moment (the search screen is in front), and a live
+     * jump request sent then would be lost: this is what the view picks up when it appears.
+     */
+    var pendingJumpLine: Int = -1
+
     var cursorLine: Int = 0
     var cursorColumn: Int = 0
 

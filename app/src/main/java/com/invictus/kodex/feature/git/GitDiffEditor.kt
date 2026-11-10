@@ -46,6 +46,12 @@ internal fun GitDiffEditor(
     onAddedLinesChange: (Set<Int>) -> Unit,
     fontSize: Float,
     modifier: Modifier = Modifier,
+    /** Gutter text for the shown text; null = 1..n. The hunk view numbers lines by their place in the file. */
+    numberTextFor: ((String) -> String)? = null,
+    /** 0-based lines drawn as muted rows (the "hidden lines" markers of the hunk view). */
+    mutedLines: ((String) -> Set<Int>)? = null,
+    /** Returns false to refuse an edit (it is then dropped, the field keeps its text). */
+    accept: ((String) -> Boolean)? = null,
 ) {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val green = Color(0xFF2EA043)
@@ -73,7 +79,11 @@ internal fun GitDiffEditor(
     val verticalPad = 6.dp
     val verticalPadPx = with(density) { verticalPad.toPx() }
     val gutterPx = with(density) { 60.dp.toPx() }
-    val numberText = remember(lineCount) { (1..lineCount).joinToString("\n") }
+    val numberText = remember(value.text, numberTextFor) {
+        numberTextFor?.invoke(value.text) ?: (1..lineCount).joinToString("\n")
+    }
+    val muted = remember(value.text, mutedLines) { mutedLines?.invoke(value.text).orEmpty() }
+    val mutedTint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
     val v = rememberScrollState()
     val h = rememberScrollState()
 
@@ -85,6 +95,11 @@ internal fun GitDiffEditor(
                     Modifier
                         .widthIn(min = minWidth)
                         .drawBehind {
+                            muted.forEach { line ->
+                                if (line in 0 until lineCount) {
+                                    drawRect(mutedTint, Offset(0f, verticalPadPx + line * lineHeightPx), Size(size.width, lineHeightPx))
+                                }
+                            }
                             // Full-width line tints, exactly one fixed-height row per line.
                             currentAdded.forEach { line ->
                                 if (line in 0 until lineCount) {
@@ -107,6 +122,7 @@ internal fun GitDiffEditor(
                     BasicTextField(
                         value = value,
                         onValueChange = { new ->
+                            if (new.text != value.text && accept?.invoke(new.text) == false) return@BasicTextField
                             if (new.text != value.text) {
                                 onAddedLinesChange(remapAdded(value.text, new.text, currentAdded))
                                 onTextChange(new.text)

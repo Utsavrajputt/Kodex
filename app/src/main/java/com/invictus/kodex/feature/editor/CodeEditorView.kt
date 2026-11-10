@@ -83,12 +83,12 @@ fun CodeEditorView(
         val flow = currentOnJump ?: return@LaunchedEffect
         flow.collect { request ->
             if (request.path != path) return@collect
-            editorHolder[0]?.post {
-                editorHolder[0]?.let { editor ->
-                    val lc = (request.line - 1).coerceIn(0, buffer.content.lineCount - 1)
-                    editor.setSelection(lc, maxOf(request.column, 0), true)
-                    if (request.column >= 0 && request.length > 0) flashMatch(editor, lc, request.column, request.length)
-                }
+            // Handled live: the buffer's copy of the request must not fire again when the view is rebuilt.
+            buffer.pendingJumpLine = -1
+            buffer.pendingFlashColumn = -1
+            buffer.pendingFlashLength = 0
+            editorHolder[0]?.let { editor ->
+                runWhenLaidOut(editor) { jumpAndFlash(editor, request.line, request.column, request.length) }
             }
         }
     }
@@ -134,13 +134,16 @@ fun CodeEditorView(
                 // viewport), then the exact scroll offset the user left the tab at.
                 if (line != 0 || column != 0) post { setSelection(line, column, false) }
                 restoreScroll(this, buffer.scrollX, buffer.scrollY)
-                if (buffer.pendingFlashLength > 0) {
+                if (buffer.pendingJumpLine >= 0) {
+                    val jumpLine = buffer.pendingJumpLine + 1
                     val col = buffer.pendingFlashColumn
                     val len = buffer.pendingFlashLength
+                    buffer.pendingJumpLine = -1
                     buffer.pendingFlashColumn = -1
                     buffer.pendingFlashLength = 0
-                    // After the restore posts above have run, so the match is scrolled into view first.
-                    post { post { flashMatch(this, line, col, len) } }
+                    // Only once the view has a size: scrolling a zero-sized editor goes nowhere.
+                    val selfEditor2 = this
+                    runWhenLaidOut(this) { jumpAndFlash(selfEditor2, jumpLine, col, len) }
                 }
 
                 handle.editor = this
@@ -171,6 +174,33 @@ fun CodeEditorView(
             editor.release()
         },
     )
+}
+
+/** Runs [block] once [editor] is attached and has a size (waits a few frames); after ~0.5s it runs anyway. */
+private fun runWhenLaidOut(editor: CodeEditor, tries: Int = 30, block: () -> Unit) {
+    if ((editor.isAttachedToWindow && editor.width > 0 && editor.height > 0) || tries <= 0) {
+        block()
+        return
+    }
+    editor.postDelayed({ runWhenLaidOut(editor, tries - 1, block) }, 16L)
+}
+
+/**
+ * Scrolls a code-search hit into view and highlights it. [line] is 1-based, [column] 0-based (-1 = unknown,
+ * then the whole line is highlighted, so a hit always shows where it is).
+ */
+private fun jumpAndFlash(editor: CodeEditor, line: Int, column: Int, length: Int) {
+    runCatching {
+        val content = editor.text
+        val lc = (line - 1).coerceIn(0, content.lineCount - 1)
+        editor.setSelection(lc, maxOf(column, 0), true)
+        if (column >= 0 && length > 0) {
+            flashMatch(editor, lc, column, length)
+        } else {
+            val len = content.getColumnCount(lc)
+            if (len > 0) flashRegion(editor, lc, 0, lc, len)
+        }
+    }
 }
 
 /**

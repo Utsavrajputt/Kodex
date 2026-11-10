@@ -399,7 +399,15 @@ class EditorViewModel(
         viewModelScope.launch { settingsStore.addRecentFile(path) } // file search: recent list
         if (path in buffers) {
             _uiState.update { it.copy(activePath = path) }
-            jumpToLine?.let { _jumpToLine.tryEmit(JumpRequest(path, it, matchColumn, matchLength)) }
+            jumpToLine?.let {
+                // Both: a view that exists reacts to the live request, one that appears later reads the buffer.
+                buffers[path]?.let { b ->
+                    b.pendingJumpLine = (it - 1).coerceAtLeast(0)
+                    b.pendingFlashColumn = matchColumn
+                    b.pendingFlashLength = matchLength
+                }
+                _jumpToLine.tryEmit(JumpRequest(path, it, matchColumn, matchLength))
+            }
             _showEditor.tryEmit(Unit)
             return
         }
@@ -425,10 +433,9 @@ class EditorViewModel(
                         buffer.cursorLine = (it - 1).coerceAtLeast(0)
                         buffer.cursorColumn = 0
                         buffer.scrollY = 0
-                        if (matchColumn >= 0 && matchLength > 0) {
-                            buffer.pendingFlashColumn = matchColumn
-                            buffer.pendingFlashLength = matchLength
-                        }
+                        buffer.pendingJumpLine = (it - 1).coerceAtLeast(0)
+                        buffer.pendingFlashColumn = matchColumn
+                        buffer.pendingFlashLength = matchLength
                     }
                     buffers[path] = buffer
                     val session = buffer.pagedSession
