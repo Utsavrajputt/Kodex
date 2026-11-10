@@ -351,6 +351,7 @@ class GitHubToolsController(
 
     /** Release workflows ask for a tag: fetch the repo's tags, then pre-fill an empty tag field with the best next one. */
     private fun loadTagsFor(info: DispatchInfo?, workflow: GhWorkflow) {
+        if (!TagSuggestions.isReleaseWorkflow(workflow.name, workflow.path)) return
         val tagInputs = info?.inputs.orEmpty().filter { TagSuggestions.isTagInput(it) }
         if (tagInputs.isEmpty()) return
         val repo = repoProvider() ?: return
@@ -394,7 +395,8 @@ class GitHubToolsController(
         val typed = info?.inputs.orEmpty()
         val pre = TagSuggestions.isPrerelease(workflow.name, workflow.path)
         // A wrong tag only fails the run after it has started, so catch the format here.
-        val badTag = typed.filter { TagSuggestions.isTagInput(it) && r.values[it.name].orEmpty().isNotBlank() && !TagSuggestions.isValid(r.values[it.name].orEmpty(), pre) }
+        val release = TagSuggestions.isReleaseWorkflow(workflow.name, workflow.path)
+        val badTag = typed.filter { release && TagSuggestions.isTagInput(it) && r.values[it.name].orEmpty().isNotBlank() && !TagSuggestions.isValid(r.values[it.name].orEmpty(), pre) }
         val missing = (typed.filter { it.required && r.values[it.name].isNullOrBlank() } + badTag).map { it.name }.toSet()
         if (missing.isNotEmpty()) {
             updateRun { it.copy(missingRequired = missing) }

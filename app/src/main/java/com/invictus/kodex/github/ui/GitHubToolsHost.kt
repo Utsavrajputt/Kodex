@@ -165,8 +165,9 @@ private fun RunInputsSheet(workflow: GhWorkflow, ref: String, state: RunWorkflow
             Text(stringResource(R.string.gh_inputs_title, workflow.name, ref), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
             val prerelease = TagSuggestions.isPrerelease(workflow.name, workflow.path)
+            val releaseWorkflow = TagSuggestions.isReleaseWorkflow(workflow.name, workflow.path)
             info?.inputs.orEmpty().forEach { input ->
-                if (TagSuggestions.isTagInput(input)) {
+                if (releaseWorkflow && TagSuggestions.isTagInput(input)) {
                     TagInputField(
                         input = input,
                         value = state.values[input.name].orEmpty(),

@@ -29,6 +29,13 @@ object TagSuggestions {
         return input.type == "string" && ("tag" in n || "version" in n)
     }
 
+    /**
+     * Only release workflows get the v1.2.0 format check, suggestions and pre-filled tag. Any other workflow with a
+     * `tag` input (say "Build package index" with `books-v1`) takes whatever the person types.
+     */
+    fun isReleaseWorkflow(workflowName: String, workflowPath: String = ""): Boolean =
+        "release" in "$workflowName $workflowPath".lowercase()
+
     /** "Make pre-release" style workflows take `v1.2.0-beta.1`; plain release workflows take `v1.2.0`. */
     fun isPrerelease(workflowName: String, workflowPath: String = ""): Boolean {
         val s = "$workflowName $workflowPath".lowercase()

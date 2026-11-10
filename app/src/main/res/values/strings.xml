@@ -461,7 +461,7 @@
     <string name="git_reflog_refresh">Refresh</string>
     <string name="git_reflog_empty">Nothing recorded yet.</string>
     <string name="git_reflog_intro">A diary of where your branch (HEAD) has been: commits, switches, merges, resets. Even work you reset away or amended is still listed, so you can get back to it.</string>
-    <string name="git_reflog_intro_tip">Tap an entry to see what happened and go back to that moment.</string>
+    <string name="git_reflog_intro_tip">Newest first. Tap an entry to go back to it.</string>
     <string name="git_reflog_current">CURRENT</string>
     <string name="git_reflog_now_at">HEAD at %1$s</string>
     <string name="git_reflog_today">Today</string>
@@ -502,7 +502,8 @@
 
     <string name="git_reflog_t_first_commit">First commit</string>
     <string name="git_reflog_t_commit">Committed</string>
-    <string name="git_reflog_t_amend">Amended the last commit</string>
+    <string name="git_reflog_t_amend">Amended</string>
+    <string name="git_reflog_t_head_updated">Branch position updated</string>
     <string name="git_reflog_t_merge_commit">Merge commit created</string>
     <string name="git_reflog_t_switch">Switched branch</string>
     <string name="git_reflog_t_reset_to">Reset to %1$s</string>

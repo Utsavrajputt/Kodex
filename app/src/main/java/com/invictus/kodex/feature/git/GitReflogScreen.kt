@@ -103,6 +103,8 @@ internal class ReflogText(
 /** Git writes lines like "commit (amend): msg" or "checkout: moving from a to b"; turn them into words. */
 internal fun describeReflog(raw: String): ReflogText {
     val msg = raw.trim()
+    // "<hash>: updating HEAD" is git moving HEAD itself (e.g. around a reset): nothing the person did.
+    if (msg.endsWith("updating HEAD")) return ReflogText(ReflogKind.OTHER, R.string.git_reflog_t_head_updated)
     val colon = msg.indexOf(':')
     val head = if (colon >= 0) msg.substring(0, colon).trim() else msg
     val rest = if (colon >= 0) msg.substring(colon + 1).trim().ifBlank { null } else null
@@ -373,76 +375,64 @@ fun GitReflogScreen(projectPath: String, onBack: () -> Unit) {
 
 @Composable
 private fun ReflogIntro() {
-    Card(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-    ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                stringResource(R.string.git_reflog_intro),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-            Text(
-                stringResource(R.string.git_reflog_intro_tip),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-        }
-    }
+    Text(
+        stringResource(R.string.git_reflog_intro_tip),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    )
 }
 
 @Composable
 private fun ReflogItem(entry: GitReflogEntry, isCurrent: Boolean, onClick: () -> Unit) {
     val context = LocalContext.current
     val text = remember(entry.message) { describeReflog(entry.message) }
+    // One line of what happened (for a commit: its message), and the time under it. Details are in the sheet.
     Column(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 9.dp),
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
+        Text(
+            lineOf(text),
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                stringResource(text.kind.label).uppercase(),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                "  ·  " + timeLabel(context, entry.timeMs),
-                style = MaterialTheme.typography.labelSmall,
+                timeLabel(context, entry.timeMs),
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.weight(1f))
             if (isCurrent) {
                 Text(
-                    stringResource(R.string.git_reflog_current),
-                    style = MaterialTheme.typography.labelSmall,
+                    "  ·  " + stringResource(R.string.git_reflog_current),
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.tertiary,
                 )
             }
         }
-        Text(titleOf(text), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-        text.detail?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Text(
-            stringResource(R.string.git_reflog_now_at, entry.shortNew),
-            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
 @Composable
 private fun titleOf(t: ReflogText): String =
     if (t.titleArg != null) stringResource(t.title, t.titleArg) else stringResource(t.title)
+
+/** The single line shown in the list: a commit shows just its message, anything else "what: detail". */
+@Composable
+private fun lineOf(t: ReflogText): String {
+    val title = titleOf(t)
+    val detail = t.detail
+    return when {
+        detail == null -> title
+        t.title == R.string.git_reflog_t_commit || t.title == R.string.git_reflog_t_first_commit ||
+            t.title == R.string.git_reflog_t_merge_commit -> detail
+        t.kind == ReflogKind.OTHER -> detail
+        else -> "$title: $detail"
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
