@@ -189,63 +189,112 @@ fun CommitMessageAi(
     if (!open) return
 
     ModalBottomSheet(onDismissRequest = { open = false }) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
-            Text(stringResource(R.string.ai_commit_generate_commit_message), style = MaterialTheme.typography.titleMedium)
-            Row(Modifier.padding(vertical = 8.dp)) {
-                CommitMessageTask.Style.entries.forEach { s ->
-                    FilterChip(
-                        selected = style == s,
-                        onClick = {
-                            style = s
-                            scope.launch { prefs.setCommitStyle(s.name) }
-                            if (generatedOnce && !busy) generate(fill = false)
-                        },
-                        label = { Text(s.label) },
-                        modifier = Modifier.padding(end = 6.dp),
-                    )
-                }
-            }
-            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(R.string.ai_commit_replace_title), style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        stringResource(if (replace) R.string.ai_commit_replace_on else R.string.ai_commit_replace_off),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(
-                    checked = replace,
-                    onCheckedChange = { replace = it; scope.launch { prefs.setCommitReplace(it) } },
-                )
-            }
-            Button(onClick = { generate(fill = false) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text(if (busy) stringResource(R.string.ai_commit_generating) else if (generatedOnce) stringResource(R.string.ai_chat_regenerate) else stringResource(R.string.ai_commit_generate))
-            }
-            error?.let {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp) // Extra padding for bottom sheet notch
+        ) {
+            // Header with Handle-like look
+            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                 Text(
-                    it, color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = 4.dp),
+                    stringResource(R.string.ai_commit_generate_commit_message),
+                    style = MaterialTheme.typography.titleLarge
                 )
             }
-            if (message.isNotEmpty()) {
-                OutlinedTextField(
-                    value = message,
-                    onValueChange = { message = it },
-                    label = { Text(stringResource(R.string.ai_commit_commit_message_editable)) },
-                    minLines = 2,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                )
+
+            Column(
+                Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+            ) {
+                // Style Chips
+                Row(Modifier.padding(vertical = 8.dp)) {
+                    CommitMessageTask.Style.entries.forEach { s ->
+                        FilterChip(
+                            selected = style == s,
+                            onClick = {
+                                style = s
+                                scope.launch { prefs.setCommitStyle(s.name) }
+                                if (generatedOnce && !busy) generate(fill = false)
+                            },
+                            label = { Text(s.label) },
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                }
+
+                // Replace Switch
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.ai_commit_replace_title),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            stringResource(if (replace) R.string.ai_commit_replace_on else R.string.ai_commit_replace_off),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = replace,
+                        onCheckedChange = { replace = it; scope.launch { prefs.setCommitReplace(it) } },
+                    )
+                }
+
+                // Action Button
                 Button(
-                    onClick = { put(message); open = false },
-                    enabled = message.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.ai_commit_use_message)) }
-                Spacer(Modifier.padding(4.dp))
-                Text(
-                    stringResource(R.string.ai_commit_fills_the_commit_box_only),
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                    onClick = { generate(fill = false) },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                ) {
+                    Text(
+                        if (busy) stringResource(R.string.ai_commit_generating)
+                        else if (generatedOnce) stringResource(R.string.ai_chat_regenerate)
+                        else stringResource(R.string.ai_commit_generate)
+                    )
+                }
+
+                error?.let {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                }
+
+                if (message.isNotEmpty()) {
+                    OutlinedTextField(
+                        value = message,
+                        onValueChange = { message = it },
+                        label = { Text(stringResource(R.string.ai_commit_commit_message_editable)) },
+                        minLines = 3,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                    )
+
+                    Button(
+                        onClick = { put(message); open = false },
+                        enabled = message.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.ai_commit_use_message))
+                    }
+
+                    Spacer(Modifier.padding(4.dp))
+                    Text(
+                        stringResource(R.string.ai_commit_fills_the_commit_box_only),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                }
             }
         }
     }
