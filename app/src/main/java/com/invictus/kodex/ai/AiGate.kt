@@ -32,9 +32,18 @@ interface AiGateImpl {
 
     // ---- M20 ----
 
-    /** Generate an editable commit message (Git stage). Fills the box via onFill; never commits. */
+    /**
+     * Generate an editable commit message (Git stage). Puts it in the box via [onReplace] (swap the text) or
+     * [onFill] (add after it), per the sheet's Replace switch; never commits.
+     */
     @Composable
-    fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -> Unit, app: android.app.Application)
+    fun CommitMessageAi(
+        projectPath: String,
+        hasChanges: Boolean,
+        onFill: (String) -> Unit,
+        onReplace: (String) -> Unit,
+        app: android.app.Application,
+    )
 
     /** Explain a commit's diff (commit detail screen). */
     @Composable

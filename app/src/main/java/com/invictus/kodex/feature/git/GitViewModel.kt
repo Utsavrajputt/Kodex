@@ -270,6 +270,7 @@ class GitViewModel(
             }
             is GitEvent.CommitMessageChange -> onCommitMessageChange(event.text)
             is GitEvent.PasteCommitText -> onPasteCommitText(event.text)
+            is GitEvent.ReplaceCommitMessage -> _uiState.update { it.copy(commitMessage = event.text.trim()) }
             GitEvent.ToggleAmend -> toggleAmend()
             GitEvent.Commit -> commit()
             GitEvent.Push -> push(force = false)

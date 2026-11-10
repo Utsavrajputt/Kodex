@@ -19,6 +19,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -453,7 +458,7 @@ private fun PlanBlock(c: CleanupState, tools: GitHubToolsController, onDelete: (
                 TextButton(onClick = tools::selectAllCleanup) { Text(stringResource(R.string.gh_cleanup_all)) }
                 TextButton(onClick = tools::selectNoneCleanup) { Text(stringResource(R.string.gh_cleanup_none)) }
             }
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 300.dp).keepScrollInside()) {
                 items(items, key = { it.id }) { item -> CleanupRow(item, checked = item.id in c.selected) { tools.toggleCleanupItem(item.id) } }
             }
             val bytes = items.filter { it.id in c.selected }.sumOf { it.sizeBytes }
@@ -473,6 +478,21 @@ private fun PlanBlock(c: CleanupState, tools: GitHubToolsController, onDelete: (
         }
     }
 }
+
+/**
+ * For a list inside a bottom sheet: scroll the list can't use (it is at its top or bottom) is swallowed here
+ * instead of reaching the sheet. Without this, pulling at the list's edge drags the sheet, which moves the list
+ * under the finger, which scrolls it back: the up-down-up-down flicker. The sheet still closes by its handle.
+ */
+@Composable
+private fun Modifier.keepScrollInside(): Modifier = nestedScroll(
+    remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = available
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available
+        }
+    },
+)
 
 @Composable
 private fun CleanupRow(item: CleanupItem, checked: Boolean, onToggle: () -> Unit) {
@@ -513,7 +533,7 @@ private fun ResultBlock(c: CleanupState, onRetry: () -> Unit, onDone: () -> Unit
         Text(stringResource(R.string.gh_cleanup_done, r.deleted, r.failed.size), style = MaterialTheme.typography.titleSmall)
         if (r.notAttempted.isNotEmpty()) Muted(stringResource(R.string.gh_cleanup_not_attempted, r.notAttempted.size))
         if (r.failed.isNotEmpty()) {
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp).keepScrollInside()) {
                 items(r.failed, key = { it.item.id }) { f ->
                     Column(Modifier.padding(vertical = 4.dp)) {
                         Text(f.item.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)

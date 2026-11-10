@@ -28,6 +28,7 @@ object Routes {
     const val GIT_NEW_REPO = "git_new_repo"
     const val GIT_BRANCHES = "git_branches/{projectPath}"
     const val GIT_HISTORY = "git_history/{projectPath}?path={path}"
+    const val GIT_REFLOG = "git_reflog/{projectPath}"
     const val GIT_STASH = "git_stash/{projectPath}"
     const val GIT_TAGS = "git_tags/{projectPath}"
     const val GIT_REMOTES = "git_remotes/{projectPath}"
@@ -50,6 +51,7 @@ object Routes {
         "git_history/${android.net.Uri.encode(p)}" +
             (path?.let { "?path=${android.net.Uri.encode(it)}" } ?: "")
 
+    fun gitReflog(p: String) = "git_reflog/${android.net.Uri.encode(p)}"
     fun gitStash(p: String) = "git_stash/${android.net.Uri.encode(p)}"
     fun gitTags(p: String) = "git_tags/${android.net.Uri.encode(p)}"
     fun gitRemotes(p: String) = "git_remotes/${android.net.Uri.encode(p)}"

@@ -24,6 +24,7 @@ class AiPrefs(private val context: Context) {
         val CONSENT = booleanPreferencesKey("ai.consent_granted")
         val GLOBS = stringPreferencesKey("ai.exclude_globs")
         val COMMIT_STYLE = stringPreferencesKey("ai.commit_style")
+        val COMMIT_REPLACE = booleanPreferencesKey("ai.commit_replace")
         val PR_STYLE = stringPreferencesKey("ai.pr_style")
         val AUTO_APPLY = booleanPreferencesKey("ai.auto_apply")
         val GLOBAL_INSTRUCTIONS = stringPreferencesKey("ai.global_instructions")
@@ -73,6 +74,10 @@ class AiPrefs(private val context: Context) {
     /** Name of the last commit-message style picked in the Git screen's AI sheet (tap on the AI button reuses it). */
     val commitStyle: Flow<String> = context.aiPrefsStore.data.map { it[K.COMMIT_STYLE] ?: "" }
     suspend fun setCommitStyle(v: String) { context.aiPrefsStore.edit { it[K.COMMIT_STYLE] = v } }
+
+    /** True (default): an AI commit message replaces what is in the commit box; false: it is added after it. */
+    val commitReplace: Flow<Boolean> = context.aiPrefsStore.data.map { it[K.COMMIT_REPLACE] ?: true }
+    suspend fun setCommitReplace(v: Boolean) { context.aiPrefsStore.edit { it[K.COMMIT_REPLACE] = v } }
 
     /** Name of the last pull-request text style picked in the New pull request AI sheet. */
     val prStyle: Flow<String> = context.aiPrefsStore.data.map { it[K.PR_STYLE] ?: "" }

@@ -94,6 +94,28 @@ data class GitCommitSummary(
     val authorEmail: String = "",
 )
 
+/** What the AI commit message reads: the staged diff, or (nothing staged) the work-tree diff plus new untracked files. */
+data class GitCommitChangeSet(
+    val diff: String,
+    val untracked: List<GitUntrackedFile>,
+    val staged: Boolean,
+)
+
+/** A file git doesn't track yet; [head] holds its first lines, null for binary or big files. */
+data class GitUntrackedFile(val path: String, val head: List<String>?)
+
+/** One line of the reflog: HEAD moved from [oldId] to [newId] because of [message] (git's own wording). */
+data class GitReflogEntry(
+    val newId: String,
+    val shortNew: String,
+    val shortOld: String,
+    val message: String,
+    val who: String,
+    val timeMs: Long,
+    /** True when this move created the very first position of HEAD (no previous commit). */
+    val fromNothing: Boolean,
+)
+
 /** How a file changed inside one commit (commit-detail file list). */
 enum class GitCommitFileChange { ADDED, MODIFIED, DELETED, RENAMED, COPIED }
 

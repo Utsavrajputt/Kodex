@@ -1,13 +1,15 @@
 package com.invictus.kodex.ai.tasks
 
-import com.invictus.kodex.ai.Redactor
 import com.invictus.kodex.ai.provider.AiEvent
 import com.invictus.kodex.ai.provider.AiMessage
 import com.invictus.kodex.ai.provider.AiProvider
 import com.invictus.kodex.ai.provider.AiRequest
 import kotlinx.coroutines.flow.Flow
 
-/** Commit message generation (plan 9.6): staged diff in, subject(+body) out. Never auto-commits. */
+/**
+ * Commit message generation (plan 9.6): the changes in (see [CommitDiffCompactor]), subject(+body) out.
+ * Every style starts with a type prefix (feat, fix, perf...) chosen by the model. Never auto-commits.
+ */
 class CommitMessageTask(
     private val provider: AiProvider,
     private val key: String,
@@ -17,31 +19,44 @@ class CommitMessageTask(
         NORMAL("Normal"), SHORTER("Shorter"), LONGER("Longer"), CONVENTIONAL("Conventional"),
     }
 
-    fun stream(diffText: String, style: Style): Flow<AiEvent> {
-        val system = when (style) {
+    fun stream(changes: String, style: Style): Flow<AiEvent> {
+        val system = TYPES + "\n" + when (style) {
             Style.CONVENTIONAL ->
-                "You write git commit messages in Conventional Commits format: type(scope): subject. " +
-                    "Types: feat, fix, chore, refactor, docs, test, build. Then an optional body."
+                "Format: type(scope): subject. The scope is the module or feature area touched (omit it when unclear). " +
+                    "Subject in imperative mood, max 72 chars. Optional body after a blank line."
             Style.SHORTER ->
-                "You write extremely concise git commit messages: one short imperative subject line, max 50 chars, no body."
+                "Format: type: subject. One line only: imperative, max 50 chars, no body."
             Style.LONGER ->
-                "You write git commit messages with a short imperative subject (max 72 chars) and a detailed " +
-                    "body explaining what and why, wrapped at 72 chars."
+                "Format: type: subject (imperative, max 72 chars), then a blank line and a body that explains what " +
+                    "changed and why, wrapped at 72 chars."
             Style.NORMAL ->
-                "You write git commit messages: short imperative subject (max 72 chars), optional body. " +
-                    "No code fences, no quotes — just the message text."
+                "Format: type: subject (imperative, max 72 chars). Add a short body of '- ' bullets only when there are " +
+                    "several distinct changes."
         }
         return provider.stream(
             key, model,
             AiRequest(
                 messages = listOf(
                     AiMessage("system", system),
-                    AiMessage("user", "Here is the staged diff (or working-tree diff when nothing is staged):\n\n${Redactor.scrub(diffText)}\n\nWrite only the commit message."),
+                    AiMessage("user", "Describe these changes:\n\n$changes\n\nWrite only the commit message."),
                 ),
                 // Hidden "thinking" tokens (Gemini 3) count against this limit; a small one cuts the message mid-sentence.
                 maxOutputTokens = when (style) { Style.SHORTER -> 1024; Style.LONGER -> 3072; else -> 2048 },
                 temperature = 0.2, model = model,
             ),
         )
+    }
+
+    private companion object {
+        const val TYPES =
+            "You write git commit messages. Judge only from the changes given. Start the subject with exactly one type " +
+                "prefix chosen for the dominant change:\n" +
+                "feat = new feature or capability; fix = bug fix; perf = speed or memory improvement; " +
+                "refactor = restructure without behaviour change; style = formatting or look only, no logic; " +
+                "docs = documentation or comments; test = tests; build = gradle, dependencies, build config; " +
+                "ci = workflows or CI scripts; chore = housekeeping, config, cleanup, version bumps; " +
+                "revert = undo an earlier commit; major = breaking change or a big overhaul across many areas.\n" +
+                "Never invent other types. Name the concrete thing that changed; do not list file names. " +
+                "No code fences, no quotes, no explanations: only the message text."
     }
 }

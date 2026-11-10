@@ -271,6 +271,12 @@ fun GitScreen(
                         Icon(XIcons.Sync, contentDescription = stringResource(R.string.git_fetch))
                     }
                     IconButton(
+                        onClick = { onOpenRoute(Routes.gitReflog(projectPath)) },
+                        enabled = state.snapshot?.hasCommits == true,
+                    ) {
+                        Icon(XIcons.Schedule, contentDescription = stringResource(R.string.git_reflog_open))
+                    }
+                    IconButton(
                         onClick = { viewModel.onEvent(GitEvent.OpenReset) },
                         enabled = state.snapshot?.hasCommits == true,
                     ) {
@@ -413,6 +419,7 @@ private fun GitContent(
                             // Staged diff is preferred; the generator falls back to the work-tree diff, so any change counts.
                             hasChanges = state.status?.isClean == false,
                             onFill = { msg -> onEvent(GitEvent.PasteCommitText(msg)) },
+                            onReplace = { msg -> onEvent(GitEvent.ReplaceCommitMessage(msg)) },
                             app = androidx.compose.ui.platform.LocalContext.current.applicationContext as android.app.Application,
                         )
                     }

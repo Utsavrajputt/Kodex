@@ -11,6 +11,9 @@ import com.invictus.kodex.core.git.model.GitCommitFile
 import com.invictus.kodex.core.git.model.GitCommitFileChange
 import com.invictus.kodex.core.git.model.GitFileDiffResult
 import com.invictus.kodex.core.git.model.GitCommitSummary
+import com.invictus.kodex.core.git.model.GitCommitChangeSet
+import com.invictus.kodex.core.git.model.GitReflogEntry
+import com.invictus.kodex.core.git.model.GitUntrackedFile
 import com.invictus.kodex.core.git.model.GitLogSearchMode
 import com.invictus.kodex.core.git.model.GitPathChange
 import com.invictus.kodex.core.git.model.GitRemoteInfo
@@ -869,6 +872,66 @@ class GitSession(
             val out = java.io.ByteArrayOutputStream()
             git.diff().setOutputStream(out).call()
             out.toString("UTF-8")
+        }
+    }
+
+    /**
+     * Changes for the AI commit message, kept small on purpose: one line of diff context, and when nothing is
+     * staged the work-tree diff plus the new untracked files (which `git diff` doesn't show).
+     */
+    suspend fun commitChangeSet(): GitResult<GitCommitChangeSet> = ioOp(TITLE_DIFF) {
+        readOnly {
+            val staged = diffText(cached = true, context = 1)
+            if (staged.isNotBlank()) {
+                GitCommitChangeSet(staged, emptyList(), staged = true)
+            } else {
+                val untracked = (lastStatus?.untracked?.map { it.repoRelativePath }
+                    ?: git.status().call().untracked.toList())
+                    .sorted().take(MAX_UNTRACKED_FOR_AI)
+                GitCommitChangeSet(
+                    diff = diffText(cached = false, context = 1),
+                    untracked = untracked.map { GitUntrackedFile(it, untrackedHead(it)) },
+                    staged = false,
+                )
+            }
+        }
+    }
+
+    private fun diffText(cached: Boolean, context: Int): String {
+        val out = java.io.ByteArrayOutputStream()
+        git.diff().setCached(cached).setContextLines(context).setOutputStream(out).call()
+        return out.toString("UTF-8")
+    }
+
+    /** First lines of a small text file, or null for binary, missing or big ones. */
+    private fun untrackedHead(path: String): List<String>? {
+        val f = File(workTree, path)
+        if (!f.isFile || f.length() > 200_000) return null
+        val bytes = f.inputStream().use { s ->
+            val buf = ByteArray(4096)
+            val n = s.read(buf)
+            if (n <= 0) ByteArray(0) else buf.copyOf(n)
+        }
+        if (bytes.any { it.toInt() == 0 }) return null
+        return String(bytes, StandardCharsets.UTF_8).lines().take(40)
+    }
+
+    // ---- reflog --------------------------------------------------------------
+
+    /** HEAD's reflog, newest first: every place HEAD has been (commits, switches, resets, merges...). */
+    suspend fun reflog(max: Int = 300): GitResult<List<GitReflogEntry>> = ioOp(TITLE_LOG) {
+        readOnly {
+            git.reflog().setRef(Constants.HEAD).call().take(max).map { e ->
+                GitReflogEntry(
+                    newId = e.newId.name,
+                    shortNew = e.newId.abbreviate(7).name(),
+                    shortOld = e.oldId.abbreviate(7).name(),
+                    message = e.comment.orEmpty(),
+                    who = e.who?.name.orEmpty(),
+                    timeMs = e.who?.`when`?.time ?: 0L,
+                    fromNothing = e.oldId == ObjectId.zeroId(),
+                )
+            }
         }
     }
 
@@ -2264,6 +2327,7 @@ class GitSession(
         private const val TITLE_FETCH = "Git fetch"
         private const val TITLE_IDENTITY = "Git identity"
         private const val TITLE_DIFF = "Git diff"
+        private const val MAX_UNTRACKED_FOR_AI = 40
         private const val TITLE_BRANCH = "Git branch"
         private const val TITLE_LOG = "Git history"
         private const val TITLE_CHERRY_PICK = "Git cherry-pick"

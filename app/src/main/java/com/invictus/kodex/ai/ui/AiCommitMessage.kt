@@ -31,6 +31,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,23 +45,31 @@ import com.invictus.kodex.ai.AiRuntime
 import com.invictus.kodex.ai.Redactor
 import com.invictus.kodex.ai.provider.AiEvent
 import com.invictus.kodex.ai.provider.AiException
+import com.invictus.kodex.ai.tasks.CommitDiffCompactor
 import com.invictus.kodex.ai.tasks.CommitMessageTask
 import com.invictus.kodex.core.git.GitResult
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.invictus.kodex.ui.icons.XIcons
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import com.invictus.kodex.R
 
-private const val MAX_DIFF_CHARS = 60_000
-
 /**
  * Git stage CommitCard AI button. Tap: generate with the last chosen style and put the message straight into the
- * commit box (never commits). Long press: the sheet (style, regenerate, edit before using). A failed tap opens
- * the sheet so the error is visible.
+ * commit box (never commits): it replaces the box text, or is added after it when the sheet's Replace switch is
+ * off. Long press: the sheet (style, Replace switch, regenerate, edit before using). A failed tap opens the sheet
+ * so the error is visible. Works on staged changes, or on the unstaged ones (incl. new files) when nothing is staged.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -> Unit, app: Application) {
+fun CommitMessageAi(
+    projectPath: String,
+    hasChanges: Boolean,
+    onFill: (String) -> Unit,
+    onReplace: (String) -> Unit,
+    app: Application,
+) {
     var open by remember { mutableStateOf(false) }
     val runtime = remember { AiRuntime(app) }
     val prefs = remember { AiPrefs(app) }
@@ -72,32 +81,42 @@ fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var generatedOnce by remember { mutableStateOf(false) }
+    var replace by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         val saved = prefs.commitStyle.first()
         CommitMessageTask.Style.entries.firstOrNull { it.name == saved }?.let { style = it }
+        replace = prefs.commitReplace.first()
         styleLoaded = true
     }
+
+    /** Into the commit box: swaps its text, or adds after it, per the Replace switch. */
+    fun put(text: String) = if (replace) onReplace(text) else onFill(text)
 
     /** Streams a message for the current diff; null (with [error] set) when there is nothing to show. */
     suspend fun produce(s: CommitMessageTask.Style): String? {
         val globs = runtime.globs()
-        val diffText = withGitSession(projectPath) { session ->
-            val staged = session.stagedDiffText()
-            if (staged is GitResult.Ok && staged.value.isNotBlank()) {
-                staged.value.take(MAX_DIFF_CHARS)
+        // Compacting (file list + trimmed hunks) is CPU work: keep it off the main thread.
+        val changes = withContext(Dispatchers.Default) {
+            val set = withGitSession(projectPath) { it.commitChangeSet() }
+            if (set is GitResult.Ok) {
+                CommitDiffCompactor.compact(
+                    diff = Redactor.scrubDiff(set.value.diff, globs),
+                    untracked = set.value.untracked
+                        .filterNot { Redactor.isExcluded(it.path, globs) }
+                        .map { CommitDiffCompactor.Untracked(it.path, it.head) },
+                ).let { Redactor.scrub(it) }
             } else {
-                val wt = session.workTreeDiffText()
-                if (wt is GitResult.Ok) wt.value.take(MAX_DIFF_CHARS) else ""
+                ""
             }
-        }.let { Redactor.scrubDiff(it, globs) }
-        if (diffText.isBlank()) {
+        }
+        if (changes.isBlank()) {
             error = "No changes to describe"
             return null
         }
         val (provider, model, key) = runtime.resolve()
         var out = ""
-        CommitMessageTask(provider, key, model).stream(diffText, s).collect { ev ->
+        CommitMessageTask(provider, key, model).stream(changes, s).collect { ev ->
             when (ev) {
                 is AiEvent.Delta -> out += ev.text
                 AiEvent.Done -> Unit
@@ -123,13 +142,14 @@ fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -
                 if (!styleLoaded) {
                     val saved = prefs.commitStyle.first()
                     CommitMessageTask.Style.entries.firstOrNull { it.name == saved }?.let { style = it }
+                    replace = prefs.commitReplace.first()
                     styleLoaded = true
                 }
                 val result = produce(style)
                 if (result != null) {
                     message = result
                     generatedOnce = true
-                    if (fill) onFill(result)
+                    if (fill) put(result)
                 }
             } catch (e: AiException) {
                 error = e.error.message
@@ -185,6 +205,20 @@ fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -
                     )
                 }
             }
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.ai_commit_replace_title), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(if (replace) R.string.ai_commit_replace_on else R.string.ai_commit_replace_off),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = replace,
+                    onCheckedChange = { replace = it; scope.launch { prefs.setCommitReplace(it) } },
+                )
+            }
             Button(onClick = { generate(fill = false) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                 Text(if (busy) stringResource(R.string.ai_commit_generating) else if (generatedOnce) stringResource(R.string.ai_chat_regenerate) else stringResource(R.string.ai_commit_generate))
             }
@@ -203,7 +237,7 @@ fun CommitMessageAi(projectPath: String, hasChanges: Boolean, onFill: (String) -
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 )
                 Button(
-                    onClick = { onFill(message); open = false },
+                    onClick = { put(message); open = false },
                     enabled = message.isNotBlank(),
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(stringResource(R.string.ai_commit_use_message)) }

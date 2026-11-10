@@ -21,6 +21,8 @@ sealed interface GitEvent {
     data class CommitMessageChange(val text: String) : GitEvent
     /** Paste button: plain text is appended; a git add/commit/push snippet runs straight away. */
     data class PasteCommitText(val text: String) : GitEvent
+    /** AI commit message: swaps the whole commit box text (never parsed as a pasted git script). */
+    data class ReplaceCommitMessage(val text: String) : GitEvent
     data object ToggleAmend : GitEvent
     data object Commit : GitEvent
     data object Push : GitEvent

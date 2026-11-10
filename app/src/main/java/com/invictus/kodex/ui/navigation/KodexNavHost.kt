@@ -39,6 +39,7 @@ import com.invictus.kodex.feature.git.GitCloneScreen
 import com.invictus.kodex.feature.git.GitNewRepoScreen
 import com.invictus.kodex.feature.git.GitCredentialsScreen
 import com.invictus.kodex.feature.git.GitHistoryScreen
+import com.invictus.kodex.feature.git.GitReflogScreen
 import com.invictus.kodex.feature.git.GitOnboardingScreen
 import com.invictus.kodex.feature.git.GitRemotesScreen
 import com.invictus.kodex.core.archive.ArchiveReader
@@ -345,6 +346,12 @@ fun KodexNavHost(
                     filePath = entry.arguments?.getString("path")?.takeIf { it.isNotBlank() },
                     onBack = { navController.popBackStack() },
                 )
+            }
+        }
+        composable(Routes.GIT_REFLOG) { entry ->
+            val path = entry.arguments?.getString("projectPath")
+            if (path != null) {
+                GitReflogScreen(projectPath = path, onBack = { navController.popBackStack() })
             }
         }
         composable(Routes.GIT_STASH) { entry ->
