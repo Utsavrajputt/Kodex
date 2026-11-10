@@ -57,6 +57,7 @@ import com.invictus.kodex.ai.provider.ProviderRegistry
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -230,6 +231,26 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
     private val _rateLimit = MutableStateFlow<RateLimitInfo?>(null)
     /** Set while a 429 is being waited out; drives the countdown card. */
     val rateLimit: StateFlow<RateLimitInfo?> = _rateLimit.asStateFlow()
+    private var gitAnswer: CompletableDeferred<Boolean>? = null
+    private val _gitConfirm = MutableStateFlow<AgentGit.GitConfirm?>(null)
+    /** A git write the agent wants to do; the chat shows an Approve / Reject card until [answerGit]. */
+    val gitConfirm: StateFlow<AgentGit.GitConfirm?> = _gitConfirm.asStateFlow()
+
+    fun answerGit(ok: Boolean) {
+        gitAnswer?.complete(ok)
+    }
+
+    private suspend fun askGit(req: AgentGit.GitConfirm): Boolean {
+        val d = CompletableDeferred<Boolean>()
+        gitAnswer = d
+        _gitConfirm.value = req
+        try {
+            return d.await()
+        } finally {
+            _gitConfirm.value = null
+            gitAnswer = null
+        }
+    }
     private val _status = MutableStateFlow(AiStatus())
     val status: StateFlow<AiStatus> = _status.asStateFlow()
     private val _contextUsed = MutableStateFlow(0)
@@ -416,7 +437,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                     svgAllowed = { _messages.value.any { it.role == "user" && SVG_ASK.containsMatchIn(it.text) } },
                 )
                 val gitTools = if (File(root, ".git").exists()) {
-                    AgentGit(root, (app as com.invictus.kodex.KodexApp).container.gitGlobalIdentityFile, files)
+                    AgentGit(root, (app as com.invictus.kodex.KodexApp).container.gitGlobalIdentityFile, files, ::askGit)
                 } else null
                 val auto = prefs.autoApply.first()
                 val memoryOn = prefs.memoryEnabled.first()
@@ -469,6 +490,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
             } finally {
                 runner = null
                 _rateLimit.value = null
+                gitAnswer?.complete(false)
                 // Auto-apply: whatever was written (even if the turn was stopped or failed) can be undone from the bar.
                 val written = synchronized(turnUndo) { turnUndo.values.toList().also { turnUndo.clear() } }
                 if (written.isNotEmpty()) {

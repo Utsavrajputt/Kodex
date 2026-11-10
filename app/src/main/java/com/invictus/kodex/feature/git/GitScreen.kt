@@ -271,12 +271,6 @@ fun GitScreen(
                         Icon(XIcons.Sync, contentDescription = stringResource(R.string.git_fetch))
                     }
                     IconButton(
-                        onClick = { onOpenRoute(Routes.gitReflog(projectPath)) },
-                        enabled = state.snapshot?.hasCommits == true,
-                    ) {
-                        Icon(XIcons.Schedule, contentDescription = stringResource(R.string.git_reflog_open))
-                    }
-                    IconButton(
                         onClick = { viewModel.onEvent(GitEvent.OpenReset) },
                         enabled = state.snapshot?.hasCommits == true,
                     ) {

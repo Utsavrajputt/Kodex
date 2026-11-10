@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -177,13 +178,26 @@ fun OpenProjectSheet(
         }
         Column(modifier = Modifier.fillMaxWidth().then(heightModifier).imePadding()) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Box(
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        XIcons.FolderOpen,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = stringResource(R.string.sheet_title),
                         style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
                     )
                     if (showBrowse) {
                         Text(
@@ -667,8 +681,14 @@ private fun RecentRow(
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FileTypeIcon(name = file.name, isDirectory = true)
-            Spacer(Modifier.width(16.dp))
+            val accent = if (item.exists) projectColor(file.name) else MaterialTheme.colorScheme.outline
+            Box(
+                modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(accent.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(XIcons.Folder, contentDescription = null, tint = accent)
+            }
+            Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = if (item.isDeviceStorage) stringResource(R.string.workspace_root_internal) else file.name,

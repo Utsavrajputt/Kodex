@@ -18,7 +18,16 @@ class AgentGit(
     private val workTree: File,
     private val globalIdentityFile: File?,
     private val files: ProjectFiles,
+    /** Asked before every write (stage, unstage, discard, commit, tag); null means writes are refused. */
+    private val confirm: (suspend (GitConfirm) -> Boolean)? = null,
 ) {
+    /** What the user is asked to approve: a [title], the [lines] affected, and whether it loses work ([destructive]). */
+    data class GitConfirm(val title: String, val lines: List<String>, val destructive: Boolean = false)
+
+    private suspend fun approved(req: GitConfirm): Boolean = confirm?.invoke(req) ?: false
+
+    private fun declined() = AgentTools.Outcome("The user declined this action. Nothing was changed.", isError = true)
+
     private suspend fun <T> withSession(block: suspend (com.invictus.kodex.core.git.GitSession) -> T): T {
         val session = GitSessionRegistry.acquire(workTree, globalIdentityFile)
         try {
@@ -137,6 +146,8 @@ class AgentGit(
     /** Stages [paths] (or everything with [stageAll]) and commits locally. Never pushes. */
     suspend fun commit(message: String, paths: List<String>, stageAll: Boolean): AgentTools.Outcome = withSession { s ->
         if (message.isBlank()) return@withSession AgentTools.Outcome("Missing 'message'", isError = true)
+        val shown = if (stageAll) listOf("All changed files") else paths
+        if (!approved(GitConfirm("Commit locally?", listOf("Message: " + message.trim().lines().first()) + shown))) return@withSession declined()
         if (stageAll) {
             val status = s.status().orFail()
             status.changes.filterNot { files.isBlocked(it.repoRelativePath) }.forEach { c -> s.stage(c.repoRelativePath).orFail() }
@@ -159,7 +170,49 @@ class AgentGit(
 
     suspend fun tag(name: String, message: String?): AgentTools.Outcome = withSession { s ->
         if (name.isBlank()) return@withSession AgentTools.Outcome("Missing 'name'", isError = true)
+        if (!approved(GitConfirm("Create tag?", listOf(name.trim())))) return@withSession declined()
         s.createTag(name.trim(), message?.takeIf { it.isNotBlank() }).orFail()
         AgentTools.Outcome("Created tag ${name.trim()} on HEAD locally (not pushed).")
+    }
+
+    /** Stages [paths] or every change with [all]. */
+    suspend fun stage(paths: List<String>, all: Boolean): AgentTools.Outcome = withSession { s ->
+        val targets = if (all) s.status().orFail().changes.filterNot { files.isBlocked(it.repoRelativePath) }.map { it.repoRelativePath } else paths
+        if (targets.isEmpty()) return@withSession AgentTools.Outcome("Nothing to stage.")
+        targets.firstOrNull { files.isBlocked(it) }?.let { return@withSession AgentTools.Outcome("Blocked by the user's never-send list: $it", isError = true) }
+        if (!approved(GitConfirm("Stage ${targets.size} file(s)?", targets.take(20) + if (targets.size > 20) listOf("… and ${targets.size - 20} more") else emptyList()))) return@withSession declined()
+        targets.forEach { s.stage(it).orFail() }
+        AgentTools.Outcome("Staged ${targets.size} file(s).")
+    }
+
+    /** Unstages [paths] or everything with [all]; the working files are untouched. */
+    suspend fun unstage(paths: List<String>, all: Boolean): AgentTools.Outcome = withSession { s ->
+        val targets = if (all) s.status().orFail().changes.filter { it.staged != GitStageState.NONE }.map { it.repoRelativePath } else paths
+        if (targets.isEmpty()) return@withSession AgentTools.Outcome("Nothing is staged.")
+        if (!approved(GitConfirm("Unstage ${targets.size} file(s)?", targets.take(20) + if (targets.size > 20) listOf("… and ${targets.size - 20} more") else emptyList()))) return@withSession declined()
+        targets.forEach { s.unstage(it).orFail() }
+        AgentTools.Outcome("Unstaged ${targets.size} file(s).")
+    }
+
+    /** Throws away uncommitted changes in [paths] (or all with [all]); untracked files are deleted. Cannot be undone. */
+    suspend fun discard(paths: List<String>, all: Boolean): AgentTools.Outcome = withSession { s ->
+        val changes = s.status().orFail().changes.filterNot { files.isBlocked(it.repoRelativePath) }
+        val picked = if (all) changes else changes.filter { it.repoRelativePath in paths }
+        if (picked.isEmpty()) return@withSession AgentTools.Outcome("No matching changes to discard.", isError = true)
+        val lines = picked.take(20).map { (if (it.unstaged == GitWorkingState.UNTRACKED) "delete (untracked)  " else "revert  ") + it.repoRelativePath } +
+            if (picked.size > 20) listOf("… and ${picked.size - 20} more") else emptyList()
+        if (!approved(GitConfirm("Discard changes in ${picked.size} file(s)? This cannot be undone.", lines, destructive = true))) return@withSession declined()
+        picked.forEach { c -> s.discard(c.repoRelativePath, c.unstaged == GitWorkingState.UNTRACKED).orFail() }
+        AgentTools.Outcome("Discarded changes in ${picked.size} file(s).")
+    }
+
+    /** HEAD's reflog (every place HEAD has been), newest first. Read-only. */
+    suspend fun reflog(max: Int): AgentTools.Outcome = withSession { s ->
+        val list = s.reflog(max.coerceIn(1, 100)).orFail()
+        if (list.isEmpty()) return@withSession AgentTools.Outcome("The reflog is empty.")
+        AgentTools.Outcome(
+            "HEAD reflog (newest first; each line: new commit, previous commit, date, git's message):\n" +
+                list.joinToString("\n") { e -> "${e.shortNew} (was ${e.shortOld}) ${day(e.timeMs)}  ${e.message}" },
+        )
     }
 }

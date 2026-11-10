@@ -174,6 +174,7 @@ fun AgentChatContent(
     val error by vm.error.collectAsState()
     val failure by vm.failure.collectAsState()
     val rateLimit by vm.rateLimit.collectAsState()
+    val gitConfirm by vm.gitConfirm.collectAsState()
     val status by vm.status.collectAsState()
     val contextUsed by vm.contextUsed.collectAsState()
     val changes by vm.changes.collectAsState()
@@ -295,6 +296,26 @@ fun AgentChatContent(
         }
 
         Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            gitConfirm?.let { g ->
+                Surface(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                    color = if (g.destructive) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(g.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            g.lines.joinToString("\n"),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 10,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                            TextButton(onClick = { vm.answerGit(false) }) { Text("Reject") }
+                            Button(onClick = { vm.answerGit(true) }) { Text("Approve") }
+                        }
+                    }
+                }
+            }
             val rl = rateLimit
             if (rl != null) {
                 RateLimitCard(

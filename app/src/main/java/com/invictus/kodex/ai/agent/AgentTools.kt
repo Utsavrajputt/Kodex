@@ -201,6 +201,22 @@ class AgentTools(
                     required = listOf("message"),
                 ),
             ),
+            ToolSpec("git_reflog", "HEAD's reflog: every place HEAD has been (commits, switches, resets, merges), newest first. Use it to explain what happened or find a lost commit. Read-only.", schema("max" to int("How many entries (1-100, default 30)."))),
+            ToolSpec(
+                "git_stage",
+                "Stage files for the next commit. Only when the user asks. The user is asked to confirm.",
+                schema("paths" to strArray("Files to stage, relative to the project root."), "all_changes" to str("'true' to stage every changed file.")),
+            ),
+            ToolSpec(
+                "git_unstage",
+                "Unstage files (keeps the changes in the working files). Only when the user asks. The user is asked to confirm.",
+                schema("paths" to strArray("Files to unstage."), "all_changes" to str("'true' to unstage everything.")),
+            ),
+            ToolSpec(
+                "git_discard",
+                "PERMANENTLY discard uncommitted changes in files (untracked files are deleted). Only when the user clearly asks. The user is asked to confirm. Cannot be undone, so read git_status first and name the exact files.",
+                schema("paths" to strArray("Files whose changes to discard."), "all_changes" to str("'true' to discard every uncommitted change.")),
+            ),
             ToolSpec(
                 "git_tag",
                 "Create a LOCAL annotated tag on the current commit (for example v3.0.0). Only when the user asks. Never pushes.",
@@ -279,6 +295,10 @@ class AgentTools(
             "git_tags" -> "Reading git tags"
             "git_commit" -> "Committing changes"
             "git_tag" -> "Tagging ${a.optString("name")}"
+            "git_reflog" -> "Reading git reflog"
+            "git_stage" -> "Staging files"
+            "git_unstage" -> "Unstaging files"
+            "git_discard" -> "Discarding changes"
             "generate_image" -> "Generating image" + a.optString("title").takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
             "render_svg" -> "Drawing SVG" + a.optString("title").takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
             "trace_image" -> "Tracing image" + a.optString("title").takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
@@ -294,6 +314,8 @@ class AgentTools(
     } catch (e: Exception) {
         err("Tool failed: ${e.message}")
     }
+
+    private fun pathList(a: JSONObject): List<String> = a.optJSONArray("paths")?.let { arr -> (0 until arr.length()).map { arr.optString(it) } }.orEmpty()
 
     private suspend fun run(call: ToolCall): Outcome = when (call.name) {
         "list_files" -> listFiles(call.args)
@@ -318,6 +340,10 @@ class AgentTools(
             call.args.optJSONArray("paths")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(),
             call.args.optString("all_changes").equals("true", true),
         ) ?: err("This project is not a git repository")
+        "git_reflog" -> git?.reflog(call.args.optInt("max", 30)) ?: err("This project is not a git repository")
+        "git_stage" -> git?.stage(pathList(call.args), call.args.optString("all_changes").equals("true", true)) ?: err("This project is not a git repository")
+        "git_unstage" -> git?.unstage(pathList(call.args), call.args.optString("all_changes").equals("true", true)) ?: err("This project is not a git repository")
+        "git_discard" -> git?.discard(pathList(call.args), call.args.optString("all_changes").equals("true", true)) ?: err("This project is not a git repository")
         "git_tag" -> git?.tag(call.args.optString("name"), call.args.optString("message")) ?: err("This project is not a git repository")
         "generate_image" -> images?.generate(call.args) ?: err("Image tools are not available")
         "render_svg" -> images?.renderSvg(call.args) ?: err("Image tools are not available")
