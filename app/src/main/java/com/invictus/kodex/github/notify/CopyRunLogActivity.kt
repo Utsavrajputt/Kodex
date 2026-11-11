@@ -1,9 +1,11 @@
 package com.invictus.kodex.github.notify
 
+import android.content.Context
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.lifecycle.lifecycleScope
 import com.invictus.kodex.KodexApp
 import com.invictus.kodex.R
 import com.invictus.kodex.github.api.GhRepoRef
@@ -11,11 +13,16 @@ import com.invictus.kodex.github.api.GitHubError
 import com.invictus.kodex.github.data.LogFiles
 import com.invictus.kodex.github.ui.ClipboardHelper
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 /**
- * Target of the failed-build notification's "Copy error" / "Copy log" buttons. Fetches the run's log, puts the text on
- * the clipboard, says so in a toast and closes at once. No UI of its own (see-through, not kept in recents).
+ * Target of the failed-build notification's "Copy error" / "Copy log" buttons. It has no window at all (NoDisplay) and
+ * closes in onCreate, so it can never sit over the screen and swallow touches or flash. The log is fetched, trimmed and
+ * copied on a background thread; only the clipboard write and the toasts touch the main thread.
  */
 class CopyRunLogActivity : ComponentActivity() {
 
@@ -26,28 +33,33 @@ class CopyRunLogActivity : ComponentActivity() {
         val runId = intent.getLongExtra(EXTRA_RUN_ID, 0L)
         val number = intent.getIntExtra(EXTRA_NUMBER, 0)
         val mode = intent.getStringExtra(EXTRA_MODE) ?: MODE_ERROR
-        if (owner == null || name == null || runId == 0L) { finish(); return }
+        val app = application as KodexApp
+        finish()
+        overridePendingTransition(0, 0)
+        if (owner == null || name == null || runId == 0L) return
 
-        toast(getString(R.string.gh_copy_working))
-        lifecycleScope.launch {
-            try {
-                val repo = (application as KodexApp).container.gitHubRepository(GhRepoRef(owner, name))
+        toast(app, app.getString(R.string.gh_copy_working))
+        scope.launch {
+            val msg = try {
+                val repo = app.container.gitHubRepository(GhRepoRef(owner, name))
                 val run = repo.run(runId)
                 val text = if (mode == MODE_LOG) fullRunLog(repo, run) else errorText(repo, run)
-                if (text.isBlank()) { toast(getString(R.string.gh_copy_nothing)); return@launch }
-                // A very large clip can be refused by the system: retry smaller before giving up.
-                val ok = ClipboardHelper.copy(this@CopyRunLogActivity, "Build #$number", text)
-                    || ClipboardHelper.copy(this@CopyRunLogActivity, "Build #$number", text.takeLast(100_000))
-                toast(getString(if (ok) (if (mode == MODE_LOG) R.string.gh_copy_log_done else R.string.gh_copy_error_done) else R.string.gh_notif_copy_failed))
+                if (text.isBlank()) R.string.gh_copy_nothing else {
+                    // A very large clip can be refused by the system: retry smaller before giving up.
+                    val ok = withContext(Dispatchers.Main) {
+                        ClipboardHelper.copy(app, "Build #$number", text) ||
+                            ClipboardHelper.copy(app, "Build #$number", text.takeLast(100_000))
+                    }
+                    if (ok) (if (mode == MODE_LOG) R.string.gh_copy_log_done else R.string.gh_copy_error_done) else R.string.gh_notif_copy_failed
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: GitHubError) {
-                toast(getString(R.string.gh_copy_fetch_failed))
+                R.string.gh_copy_fetch_failed
             } catch (e: Exception) {
-                toast(getString(R.string.gh_notif_copy_failed))
-            } finally {
-                finish()
+                R.string.gh_notif_copy_failed
             }
+            toast(app, app.getString(msg))
         }
     }
 
@@ -78,9 +90,13 @@ class CopyRunLogActivity : ComponentActivity() {
         return out.toString().trim()
     }
 
-    private fun toast(msg: String) = Toast.makeText(applicationContext, msg, Toast.LENGTH_SHORT).show()
+    private fun toast(ctx: Context, msg: String) {
+        Handler(Looper.getMainLooper()).post { Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show() }
+    }
 
     companion object {
+        /** Outlives the (already closed) activity so the copy finishes after it is gone. */
+        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         const val EXTRA_OWNER = "owner"
         const val EXTRA_REPO = "repo"
         const val EXTRA_RUN_ID = "run_id"

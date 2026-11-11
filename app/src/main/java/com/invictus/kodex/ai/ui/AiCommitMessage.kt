@@ -3,7 +3,14 @@ package com.invictus.kodex.ai.ui
 import android.app.Application
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -190,112 +197,73 @@ fun CommitMessageAi(
 
     ModalBottomSheet(onDismissRequest = { open = false }) {
         Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp) // Extra padding for bottom sheet notch
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // Header with Handle-like look
-            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+            // Title + the "replace the commit box" switch share one line.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(XIcons.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(10.dp))
                 Text(
                     stringResource(R.string.ai_commit_generate_commit_message),
-                    style = MaterialTheme.typography.titleLarge
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    stringResource(R.string.ai_commit_replace_short),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(6.dp))
+                Switch(
+                    checked = replace,
+                    onCheckedChange = { replace = it; scope.launch { prefs.setCommitReplace(it) } },
                 )
             }
-
-            Column(
-                Modifier
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-            ) {
-                // Style Chips
-                Row(Modifier.padding(vertical = 8.dp)) {
-                    CommitMessageTask.Style.entries.forEach { s ->
-                        FilterChip(
-                            selected = style == s,
-                            onClick = {
-                                style = s
-                                scope.launch { prefs.setCommitStyle(s.name) }
-                                if (generatedOnce && !busy) generate(fill = false)
-                            },
-                            label = { Text(s.label) },
-                            modifier = Modifier.padding(end = 8.dp),
-                        )
-                    }
-                }
-
-                // Replace Switch
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            stringResource(R.string.ai_commit_replace_title),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        Text(
-                            stringResource(if (replace) R.string.ai_commit_replace_on else R.string.ai_commit_replace_off),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = replace,
-                        onCheckedChange = { replace = it; scope.launch { prefs.setCommitReplace(it) } },
-                    )
-                }
-
-                // Action Button
-                Button(
-                    onClick = { generate(fill = false) },
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                ) {
-                    Text(
-                        if (busy) stringResource(R.string.ai_commit_generating)
-                        else if (generatedOnce) stringResource(R.string.ai_chat_regenerate)
-                        else stringResource(R.string.ai_commit_generate)
-                    )
-                }
-
-                error?.let {
-                    Text(
-                        it,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(vertical = 4.dp),
-                    )
-                }
-
-                if (message.isNotEmpty()) {
-                    OutlinedTextField(
-                        value = message,
-                        onValueChange = { message = it },
-                        label = { Text(stringResource(R.string.ai_commit_commit_message_editable)) },
-                        minLines = 3,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                    )
-
-                    Button(
-                        onClick = { put(message); open = false },
-                        enabled = message.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(stringResource(R.string.ai_commit_use_message))
-                    }
-
-                    Spacer(Modifier.padding(4.dp))
-                    Text(
-                        stringResource(R.string.ai_commit_fills_the_commit_box_only),
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(bottom = 16.dp)
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CommitMessageTask.Style.entries.forEach { s ->
+                    FilterChip(
+                        selected = style == s,
+                        onClick = {
+                            style = s
+                            scope.launch { prefs.setCommitStyle(s.name) }
+                            if (generatedOnce && !busy) generate(fill = false)
+                        },
+                        label = { Text(s.label) },
                     )
                 }
             }
+            // The message is always on screen (empty until generated) so the sheet never jumps around.
+            Column {
+                OutlinedTextField(
+                    value = message,
+                    onValueChange = { message = it },
+                    label = { Text(stringResource(R.string.ai_commit_commit_message_editable)) },
+                    placeholder = { Text(if (busy) stringResource(R.string.ai_commit_generating) else stringResource(R.string.ai_commit_generate)) },
+                    isError = error != null,
+                    supportingText = error?.let { e -> { Text(e) } },
+                    minLines = 4,
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp).clip(CircleShape))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = { generate(fill = false) }, enabled = !busy, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(if (generatedOnce) R.string.ai_chat_regenerate else R.string.ai_commit_generate))
+                }
+                Button(
+                    onClick = { put(message); open = false },
+                    enabled = message.isNotBlank() && !busy,
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(R.string.ai_commit_use_message)) }
+            }
+            Text(
+                stringResource(if (replace) R.string.ai_commit_replace_on else R.string.ai_commit_replace_off),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

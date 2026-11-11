@@ -952,6 +952,7 @@
     <string name="ai_commit_generating">Generating…</string>
     <string name="ai_commit_use_message">Use message</string>
     <string name="ai_commit_replace_title">Replace commit message</string>
+    <string name="ai_commit_replace_short">Replace</string>
     <string name="ai_commit_replace_on">The AI message replaces what is in the commit box.</string>
     <string name="ai_commit_replace_off">The AI message is added after what is in the commit box.</string>
     <string name="ai_comp_a_custom_model_id_is">A custom model id is set in Settings. Picking a model here clears it.</string>

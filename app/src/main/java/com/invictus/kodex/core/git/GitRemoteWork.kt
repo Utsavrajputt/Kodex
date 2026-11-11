@@ -86,10 +86,17 @@ object GitRemoteWork {
 
     internal fun isIdle(): Boolean = synchronized(lock) { active.isEmpty() }
 
-    /** A short result notice for an operation that finished while the app was not on screen. */
+    /** A short result for an operation that finished while the app was not on screen: a toast on success, a notification on failure. */
     fun notifyDone(@StringRes text: Int, project: String, ok: Boolean) {
         val ctx = appContext ?: return
         if (AppVisibility.visible) return
+        if (ok) {
+            // Success is just a toast; only a failure deserves a notification that stays.
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(ctx, ctx.getString(text, project), android.widget.Toast.LENGTH_LONG).show()
+            }
+            return
+        }
         ensureChannels(ctx)
         val n = NotificationCompat.Builder(ctx, CHANNEL_RESULT)
             .setSmallIcon(if (ok) R.drawable.ic_stat_check else R.drawable.ic_stat_error)
