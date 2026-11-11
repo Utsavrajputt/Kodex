@@ -11,10 +11,16 @@
 </p>
 
 > [!NOTE]
-> **Kodex 1.2.0 is out — now with an AI assistant and a GitHub Manager.** Grab the APK for your phone
+> **Kodex 1.3.0 is out — a Tools hub, git-aware AI and background-safe git actions.** Grab the APK for your phone
 > from the [latest release](https://github.com/Utsavrajputt/Kodex/releases/latest) — see
 > [APK variants](#-apk-variants) if you're not sure which one — and read what's new in
 > [CHANGELOG.md](CHANGELOG.md).
+
+> [!IMPORTANT]
+> **⏸️ Development is paused for about six months** (until roughly **May 2027**). 1.3.0 is the last planned feature release before the break. Kodex stays fully usable — new features and non-critical fixes will wait, and issue replies may be slow.
+
+> [!WARNING]
+> **🛡️ Google Play Protect may say "Harmful app blocked" when you install Kodex.** It is a false positive (Kodex is installed from GitHub, not the Play Store, and it can install APKs — always with your confirmation). See [Installing & Play Protect](#-installing--play-protect) for the 4-step fix.
 
 <p align="center">
   <img src="https://img.shields.io/badge/Platform-Android%2011%2B-brightgreen.svg" />
@@ -54,6 +60,8 @@ Closed-source editors cover this niche already. Kodex is an open, from-scratch t
 matters on a phone: **editing code and managing it with Git**. Building and running is deliberately
 left to GitHub Actions or a PC — that is a different (and much heavier) problem.
 
+**What's new in 1.3.0** — a **Tools hub** (keystore generator, file splitter, image tracer), an AI that can **read and operate Git with your approval**, a plain-language **Reflog** screen, **hunk-only diff editing**, and **push / pull / fetch that keep running** when you leave the app. Full list in the [changelog](CHANGELOG.md).
+
 ---
 
 ## ✨ Features
@@ -70,6 +78,7 @@ left to GitHub Actions or a PC — that is a different (and much heavier) proble
 | **Open Project sheet** | Search, type a path by hand, or browse folders with editable shortcuts |
 | **Recent projects** | Home and *All projects* lists with search and sort. Per-project menu: **pin to top**, **rename**, **delete** (with confirmation), **project info** (size, files, last modified/opened, Git branch), copy path, remove from recents |
 | **Backup as ZIP** | One-tap project backup from the recents menu |
+| **Tools hub** | Keystore & secrets, File splitter and Image tracer live under *Tools* on Home (see [Tools](#-tools)) |
 | **Pinned files** | Pin files and folders to the top of a project's tree |
 | **Long names** | The file tree scrolls sideways only while a name is wider than the screen (Settings → Workspace → *Scroll long file names*, on by default) |
 | **Safety** | Binary/large-file open warning, hidden-files toggle, and device root, Documents and Downloads can never be deleted from the app |
@@ -86,6 +95,7 @@ left to GitHub Actions or a PC — that is a different (and much heavier) proble
 | **Editing** | Find/replace (case, whole word, regex), go to line, undo/redo, auto-indent, bracket matching, word wrap, font zoom |
 | **Autocomplete** | Keyword and word based — no language server needed |
 | **Symbol bar** | Customisable, add/remove/reorder |
+| **Magnifier** | The zoom bubble shown while dragging the cursor can be turned off (Settings → Editing → *Magnifier*) |
 | **Quick actions** | Duplicate/delete/move line, comment toggle, select line |
 | **External changes** | "Reload / keep my edits" prompt when a file changes outside the app |
 | **Large files** | Paged loading with a read-only fallback |
@@ -106,6 +116,9 @@ left to GitHub Actions or a PC — that is a different (and much heavier) proble
 | **Merge & cherry-pick** | Fast-forward and normal merge, cherry-pick from history |
 | **Conflicts** | Inline accept ours/theirs/both, abort or complete the merge |
 | **Stash & tags** | Save/list/apply/pop/drop and tag list/create/delete |
+| **Reflog** | Plain-language list of everywhere HEAD has been (commit, amend, checkout, merge, reset…), opened from the Stash screen; tap an entry to **go back to that point** with Soft / Mixed / Hard reset |
+| **Hunk-only edit** | *Edit* in a diff opens just the changed hunks with a little context; the rest of the file is folded and spliced back on save |
+| **Background network ops** | Push, pull and fetch keep running behind a foreground service when you leave the screen or the app — a toast on success, a notification on failure |
 | **Guided onboarding** | Step-by-step wizard: init → identity → remote → first commit → upstream (skippable) |
 | **Multi-remote** | Per-remote token manager; tokens live in an AES/GCM vault backed by the Android Keystore |
 | **GitHub settings** | Per-host token and profile management |
@@ -122,6 +135,7 @@ Not planned: GPG commit signing, submodules, SSH auth.
 | **Preview** | Markdown (theme toggle), HTML (split mode, JS off by default), SVG, images and video as in-editor tabs |
 | **Vector XML preview** | Any `.xml` with a `<vector>` root gets the same Editor / Split / Preview toggle. Live render (groups, clip-paths, strokes, alpha), light/dark canvas switch, and **PNG**, **SVG** and **Copy SVG** buttons — exports land in `Downloads/` |
 | **File search** | Fuzzy filename match, recents, extension/folder filters. Long-press a result for **Show in tree** |
+| **Result actions** | Long-press a file-name result (also in the Workspace search box) for the file-tree menu: Show in tree, Pin, Cut, Copy, Rename, Duplicate, Paste, Copy path, Delete |
 | **Code search** | Whole-workspace content search with regex/case/whole word and streamed, grouped results. Long-press a file for *Locate in file tree* or **Exclude this file** (saved per project, restorable from the *Excluded files* list) |
 | **Search history** | Separate history for file and code search |
 
@@ -142,6 +156,10 @@ Open it from the workspace menu. It reuses the token you already saved for Git �
 | **Artifacts & deployments** | Install, save to a folder or delete |
 | **Cleanup** | Runs, deployments and artifacts with filters and a preview; rate-limit-aware, keeps going in the background, never preselects the newest successful build |
 | **Notifications** | Live progress and results for downloads, installs, cleanup and workflow dispatch, plus build notifications that open the run |
+| **Download controls** | **Pause / Resume / Cancel** on the APK download notification; pause keeps the partial file and resume continues from it |
+| **Copy error / log** | Failed-build notifications have *Copy error* and *Copy log* buttons that work without opening the app |
+| **New repository & clone** | Create a repository and clone it automatically; switch the upstream for forks; background clone with a live, cancellable notification |
+| **Account** | Export / import your personal access token and manage the GitHub account in one screen |
 
 </details>
 
@@ -158,11 +176,26 @@ turning it off hides every AI entry point and disables every AI route.
 | **Chat** | Markdown and code blocks, `@file` mentions, photo attachments, per-project history with rename, model picker in the composer, thinking summaries |
 | **Inline edit** | Selection → *Edit with AI* → search/replace proposal → per-hunk diff review → single-undo-step apply with stale-file protection |
 | **Explain** | Explain a selection, a diff (commit detail + diff review) or an error (run log, diagnostics) with an optional reviewed fix patch |
-| **Commit messages** | One tap in your saved style; long-press for style settings |
+| **Commit messages** | One tap in your saved style; long-press for the style (Normal / Shorter / Longer / Conventional) and a **Replace** switch. Picks a type (feat, fix, chore, perf…), covers staged, unstaged and untracked changes, and sends a compact, redacted diff for speed |
+| **Git tools** | The agent can read status, history, commit diffs, tags and the **reflog**, and — only when you ask — **stage, unstage, discard, commit and tag**. Every write shows an **Approve / Reject** card; discard is marked destructive; it never pushes, resets or checks out |
+| **File operations** | Move, copy, create/delete folders and extract archives, all reviewed before anything is applied |
 | **Images** | AI image and app-icon generation |
 | **Memory & instructions** | Per-project `.kodex/memory.md` and `.kodex/instructions.md`, plus global custom instructions |
 | **Usage & limits** | Daily/monthly requests and tokens per model, custom daily limits, clear rate-limit handling |
 | **Privacy** | Secret redaction and exclusion globs; diagnostics logs redact AI and git tokens |
+
+</details>
+
+<details>
+<summary><b>🧰 Tools</b></summary>
+
+<a id="-tools"></a>
+
+| Feature | Description |
+|---|---|
+| **Keystore & secrets** | Generate JKS / PKCS12 keystores with preset and custom secrets (multi-select), copy or save the public key, plus a public-key finder (RSA / Ed25519) and a **Morphe** Ed25519 signing-key generator |
+| **File splitter** | Split a file or a whole project folder (zipped on the fly) into parts of a chosen size; already-compressed types are stored without recompressing |
+| **Image tracer** | Native VTracer (Rust) turns raster images into SVG pixel-exactly, with size chips, an auto mode and cancellable jobs; the AI agent can use it too |
 
 </details>
 
@@ -194,6 +227,7 @@ turning it off hides every AI entry point and disables every AI route.
 | Networking | OkHttp (GitHub API, AI providers) |
 | Storage | Room (recent projects, pins, search history), DataStore (settings) |
 | Token security | Android Keystore (AES/GCM) |
+| Native | Rust ([VTracer](https://github.com/visioncortex/vtracer)) via JNI for the image tracer |
 | Images | Coil |
 
 ---
@@ -204,24 +238,28 @@ turning it off hides every AI entry point and disables every AI route.
 app/src/main/java/com/invictus/kodex/
  ├─ core/
  │   ├─ fs/          # file operations, directory/external-change watchers, storage permission
- │   ├─ git/         # JGit session, auth, cloner, conflict parser
+ │   ├─ git/         # JGit session, auth, cloner, conflict parser, background remote work
  │   ├─ github/      # GitHub profile + contributors lookups
  │   ├─ backup/      # settings export / import
  │   ├─ editor/      # tab buffers, language registry, TextMate + editor settings
  │   ├─ preview/     # preview helpers
  │   ├─ search/      # fuzzy file search, code search, search history
  │   ├─ project/     # recents + pins repository, ZIP backup
+│   ├─ archive/     # zip / split / extract helpers
+│   ├─ tracer/      # native image tracer bindings + session
  │   ├─ security/    # per-remote token vault
  │   ├─ data/        # Room database, DAOs, entities
  │   └─ diagnostics/ # crash + Git logs
- ├─ ai/              # providers, agent, chat + editor AI UI, memory, usage
+ ├─ ai/              # providers, agent (incl. git tools), chat + editor AI UI, memory, usage
  ├─ github/          # Actions runs, run logs, APK download/install, cleanup, notifications
  ├─ feature/
  │   ├─ home/        # home, all-projects list, project card menu
  │   ├─ project/     # Open Project sheet
  │   ├─ workspace/   # file tree, workspace screen
  │   ├─ editor/      # tabs, editor screen, find/replace, symbol bar
- │   ├─ git/         # status, commit, branches, diff, history, stash, remotes, onboarding
+ │   ├─ git/         # status, commit, branches, diff, history, stash, reflog, remotes, onboarding
+ │   ├─ tools/       # keystore, file splitter, image tracer
+ │   ├─ archive/     # archive extract screens
  │   ├─ preview/     # Markdown / HTML / SVG / image / video
  │   ├─ search/      # file search overlay, code search screen
  │   ├─ settings/    # appearance, editor, workspace, GitHub, AI, advanced, about + libraries
@@ -248,6 +286,32 @@ can actually use:
 | `kodex-<tag>-universal.apk` | Both ARM ABIs in one file — larger, use it if you're unsure |
 
 x86 / x86_64 builds are intentionally not produced.
+
+---
+
+## 📲 Installing & Play Protect
+
+1. Download the APK that fits your phone from the [latest release](https://github.com/Utsavrajputt/Kodex/releases/latest) (see [APK variants](#-apk-variants)).
+2. Open it and allow *Install unknown apps* for your browser / file manager when Android asks.
+3. Optionally compare the file's **SHA-256** with the checksums at the bottom of the release page.
+
+### If Google Play Protect blocks it ("Harmful app blocked")
+
+Kodex is not on the Play Store and it can install other APKs (your own GitHub builds). Play Protect's automatic scan sometimes reacts to that with *"This app can install potentially harmful apps without your permission"*. It is a **false positive** — Kodex always asks you to confirm every install and never installs silently. To install anyway:
+
+1. Open the **Google Play Store** → tap your **profile picture** → **Play Protect** → the **⚙ settings** icon.
+2. Turn **off** *Scan apps with Play Protect* (and *Improve harmful app detection* if it is on).
+3. Install the Kodex APK again.
+4. Turn Play Protect scanning back **on**.
+
+If the warning shows **More details → Install anyway**, you can use that instead. Updating from an older Kodex build signed with the same key works the same way.
+
+---
+
+## ⏸️ Project status
+
+> [!IMPORTANT]
+> Active development is **paused for about six months** (until roughly May 2027). Kodex 1.3.0 is the last planned feature release before the break. Existing features keep working; new features and non-critical fixes will wait, and issue replies may be slow.
 
 ---
 
@@ -291,9 +355,9 @@ to `main` runs `.github/workflows/android-build.yml` and uploads the signed APKs
 Two tag-triggered workflows build signed APKs and publish them to GitHub Releases, with SHA-256
 checksums and notes pulled from `CHANGELOG.md`:
 
-- **`.github/workflows/release.yml`** — stable releases, tags matching `vX.Y.Z` (e.g. `v1.2.0`, the current release). The tag must start with a **lowercase** `v` — `V1.2.0` neither triggers the workflow nor passes `version-from-tag.sh`.
+- **`.github/workflows/release.yml`** — stable releases, tags matching `vX.Y.Z` (e.g. `v1.3.0`, the current release). The tag must start with a **lowercase** `v` — `V1.3.0` neither triggers the workflow nor passes `version-from-tag.sh`.
 - **`.github/workflows/prerelease.yml`** — pre-releases, tags matching `vX.Y.Z-suffix` (e.g.
-  `v1.2.0-beta.1`, `v1.2.0-rc.2`). The GitHub Release is flagged **Pre-release** automatically.
+  `v1.3.0-beta.1`, `v1.3.0-rc.2`). The GitHub Release is flagged **Pre-release** automatically.
 
 Both fail if any signing secret is missing — a release is never published unsigned.
 
@@ -305,12 +369,12 @@ To cut a release:
 
    ```bash
    # stable
-   git tag v1.2.0
-   git push origin v1.2.0
+   git tag v1.3.0
+   git push origin v1.3.0
 
    # pre-release
-   git tag v1.2.0-beta.1
-   git push origin v1.2.0-beta.1
+   git tag v1.3.0-beta.1
+   git push origin v1.3.0-beta.1
    ```
 
 3. The matching job publishes the GitHub Release with all three APKs attached.

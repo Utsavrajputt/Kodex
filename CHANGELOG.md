@@ -8,6 +8,95 @@ stable releases.
 When cutting a release, add a `## [x.y.z] - YYYY-MM-DD` section for it; the release workflows
 pick the matching section as the GitHub Release notes.
 
+## [1.3.0] - 2026-11-11
+
+**Git, Tools & background-work release.** A full Tools hub (keystore generator, file splitter, image tracer), a much smarter and safer AI that can work with git, a Reflog screen, and Git network actions that keep running when you leave the app.
+
+> [!IMPORTANT]
+> **⏸️ Development is paused for about six months** (until roughly **May 2027**). 1.3.0 is the last planned feature release before the break. Kodex stays fully usable — new features and non-critical fixes will wait, and issue replies may be slow.
+
+> [!WARNING]
+> **🛡️ Google Play Protect may block the install ("Harmful app blocked")**
+>
+> Kodex is installed from a GitHub Release, not from the Play Store, and it can install other APKs (for example your own builds from the GitHub screen). Play Protect's automatic scan sometimes flags such apps with *"This app can install potentially harmful apps without your permission"*. That is a **false positive** — Kodex always asks you to confirm every install, and it never installs anything silently. If you see it, install like this:
+> 1. Open the **Google Play Store** → tap your **profile picture** → **Play Protect** → the **⚙ settings** icon.
+> 2. Turn **off** *Scan apps with Play Protect* (and *Improve harmful app detection* if it is on).
+> 3. Install the Kodex APK again (open the downloaded file, or install from the **Kodex GitHub screen**).
+> 4. Turn Play Protect scanning back **on** afterwards.
+>
+> If the warning has a **More details → Install anyway** option, you can use that instead. To be sure the file is genuine, compare its SHA-256 with the checksums listed at the bottom of this release. Updating from an older Kodex build with the same signing key works the same way.
+
+### ✨ Highlights
+- 🧰 **Tools hub** — Keystore & secrets, File splitter and the native Image tracer in one place.
+- 🤖 **AI that understands git** — the agent reads history, the reflog and diffs, and can stage, unstage, discard and commit after you approve each action.
+- 🕘 **Reflog screen** — a plain-language list of where HEAD has been, with a one-tap "go back to this point".
+- 📡 **Push / pull / fetch keep going** — they finish even if you leave the screen or the app.
+- 📝 **Better AI commit messages** — Conventional-Commit types, unstaged and untracked files, and a Replace-or-fill switch.
+- ✏️ **Edit only what changed** — the Git diff editor opens just the changed hunks.
+
+### ✨ Added
+
+#### 🧰 Tools
+- 🔑 **Keystore generator** — create JKS / PKCS12 keystores with preset and custom secrets, select several secret chips at once, and copy or save the public key of a generated keystore.
+- 🪪 **Public-key finder** (RSA / Ed25519) in a bottom sheet, with copy and save.
+- 🔐 **Morphe signing-key generator** (Ed25519) inside Keystore & secrets.
+- ✂️ **File splitter** — split a file, or a whole project folder zipped on the fly, into parts of a size you choose. Already-compressed file types are stored without recompressing, with larger buffers for speed.
+- 🖼️ **Image tracer** — native VTracer, pixel-exact, with size chips, an **auto** mode (picks quality and colours) and cancellable jobs; no-op retraces are skipped. The AI agent can call it through `trace_image`.
+- 🏠 Tools replace the old APKs screen as the Home entry point.
+
+#### 🌿 Git
+- 🕘 **Reflog** — open it from the Stash screen. Each entry says in plain words what happened (commit, amend, checkout, merge, rebase, reset…), when it happened and how HEAD moved. Tap an entry to **go back to that point** with Soft / Mixed / Hard reset (with confirmation) or copy its id.
+- ✏️ **Hunk-only editing** — *Edit* in a diff opens only the changed lines with a little context. The rest of the file is folded into read-only markers and spliced back in on save.
+- 📡 **Background push / pull / fetch** — see *Changed*.
+- 🧩 Commit **line stats** (+ / −) in history, and an editable conflict result with scroll-and-highlight.
+- 📜 Pasted scripts can use `git rm` / `rm`.
+
+#### 🤖 AI
+- 🛠️ **Git tools for the agent** — read: `git_status`, `git_log` (with `since='last_tag'`), `git_show`, `git_diff`, `git_tags`, `git_reflog`. Write: `git_stage`, `git_unstage`, `git_discard`, `git_commit`, `git_tag`. Nothing ever pushes, resets or checks out.
+- ✅ **Approval cards** — every git write shows an **Approve / Reject** card in the chat listing exactly what will happen. Discard is marked destructive (untracked files are listed as deleted). Rejecting or stopping the run means the action is not retried.
+- 🔒 Paths on your **never-send list** are skipped by every git tool and are never staged.
+- 📂 **File operations** — the agent can move, copy, create and delete folders and extract archives; all of it goes through the same review before anything touches disk.
+- 💬 **AI commit message sheet** — tap to generate; long-press for the style (Normal / Shorter / Longer / Conventional) and the **Replace** switch that overwrites the commit box instead of only filling an empty one. Messages get a type prefix (feat, fix, chore, perf, refactor, docs…) chosen by the AI, and unstaged and untracked files are covered too. The sheet is redesigned: a compact layout with an always-visible, editable message box and Regenerate / Use side by side.
+- 🧠 Higher output limits so long messages are no longer cut off.
+
+#### 🐙 GitHub
+- ⏯️ **Download controls** — Pause / Resume / Cancel buttons on the APK download notification. Pause keeps the partial file; Resume continues from where it stopped.
+- 📋 **Copy error / Copy log** on the failed-build notification.
+- 🔑 **GitHub account screen** — export and import your personal access token, and manage the account in one place.
+- 🌱 **New repository flow** — create a repository and clone it automatically; switch the upstream repository for forks.
+- 🗂️ **Clone** — workflow-style cards, a background clone through the manager and a foreground service, a live notification with Cancel, and a remembered parent folder.
+- ⏱️ Build notification shows an elapsed-time chronometer.
+- 💾 Project backup action.
+
+#### 🧭 Workspace & editor
+- 🔍 **Search results menu** — long-press a file in the file-name search for the same actions as the file tree (Show in tree, Pin, Cut, Copy, Rename, Duplicate, Paste, Copy path, Delete).
+- 🧲 **Magnifier switch** — Settings → Editing → *Magnifier* turns off the zoom bubble that appears while dragging the cursor or selection handles.
+- 🎨 The Home hero art is tinted to the selected theme; recent projects use coloured folder tiles that match the Home cards.
+
+### 🔄 Changed
+- 📡 **Remote git work is background-safe** — push, pull and fetch run in an app-wide scope behind a foreground service, so leaving the screen or the app no longer stops them. On success you get a short toast; on failure a notification stays until you dismiss it.
+- ⚡ **Faster AI commit messages** — the model gets a compact, redacted diff (file list plus trimmed hunks; lock files, minified and binary files are listed only) and tighter output limits, and the work runs off the main thread.
+- 🏷️ **Release-tag check** (`v1.2.0` format, suggestions, pre-fill) now applies only to *release* workflows; any other workflow with a `tag` input takes whatever you type.
+- 🪟 **Recent projects** sheet has a plain text title and no extra section label; the image tracer shows the file name on its own line so it is not cut off.
+- 🧭 The Git screen top bar is lighter: the Reflog shortcut lives on the Stash screen.
+- 🧹 **Pull requests and issues were removed** from the GitHub Manager (and their AI summaries).
+- 🖱️ Several GitHub and editor settings screens were reorganised.
+
+### 🐞 Fixed
+- 🔄 The Cleanup sheet no longer jitters up and down while scrolling (leftover scroll from inner lists dragged the sheet).
+- 🔎 **Search jump** — opening a result now always scrolls to the match and highlights it, even if the editor was not on screen yet.
+- 📌 *Edit* on a changed file no longer jumps the view back to the top.
+- 📋 **Copy error / Copy log** no longer freezes the screen or flashes a window: it has no window, finishes at once, and does the work in the background.
+- 🧩 The merge message no longer includes the leftover *Conflicts* list; build "ago" text is consistent and ticks live, and runs refresh on resume.
+- 🖼️ **Stale APK card** after a build completes.
+- ⌨️ Editor scrolling and multi-select on keystore chips.
+
+### 🛠️ Technical
+- New `GitRemoteWork` (app scope + foreground service) and `DownloadActionReceiver` (notification actions, process-wide `ActiveDownloads` handlers).
+- `CommitDiffCompactor`, `GitDiffHunkEditor`, `GitReflogScreen` and the native `TraceSession` (cached session, cancel token).
+- Pending editor jumps are stored on the tab buffer and applied once the view has a size.
+- Network git operations hold their own repository reference so they survive ViewModel clearing.
+
 ## [1.2.0] - 2026-10-14
 
 **AI & GitHub release.** Kodex is rebranded, gains a native AI agent that works with any provider (Claude, OpenAI, Gemini, OpenRouter, Groq, DeepSeek and more, or your own endpoint) with multi-file editing, and a GitHub Manager that runs workflows and installs your latest build.
