@@ -16,6 +16,7 @@ import io.github.rosemoe.sora.event.ScrollEvent
 import io.github.rosemoe.sora.event.SelectionChangeEvent
 import io.github.rosemoe.sora.widget.CodeEditor
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion
+import io.github.rosemoe.sora.widget.component.Magnifier
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
 import io.github.rosemoe.sora.widget.schemes.SchemeDarcula
 import kotlinx.coroutines.flow.SharedFlow
@@ -56,6 +57,7 @@ fun CodeEditorView(
     highlightReady: Boolean,
     themeId: String = EditorThemes.DEFAULT_ID,
     autocompleteEnabled: Boolean = true,
+    magnifierEnabled: Boolean = true,
     handle: EditorHandle,
     onEdited: () -> Unit,
     onViewState: (line: Int, column: Int, textSizePx: Float, scrollX: Int, scrollY: Int) -> Unit,
@@ -103,6 +105,7 @@ fun CodeEditorView(
                 if (buffer.textSizePx > 0f) textSizePx = buffer.textSizePx
                 applyLook(this, buffer, textMate, darkTheme, highlightReady, themeId)
                 getComponent(EditorAutoCompletion::class.java).isEnabled = autocompleteEnabled
+                getComponent(Magnifier::class.java).isEnabled = magnifierEnabled
                 installSelectionPopup(this) { currentOnExplain }
                 // TextMate schemes listen to the global ThemeRegistry and reset their colours whenever
                 // any editor switches theme, which silently wiped our selection colour. Re-assert it.
@@ -157,6 +160,7 @@ fun CodeEditorView(
             }
             enforceSelectionColor(editor)
             editor.getComponent(EditorAutoCompletion::class.java).isEnabled = autocompleteEnabled
+            editor.getComponent(Magnifier::class.java).isEnabled = magnifierEnabled
             val wordsVersion = textMate.userWords.version
             if (appliedWordsVersion[editor] != wordsVersion) {
                 appliedWordsVersion[editor] = wordsVersion

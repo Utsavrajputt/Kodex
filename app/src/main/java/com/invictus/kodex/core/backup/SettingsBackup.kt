@@ -255,7 +255,7 @@ class SettingsBackup(context: Context) {
         val APPEARANCE_KEYS = setOf("editor_theme_id", "editor_font_size_px")
         val EDITOR_KEYS = setOf(
             "editor_symbol_bar", "editor_symbol_bar_visible", "editor_autocomplete_enabled",
-            "editor_pair_cursor_enabled", "editor_auto_reload_external", "editor_auto_preview_enabled",
+            "editor_pair_cursor_enabled", "editor_magnifier_enabled", "editor_auto_reload_external", "editor_auto_preview_enabled",
             "editor_restore_tabs_on_open", "search_default_strings_only", "search_extra_excludes", "search_max_file_mb",
         )
         val BEHAVIOR_KEYS = setOf(

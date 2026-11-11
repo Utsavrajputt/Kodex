@@ -36,6 +36,7 @@ fun SettingsEditingScreen(
 ) {
     val autocompleteEnabled by viewModel.autocompleteEnabled.collectAsStateWithLifecycle()
     val pairCursorEnabled by viewModel.pairCursorEnabled.collectAsStateWithLifecycle()
+    val magnifierEnabled by viewModel.magnifierEnabled.collectAsStateWithLifecycle()
     val symbolBar by viewModel.symbolBar.collectAsStateWithLifecycle()
     val symbolBarVisible by viewModel.symbolBarVisible.collectAsStateWithLifecycle()
     val autoPreviewEnabled by viewModel.autoPreviewEnabled.collectAsStateWithLifecycle()
@@ -75,6 +76,13 @@ fun SettingsEditingScreen(
                     subtitle = stringResource(R.string.settings_pair_cursor_desc),
                     checked = pairCursorEnabled,
                     onCheckedChange = { viewModel.setPairCursorEnabled(it) },
+                )
+                SettingsDivider()
+                SwitchSettingRow(
+                    title = stringResource(R.string.settings_magnifier),
+                    subtitle = stringResource(R.string.settings_magnifier_desc),
+                    checked = magnifierEnabled,
+                    onCheckedChange = { viewModel.setMagnifierEnabled(it) },
                 )
             }
 

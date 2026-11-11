@@ -68,6 +68,7 @@ fun SettingsScreen(
     val symbolBarVisible by viewModel.symbolBarVisible.collectAsStateWithLifecycle()
     val autocompleteEnabled by viewModel.autocompleteEnabled.collectAsStateWithLifecycle()
     val pairCursorEnabled by viewModel.pairCursorEnabled.collectAsStateWithLifecycle()
+    val magnifierEnabled by viewModel.magnifierEnabled.collectAsStateWithLifecycle()
     val autoReloadExternal by viewModel.autoReloadExternalChanges.collectAsStateWithLifecycle()
 
     var showThemePicker by remember { mutableStateOf(false) }
@@ -96,6 +97,7 @@ fun SettingsScreen(
     val symbolBarVisibleLabel = stringResource(R.string.settings_symbol_bar_visible)
     val autocompleteLabel = stringResource(R.string.settings_autocomplete)
     val pairCursorLabel = stringResource(R.string.settings_pair_cursor)
+    val magnifierLabel = stringResource(R.string.settings_magnifier)
     val externalChangesLabel = stringResource(R.string.settings_external_changes)
 
     val sections = listOf(
@@ -152,6 +154,14 @@ fun SettingsScreen(
                     subtitle = stringResource(R.string.settings_pair_cursor_desc),
                     checked = pairCursorEnabled,
                     onCheckedChange = { viewModel.setPairCursorEnabled(it) },
+                )
+            },
+            SettingRow(magnifierLabel) {
+                SettingsSwitchRow(
+                    title = magnifierLabel,
+                    subtitle = stringResource(R.string.settings_magnifier_desc),
+                    checked = magnifierEnabled,
+                    onCheckedChange = { viewModel.setMagnifierEnabled(it) },
                 )
             },
         ),

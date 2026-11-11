@@ -275,6 +275,8 @@
     <string name="settings_autocomplete">Autocomplete</string>
     <string name="settings_autocomplete_desc">Suggest words and keywords while typing</string>
     <string name="settings_pair_cursor">Pair cursor</string>
+    <string name="settings_magnifier">Magnifier</string>
+    <string name="settings_magnifier_desc">Zoom bubble that appears while dragging the cursor or selection handles</string>
     <string name="settings_pair_cursor_desc">Tapping ( on the symbol bar also inserts the closing )</string>
     <string name="settings_external_changes">File changed outside the app</string>
     <string name="settings_external_changes_ask">Always ask</string>

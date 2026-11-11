@@ -110,6 +110,7 @@ fun EditorScreen(
     val highlightReady by viewModel.textMate.ready.collectAsStateWithLifecycle()
     val themeId by viewModel.themeId.collectAsStateWithLifecycle()
     val autocompleteEnabled by viewModel.autocompleteEnabled.collectAsStateWithLifecycle()
+    val magnifierEnabled by viewModel.magnifierEnabled.collectAsStateWithLifecycle()
     val pairCursorEnabled by viewModel.pairCursorEnabled.collectAsStateWithLifecycle()
     var showSymbolCustomize by remember { mutableStateOf(false) }
     var showFind by remember { mutableStateOf(false) }
@@ -357,6 +358,7 @@ fun EditorScreen(
                                 highlightReady = highlightReady,
                                 themeId = themeId,
                                 autocompleteEnabled = autocompleteEnabled,
+                                magnifierEnabled = magnifierEnabled,
                                 handle = handle,
                                 onEdited = {
                                     viewModel.onEdited(path)

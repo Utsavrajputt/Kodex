@@ -108,6 +108,14 @@ class EditorViewModel(
         viewModelScope.launch { settingsStore.setAutocompleteEnabled(enabled) }
     }
 
+    /** Settings screen "Magnifier" toggle (zoom bubble while dragging the cursor). */
+    val magnifierEnabled: StateFlow<Boolean> = settingsStore.magnifierEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    fun setMagnifierEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setMagnifierEnabled(enabled) }
+    }
+
     /** Settings screen "Pair cursor" toggle. */
     val pairCursorEnabled: StateFlow<Boolean> = settingsStore.pairCursorEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)

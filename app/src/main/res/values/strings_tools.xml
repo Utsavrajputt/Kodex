@@ -61,7 +61,7 @@
     <string name="split_no_recents">No recent projects yet</string>
     <string name="split_choose_storage">Choose from storage</string>
     <string name="split_choose_file">Choose file</string>
-    <string name="split_choose_folder">Choose project folder</string>
+    <string name="split_choose_folder">Choose project</string>
     <string name="split_nothing_chosen">Nothing chosen yet</string>
     <string name="split_folder_note">The folder is zipped first, then the zip is cut into parts.</string>
     <string name="split_size_line">%1$s</string>

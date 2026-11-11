@@ -34,6 +34,7 @@ class EditorSettingsStore(private val context: Context) {
         val SYMBOL_BAR_VISIBLE = booleanPreferencesKey("editor_symbol_bar_visible")
         val AUTOCOMPLETE_ENABLED = booleanPreferencesKey("editor_autocomplete_enabled")
         val PAIR_CURSOR_ENABLED = booleanPreferencesKey("editor_pair_cursor_enabled")
+        val MAGNIFIER_ENABLED = booleanPreferencesKey("editor_magnifier_enabled")
         val AUTO_RELOAD_EXTERNAL = booleanPreferencesKey("editor_auto_reload_external")
         val AUTO_PREVIEW_ENABLED = booleanPreferencesKey("editor_auto_preview_enabled")
         val RESTORE_TABS_ON_OPEN = booleanPreferencesKey("editor_restore_tabs_on_open")
@@ -77,6 +78,10 @@ class EditorSettingsStore(private val context: Context) {
     /** Settings screen "Pair cursor" toggle -- symbol bar openers also insert the closing half. */
     val pairCursorEnabled: Flow<Boolean> = context.editorSettingsDataStore.data
         .map { it[Keys.PAIR_CURSOR_ENABLED] ?: true }
+
+    /** The zoom bubble shown above the finger while dragging the cursor / selection handles. */
+    val magnifierEnabled: Flow<Boolean> = context.editorSettingsDataStore.data
+        .map { it[Keys.MAGNIFIER_ENABLED] ?: true }
 
     /** false (default) = ask via the external-change banner; true = reload from disk silently, even over unsaved edits. */
     val autoReloadExternalChanges: Flow<Boolean> = context.editorSettingsDataStore.data
@@ -232,6 +237,10 @@ class EditorSettingsStore(private val context: Context) {
 
     suspend fun setAutocompleteEnabled(enabled: Boolean) {
         context.editorSettingsDataStore.edit { it[Keys.AUTOCOMPLETE_ENABLED] = enabled }
+    }
+
+    suspend fun setMagnifierEnabled(enabled: Boolean) {
+        context.editorSettingsDataStore.edit { it[Keys.MAGNIFIER_ENABLED] = enabled }
     }
 
     suspend fun setPairCursorEnabled(enabled: Boolean) {
