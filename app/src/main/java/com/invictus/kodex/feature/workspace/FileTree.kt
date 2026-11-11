@@ -214,8 +214,16 @@ fun FileTree(
                     items(items = results, key = { it.file.path }) { result ->
                         SearchResultRow(
                             result = result,
+                            isPinned = result.file.path in state.pinnedPaths,
+                            canPaste = state.clipboard != null,
+                            onEvent = onEvent,
+                            onCopyPath = onCopyPath,
                             onClick = {
                                 onEvent(FileTreeEvent.RowClicked(result.file, isDirectory = false))
+                                onSearchResultOpened()
+                            },
+                            onShowInTree = {
+                                onEvent(FileTreeEvent.Reveal(result.file, false))
                                 onSearchResultOpened()
                             },
                         )
@@ -226,26 +234,72 @@ fun FileTree(
     }
 }
 
-/** One recursive filename-search hit: icon + highlighted name + its folder path under the project. */
+/**
+ * One recursive filename-search hit: icon + highlighted name + its folder path under the project. Tap opens; long-press
+ * shows the same file menu as the tree (plus "Show in tree").
+ */
 @Composable
-private fun SearchResultRow(result: FileSearchEngine.Result, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        FileTypeIcon(name = result.name, isDirectory = false)
-        Column(modifier = Modifier.padding(start = 12.dp)) {
-            Text(text = highlightedName(result), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                text = result.relativePath,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+private fun SearchResultRow(
+    result: FileSearchEngine.Result,
+    isPinned: Boolean,
+    canPaste: Boolean,
+    onEvent: (FileTreeEvent) -> Unit,
+    onCopyPath: (File) -> Unit,
+    onClick: () -> Unit,
+    onShowInTree: () -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var pressOffset by remember { mutableStateOf(Offset.Zero) }
+    var rowHeightPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val menuOffset = with(density) { DpOffset(pressOffset.x.toDp(), (pressOffset.y - rowHeightPx).toDp()) }
+    val file = result.file
+    Box(modifier = Modifier.fillMaxWidth().onSizeChanged { rowHeightPx = it.height }) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(file.path) {
+                    detectTapGestures(
+                        onTap = { onClick() },
+                        onLongPress = { position ->
+                            pressOffset = position
+                            menuOpen = true
+                        },
+                    )
+                }
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FileTypeIcon(name = result.name, isDirectory = false)
+            Column(modifier = Modifier.padding(start = 12.dp)) {
+                Text(text = highlightedName(result), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    text = result.relativePath,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, offset = menuOffset) {
+            val close = { menuOpen = false }
+            MenuItem(XIcons.MyLocation, R.string.tree_menu_reveal) { close(); onShowInTree() }
+            MenuItem(XIcons.Pin, if (isPinned) R.string.tree_menu_unpin else R.string.tree_menu_pin) {
+                close(); onEvent(FileTreeEvent.TogglePin(file, false))
+            }
+            MenuItem(XIcons.ContentCut, R.string.tree_menu_cut) { close(); onEvent(FileTreeEvent.Cut(file)) }
+            MenuItem(XIcons.ContentCopy, R.string.tree_menu_copy) { close(); onEvent(FileTreeEvent.Copy(file)) }
+            MenuItem(XIcons.Edit, R.string.tree_menu_rename) { close(); onEvent(FileTreeEvent.StartRename(file)) }
+            MenuItem(XIcons.FileCopy, R.string.tree_menu_duplicate) { close(); onEvent(FileTreeEvent.Duplicate(file)) }
+            if (canPaste) {
+                MenuItem(XIcons.ContentPaste, R.string.tree_menu_paste) {
+                    close(); onEvent(FileTreeEvent.PasteInto(file.parentFile ?: file))
+                }
+            }
+            MenuItem(XIcons.Link, R.string.tree_menu_copy_path) { close(); onCopyPath(file) }
+            HorizontalDivider()
+            MenuItem(XIcons.Delete, R.string.tree_menu_delete) { close(); onEvent(FileTreeEvent.RequestDelete(file, false)) }
         }
     }
 }

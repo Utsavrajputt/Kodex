@@ -93,6 +93,8 @@ class GhNotifier(context: Context) {
         val stoppable: Boolean = false,
         /** Epoch ms the process started; when set the notification shows a live elapsed-time chronometer. */
         val startedAtMs: Long? = null,
+        /** Non-zero while an artifact download runs: adds Pause and Cancel buttons for it. */
+        val downloadId: Long = 0L,
     )
 
     /**
@@ -113,6 +115,10 @@ class GhNotifier(context: Context) {
             .setProgress(100, spec.progress ?: 0, spec.progress == null)
         spec.startedAtMs?.let { b.setWhen(it.coerceAtMost(System.currentTimeMillis())).setShowWhen(true).setUsesChronometer(true) }
         if (spec.stoppable) b.addAction(0, ctx.getString(R.string.gh_notif_stop_watching), stopWatchingIntent())
+        if (spec.downloadId != 0L) {
+            b.addAction(0, ctx.getString(R.string.gh_notif_pause), downloadAction(DownloadActionReceiver.ACTION_PAUSE, spec.downloadId))
+            b.addAction(0, ctx.getString(R.string.gh_notif_cancel), downloadAction(DownloadActionReceiver.ACTION_CANCEL, spec.downloadId))
+        }
         return b.build()
     }
 
@@ -126,10 +132,41 @@ class GhNotifier(context: Context) {
         runId: Long = 0L,
         stoppable: Boolean = false,
         startedAtMs: Long? = null,
+        downloadId: Long = 0L,
     ) {
-        val spec = LiveSpec(title, text, progress, projectPath, runId, stoppable, startedAtMs)
+        val spec = LiveSpec(title, text, progress, projectPath, runId, stoppable, startedAtMs, downloadId)
         lastLive = spec
         post(LIVE_ID, live(spec))
+    }
+
+    private fun downloadAction(action: String, artifactId: Long): PendingIntent =
+        PendingIntent.getBroadcast(
+            ctx, (artifactId.hashCode() * 31 + action.hashCode()),
+            Intent(ctx, DownloadActionReceiver::class.java).setAction(action).putExtra(DownloadActionReceiver.EXTRA_ID, artifactId),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    /** A paused download stays on screen with Resume / Cancel (the live notification ends with the download job). */
+    fun showPaused(artifactId: Long, title: String, percent: Int?) {
+        val text = if (percent != null) ctx.getString(R.string.gh_notif_paused_at, percent) else ctx.getString(R.string.gh_notif_paused)
+        val n = NotificationCompat.Builder(ctx, CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_download)
+            .setColor(accent)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setOngoing(false)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setContentIntent(openApp(null, 0L))
+            .addAction(0, ctx.getString(R.string.gh_notif_resume), downloadAction(DownloadActionReceiver.ACTION_RESUME, artifactId))
+            .addAction(0, ctx.getString(R.string.gh_notif_cancel), downloadAction(DownloadActionReceiver.ACTION_CANCEL, artifactId))
+            .apply { if (percent != null) setProgress(100, percent, false) }
+            .build()
+        post(PAUSED_ID, n)
+    }
+
+    fun clearPaused() {
+        try { nm.cancel(PAUSED_ID) } catch (_: SecurityException) { }
     }
 
     fun clearLive() {
@@ -270,6 +307,7 @@ class GhNotifier(context: Context) {
         const val CHANNEL = "gh_manager"
         const val CHANNEL_BUILDS = "gh_new_builds"
         const val LIVE_ID = 7100
+        private const val PAUSED_ID = 7101
         private const val RESULT_BASE = 7200
         const val KIND_DOWNLOAD = 1
         const val KIND_INSTALL = 2

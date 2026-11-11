@@ -77,6 +77,19 @@ object ActiveDownloads {
         jobs[artifactId]?.cancel()
     }
 
+    private val pausedHandlers = ConcurrentHashMap<Long, Pair<() -> Unit, () -> Unit>>()
+
+    /** A paused download that can be continued / dropped from its notification (set by the screen that owns it). */
+    fun registerPaused(artifactId: Long, resume: () -> Unit, cancel: () -> Unit) { pausedHandlers[artifactId] = resume to cancel }
+
+    fun unregisterPaused(artifactId: Long) { pausedHandlers.remove(artifactId) }
+
+    /** Notification "Resume"; false when nobody owns the paused download any more. */
+    fun resumePaused(artifactId: Long): Boolean = pausedHandlers[artifactId]?.first?.also { it() } != null
+
+    /** Notification "Cancel" on a paused download; false when nobody owns it any more. */
+    fun cancelPaused(artifactId: Long): Boolean = pausedHandlers[artifactId]?.second?.also { it() } != null
+
     /** True once when the stop that is being handled was a pause rather than a cancel. */
     fun takePause(artifactId: Long): Boolean = pauses.remove(artifactId)
 }

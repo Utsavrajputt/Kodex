@@ -613,6 +613,8 @@ class GitHubToolsController(
         val t = _state.value.transfer ?: return
         if (t.paused) {
             pausedTransfer = null
+            ActiveDownloads.unregisterPaused(t.artifactId)
+            notifier.clearPaused()
             _state.update { it.copy(transfer = null) }
             scope.launch(Dispatchers.IO) { downloader.discardPartial(t.artifactId) }
         } else {
@@ -655,7 +657,9 @@ class GitHubToolsController(
                     }
                     return@launchTracked
                 }
-                notifier.updateLive(title, str(R.string.gh_notif_download_progress, 0), 0)
+                notifier.clearPaused()
+                ActiveDownloads.unregisterPaused(artifact.id)
+                notifier.updateLive(title, str(R.string.gh_notif_download_progress, 0), 0, downloadId = artifact.id)
                 var last = -1f
                 var lastUiMs = 0L
                 val file = downloader.downloadZip(repo, artifact) { bytes ->
@@ -671,7 +675,7 @@ class GitHubToolsController(
                                 ?.let { t -> st.copy(transfer = t.copy(progress = p, downloaded = bytes, total = artifact.sizeBytes, etaSeconds = eta, speedBps = meter.speedBytesPerSec)) }
                                 ?: st
                         }
-                        notifier.updateLive(title, p?.let { str(R.string.gh_notif_download_progress, (it * 100).toInt()) } ?: "", p?.let { (it * 100).toInt() })
+                        notifier.updateLive(title, p?.let { str(R.string.gh_notif_download_progress, (it * 100).toInt()) } ?: "", p?.let { (it * 100).toInt() }, downloadId = artifact.id)
                     }
                 }
                 zip = file
@@ -690,6 +694,8 @@ class GitHubToolsController(
                     // Paused: the .part file stays so Resume continues from there.
                     paused = true
                     pausedTransfer = PausedTransfer(artifact, purpose, fromApkCard)
+                    ActiveDownloads.registerPaused(artifact.id, resume = { resumeTransfer() }, cancel = { cancelTransfer() })
+                    notifier.showPaused(artifact.id, title, _state.value.transfer?.progress?.let { (it * 100).toInt() })
                     _state.update { st -> st.transfer?.let { t -> st.copy(transfer = t.copy(paused = true, etaSeconds = null, speedBps = null)) } ?: st }
                 } else {
                     zip?.delete()

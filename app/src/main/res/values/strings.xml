@@ -1329,6 +1329,11 @@
 
     <string name="gh_notif_download_title">Downloading %1$s</string>
     <string name="gh_notif_download_progress">%1$d%%</string>
+    <string name="gh_notif_pause">Pause</string>
+    <string name="gh_notif_resume">Resume</string>
+    <string name="gh_notif_cancel">Cancel</string>
+    <string name="gh_notif_paused">Paused</string>
+    <string name="gh_notif_paused_at">Paused at %1$d%%</string>
     <string name="gh_notif_download_preparing">Unpacking…</string>
     <string name="gh_notif_download_done_title">Download complete</string>
     <string name="gh_notif_download_done_text">%1$s downloaded. Tap to install.</string>

@@ -1129,6 +1129,8 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <receiver android:name=".github.notify.DownloadActionReceiver" android:exported="false" />
+
         <!-- Kodex AI: keeps an answer running while the app is minimized. -->
         <service
             android:name=".ai.notify.AiWorkService"
