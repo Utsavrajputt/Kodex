@@ -368,6 +368,8 @@
     <string name="clone_private_repo_configure">Configure</string>
     <string name="clone_parent_hint">Parent folder</string>
     <string name="clone_browse_folder">Browse for folder</string>
+    <string name="clone_paste_url">Paste URL from clipboard</string>
+    <string name="clone_paste_invalid">Clipboard has no valid repository URL</string>
     <string name="clone_branch_hint">Branch (optional)</string>
     <string name="clone_start">Clone</string>
     <string name="clone_cloning">Cloning…</string>

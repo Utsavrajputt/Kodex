@@ -1,5 +1,6 @@
 package com.invictus.kodex.feature.git
 
+import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -51,6 +52,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -241,6 +243,8 @@ internal fun CardTitle(@StringRes title: Int, modifier: Modifier = Modifier) {
 @Composable
 private fun SourceCard(state: GitCloneViewModel.UiState, locked: Boolean, onEvent: (GitCloneEvent) -> Unit) {
     val p = ghPalette()
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     GhCard(p.card, p.cardBorder) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             CardTitle(R.string.clone_card_source)
@@ -251,6 +255,27 @@ private fun SourceCard(state: GitCloneViewModel.UiState, locked: Boolean, onEven
                 leading = XIcons.CloudDownload,
                 enabled = !locked,
                 keyboardType = KeyboardType.Uri,
+                trailing = {
+                    IconButton(
+                        onClick = {
+                            val clip = clipboard.getText()?.text?.trim().orEmpty()
+                            if (isGitUrl(clip)) {
+                                onEvent(GitCloneEvent.UrlChange(clip))
+                            } else {
+                                Toast.makeText(context, R.string.clone_paste_invalid, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        enabled = !locked,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Icon(
+                            XIcons.ContentPaste,
+                            contentDescription = stringResource(R.string.clone_paste_url),
+                            tint = p.accent,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                },
             )
             CloneInput(
                 value = state.branch,
@@ -261,6 +286,13 @@ private fun SourceCard(state: GitCloneViewModel.UiState, locked: Boolean, onEven
             )
         }
     }
+}
+
+/** Accepts http(s)/git/ssh URLs and scp-style `git@host:owner/repo`; no whitespace allowed. */
+private fun isGitUrl(text: String): Boolean {
+    if (text.isEmpty() || text.any { it.isWhitespace() }) return false
+    return Regex("^(https?|git|ssh)://[^/]+/.+", RegexOption.IGNORE_CASE).containsMatchIn(text) ||
+        Regex("^[\\w.-]+@[^:/\\s]+:.+").containsMatchIn(text)
 }
 
 @Composable
