@@ -5,7 +5,20 @@ package com.invictus.kodex.ai.ui.chat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -27,7 +40,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -685,6 +697,7 @@ private fun SetupRow(done: Boolean, title: String, detail: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageItem(
     m: UiMessage,
@@ -697,34 +710,81 @@ private fun MessageItem(
     onMoreLikeThis: (GeneratedImage) -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    var menuOpen by remember(m.id) { mutableStateOf(false) }
+    var selectOpen by remember(m.id) { mutableStateOf(false) }
+    var viewerAt by remember(m.id) { mutableStateOf(-1) }
+    val openMenu = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); menuOpen = true }
+    val hasText = m.text.isNotBlank()
+    val canEdit = m.role == "user" && !busy
+    // Long-press menu, like Claude: Copy message / Select text (/ Edit on your own messages).
+    val menu: @Composable () -> Unit = {
+        if (hasText || canEdit) {
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                if (hasText) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.ai_chat_copy_message)) },
+                        leadingIcon = { Icon(XIcons.ContentCopy, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        onClick = { menuOpen = false; clipboard.setText(AnnotatedString(m.text)) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.ai_chat_select_text)) },
+                        leadingIcon = { Icon(XIcons.Article, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        onClick = { menuOpen = false; selectOpen = true },
+                    )
+                }
+                if (canEdit) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.ai_chat_edit)) },
+                        leadingIcon = { Icon(XIcons.Edit, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        onClick = { menuOpen = false; onEdit() },
+                    )
+                }
+            }
+        }
+    }
     if (m.role == "user") {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
-            Surface(shape = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-                Column(
-                    Modifier.widthIn(max = 320.dp).padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
+            Box(contentAlignment = Alignment.TopEnd) {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Photos sit above the bubble as their own cards (like Claude), tap opens them fullscreen.
                     if (m.images.isNotEmpty()) {
-                        val side = if (m.images.size == 1) 168.dp else 96.dp
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            m.images.forEach { img ->
+                        val side = if (m.images.size == 1) 190.dp else 120.dp
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.widthIn(max = 320.dp),
+                        ) {
+                            m.images.forEachIndexed { i, img ->
                                 AsyncImage(
                                     model = File(img.path),
                                     contentDescription = stringResource(R.string.ai_chat_photo),
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.size(side).clip(RoundedCornerShape(12.dp)),
+                                    modifier = Modifier
+                                        .size(side)
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .combinedClickable(onClick = { viewerAt = i }, onLongClick = { openMenu() }),
                                 )
                             }
                         }
                     }
-                    SelectionContainer {
-                        Text(
-                            m.text,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                    if (hasText) {
+                        Surface(
+                            shape = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.pointerInput(m.id) { detectTapGestures(onLongPress = { openMenu() }) },
+                        ) {
+                            Text(
+                                m.text,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.widthIn(max = 320.dp).padding(horizontal = 14.dp, vertical = 10.dp),
+                            )
+                        }
                     }
                 }
+                menu()
             }
             if (m.attachments.isNotEmpty()) {
                 FlowRow(
@@ -735,22 +795,17 @@ private fun MessageItem(
                     m.attachments.forEach { AiTag(it.substringAfterLast('/')) }
                 }
             }
-            if (!busy) TextButton(onClick = onEdit) { Text(stringResource(R.string.ai_chat_edit), style = MaterialTheme.typography.labelMedium) }
         }
     } else {
         Column(Modifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
-                Box(
-                    Modifier.size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(XIcons.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(13.dp)) }
-                Text(stringResource(R.string.ai_chat_kodex_ai), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp))
-            }
-            // One status row, like Claude: the running step, else a cycling "Thinking…" word; tap opens the timeline.
+            // One status row, like Claude: the running step, else a cycling "Thinking…" word; tap opens the Summary sheet.
             val showSteps = m.steps.isNotEmpty() || (m.streaming && m.text.isBlank())
             if (showSteps) StepsBlock(m)
-            if (m.text.isNotBlank()) {
-                SelectionContainer { MarkdownContent(m.text, Modifier.padding(top = if (showSteps) 8.dp else 0.dp)) }
+            if (hasText) {
+                Box(Modifier.pointerInput(m.id) { detectTapGestures(onLongPress = { openMenu() }) }) {
+                    MarkdownContent(m.text, Modifier.padding(top = if (showSteps) 8.dp else 0.dp))
+                    menu()
+                }
             }
             m.generated.forEach { g ->
                 GeneratedImageCard(
@@ -758,9 +813,13 @@ private fun MessageItem(
                     onMoreLikeThis = if (isLast && !busy && g.svgPath == null) ({ onMoreLikeThis(g) }) else null,
                 )
             }
-            if (!m.streaming && m.text.isNotBlank()) {
+            if (!m.streaming && hasText) {
                 Row {
                     IconButton(onClick = { clipboard.setText(AnnotatedString(m.text)) }) { Icon(XIcons.ContentCopy, contentDescription = stringResource(R.string.ai_chat_copy), modifier = Modifier.size(18.dp)) }
+                    IconButton(onClick = {
+                        val send = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; putExtra(Intent.EXTRA_TEXT, m.text) }
+                        context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }) { Icon(XIcons.Share, contentDescription = stringResource(R.string.action_share), modifier = Modifier.size(18.dp)) }
                     if (isLast && !busy) {
                         IconButton(onClick = onRegenerate) { Icon(XIcons.Refresh, contentDescription = stringResource(R.string.ai_chat_regenerate), modifier = Modifier.size(18.dp)) }
                     }
@@ -768,6 +827,97 @@ private fun MessageItem(
             }
         }
     }
+    if (selectOpen) SelectTextSheet(m.text) { selectOpen = false }
+    if (viewerAt >= 0 && m.images.isNotEmpty()) ImageViewerDialog(m.images, viewerAt.coerceAtMost(m.images.lastIndex)) { viewerAt = -1 }
+}
+
+/** "Select text": the whole message in a sheet where any part can be selected and copied. */
+@Composable
+private fun SelectTextSheet(text: String, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Text(
+            stringResource(R.string.ai_chat_select_text),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 12.dp),
+        )
+        SelectionContainer(Modifier.weight(1f, fill = false)) {
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp)
+                    .navigationBarsPadding(),
+            )
+        }
+    }
+}
+
+/** Fullscreen photo viewer: swipe between photos, pinch or double-tap to zoom. */
+@Composable
+private fun ImageViewerDialog(images: List<ChatImage>, startIndex: Int, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        val pager = rememberPagerState(initialPage = startIndex) { images.size }
+        var zoomed by remember { mutableStateOf(false) }
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            HorizontalPager(state = pager, userScrollEnabled = !zoomed, modifier = Modifier.fillMaxSize()) { page ->
+                ZoomableImage(images[page], onZoomChange = { zoomed = it })
+            }
+            IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopStart).padding(12.dp)) {
+                Icon(XIcons.Close, contentDescription = stringResource(R.string.action_close_dialog), tint = Color.White)
+            }
+            if (images.size > 1) {
+                Text(
+                    "${pager.currentPage + 1} / ${images.size}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 24.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZoomableImage(img: ChatImage, onZoomChange: (Boolean) -> Unit) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    LaunchedEffect(scale > 1f) { onZoomChange(scale > 1f) }
+    AsyncImage(
+        model = File(img.path),
+        contentDescription = stringResource(R.string.ai_chat_photo),
+        contentScale = ContentScale.Fit,
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                // Two fingers always zoom; one finger only pans once zoomed in, so the pager can still swipe.
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        val multi = event.changes.count { it.pressed } > 1
+                        if (multi || scale > 1f) {
+                            val zoom = event.calculateZoom()
+                            val pan = event.calculatePan()
+                            val next = (scale * zoom).coerceIn(1f, 5f)
+                            scale = next
+                            val maxX = size.width * (next - 1f) / 2f
+                            val maxY = size.height * (next - 1f) / 2f
+                            offset = if (next > 1f) Offset((offset.x + pan.x).coerceIn(-maxX, maxX), (offset.y + pan.y).coerceIn(-maxY, maxY)) else Offset.Zero
+                            if (zoom != 1f || pan != Offset.Zero) event.changes.forEach { if (it.positionChanged()) it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(onDoubleTap = { if (scale > 1f) { scale = 1f; offset = Offset.Zero } else scale = 2.5f })
+            }
+            .graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y },
+    )
 }
 
 private fun stepIcon(label: String): ImageVector = when {
@@ -820,88 +970,108 @@ private fun thoughtText(raw: String): AnnotatedString = buildAnnotatedString {
  */
 @Composable
 private fun StepsBlock(m: UiMessage) {
-    var expanded by remember(m.id) { mutableStateOf(false) }
+    var showSheet by remember(m.id) { mutableStateOf(false) }
     val tools = m.steps.filter { !it.thought }
     val failed = tools.count { it.status == StepStatus.FAILED }
     val running = tools.lastOrNull { it.status == StepStatus.RUNNING }
     val working = m.streaming && (running != null || m.text.isBlank())
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val chevron by animateFloatAsState(if (expanded) 90f else 0f, label = "stepsChevron")
     val expandable = m.steps.isNotEmpty()
-    Column(Modifier.fillMaxWidth().animateContentSize()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(enabled = expandable) { expanded = !expanded }
-                .padding(vertical = 8.dp, horizontal = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (working) ClaudeSpinner(size = 20.dp)
-            else Icon(XIcons.Schedule, contentDescription = null, tint = muted, modifier = Modifier.size(18.dp))
-            when {
-                working && running != null ->
-                    ShimmerText(running.label, modifier = Modifier.weight(1f).padding(horizontal = 10.dp))
-                working ->
-                    Box(Modifier.weight(1f).padding(horizontal = 10.dp)) { ThinkingLabel(seed = m.id) }
-                else -> Text(
-                    stepsSummary(m.steps) + if (failed > 0) stringResource(R.string.ai_chat_steps_failed, failed) else "",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
-                )
-            }
-            if (expandable) {
-                Icon(
-                    XIcons.ChevronRight, contentDescription = if (expanded) stringResource(R.string.ai_chat_hide_steps) else stringResource(R.string.ai_chat_show_steps), tint = muted,
-                    modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = chevron },
-                )
-            }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = expandable) { showSheet = true }
+            .padding(vertical = 8.dp, horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (working) ClaudeSpinner(size = 20.dp)
+        else Icon(XIcons.Schedule, contentDescription = null, tint = muted, modifier = Modifier.size(18.dp))
+        when {
+            working && running != null ->
+                ShimmerText(running.label, modifier = Modifier.weight(1f).padding(horizontal = 10.dp))
+            working ->
+                Box(Modifier.weight(1f).padding(horizontal = 10.dp)) { ThinkingLabel(seed = m.id) }
+            else -> Text(
+                stepsSummary(m.steps) + if (failed > 0) stringResource(R.string.ai_chat_steps_failed, failed) else "",
+                style = MaterialTheme.typography.bodyMedium,
+                color = muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+            )
         }
-        if (expanded && expandable) {
-            val rail = MaterialTheme.colorScheme.outlineVariant
-            val bg = MaterialTheme.colorScheme.background
-            Column(
-                Modifier
-                    .padding(start = 9.dp, bottom = 6.dp)
-                    .drawBehind {
-                        drawLine(rail, Offset(8.dp.toPx(), 8.dp.toPx()), Offset(8.dp.toPx(), size.height - 8.dp.toPx()), strokeWidth = 1.5.dp.toPx())
-                    },
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                m.steps.forEach { st ->
-                    if (st.thought) {
-                        Row(verticalAlignment = Alignment.Top) {
-                            Box(Modifier.background(bg).padding(vertical = 1.dp)) {
-                                Icon(XIcons.AutoAwesome, contentDescription = null, tint = muted, modifier = Modifier.size(16.dp))
-                            }
-                            Text(
-                                thoughtText(st.label.trim()),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = muted,
-                                modifier = Modifier.weight(1f).padding(start = 10.dp),
-                            )
+        if (expandable) {
+            Icon(XIcons.ChevronRight, contentDescription = stringResource(R.string.ai_chat_show_steps), tint = muted, modifier = Modifier.size(20.dp))
+        }
+    }
+    // Reads [m] directly, so the timeline keeps filling in live while the agent works.
+    if (showSheet && expandable) StepsSheet(m) { showSheet = false }
+}
+
+/** Claude-style "Summary" sheet: close button, centred title, then the step timeline. */
+@Composable
+private fun StepsSheet(m: UiMessage, onDismiss: () -> Unit) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val rail = MaterialTheme.colorScheme.outlineVariant
+    val sheetBg = MaterialTheme.colorScheme.surfaceContainerLow
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = sheetBg,
+    ) {
+        Box(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+            IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.CenterStart)) {
+                Icon(XIcons.Close, contentDescription = stringResource(R.string.action_close_dialog))
+            }
+            Text(
+                stringResource(R.string.ai_chat_summary),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+        Column(
+            Modifier
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 26.dp, end = 20.dp, top = 16.dp, bottom = 24.dp)
+                .navigationBarsPadding()
+                .drawBehind {
+                    drawLine(rail, Offset(8.dp.toPx(), 8.dp.toPx()), Offset(8.dp.toPx(), size.height - 8.dp.toPx()), strokeWidth = 1.5.dp.toPx())
+                },
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            m.steps.forEach { st ->
+                if (st.thought) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Box(Modifier.background(sheetBg).padding(vertical = 2.dp)) {
+                            Icon(XIcons.AutoAwesome, contentDescription = null, tint = muted, modifier = Modifier.size(16.dp))
                         }
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.background(bg).padding(vertical = 1.dp)) {
-                                Icon(stepIcon(st.label), contentDescription = null, tint = muted, modifier = Modifier.size(16.dp))
-                            }
-                            Text(
-                                st.label,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (st.status == StepStatus.FAILED) MaterialTheme.colorScheme.error else muted,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
-                            )
-                            when (st.status) {
-                                StepStatus.RUNNING -> ClaudeSpinner(size = 14.dp)
-                                StepStatus.DONE -> Icon(XIcons.Check, contentDescription = stringResource(R.string.ai_chat_done), tint = muted, modifier = Modifier.size(14.dp))
-                                StepStatus.FAILED -> Icon(XIcons.ErrorCircle, contentDescription = stringResource(R.string.ai_chat_failed), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
-                            }
+                        Text(
+                            thoughtText(st.label.trim()),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f).padding(start = 16.dp),
+                        )
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.background(sheetBg).padding(vertical = 2.dp)) {
+                            Icon(stepIcon(st.label), contentDescription = null, tint = muted, modifier = Modifier.size(16.dp))
+                        }
+                        Text(
+                            st.label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = if (st.status == StepStatus.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
+                        )
+                        when (st.status) {
+                            StepStatus.RUNNING -> ClaudeSpinner(size = 14.dp)
+                            StepStatus.DONE -> Icon(XIcons.Check, contentDescription = stringResource(R.string.ai_chat_done), tint = muted, modifier = Modifier.size(14.dp))
+                            StepStatus.FAILED -> Icon(XIcons.ErrorCircle, contentDescription = stringResource(R.string.ai_chat_failed), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -1158,18 +1328,18 @@ private fun GeneratedImageCard(g: GeneratedImage, onSave: (svg: Boolean) -> Unit
 /** A photo waiting in the input card, with a small remove button in its corner. */
 @Composable
 private fun DraftPhoto(img: ChatImage, onRemove: () -> Unit) {
-    Box(Modifier.size(68.dp)) {
+    Box(Modifier.size(92.dp)) {
         AsyncImage(
             model = File(img.path),
             contentDescription = stringResource(R.string.ai_chat_photo),
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(14.dp)),
+            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(18.dp)),
         )
         Surface(
             onClick = onRemove,
             shape = CircleShape,
             color = Color.Black.copy(alpha = 0.6f),
-            modifier = Modifier.align(Alignment.TopEnd).padding(3.dp).size(20.dp),
+            modifier = Modifier.align(Alignment.TopStart).padding(5.dp).size(22.dp),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(XIcons.Close, contentDescription = stringResource(R.string.ai_chat_remove_photo), tint = Color.White, modifier = Modifier.size(12.dp))

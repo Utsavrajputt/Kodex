@@ -107,12 +107,14 @@ class GhNotifier(context: Context) {
             .setColor(accent)
             .setContentTitle(spec.title)
             .setContentText(spec.text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(spec.text))
             .setOngoing(false)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setContentIntent(openApp(spec.projectPath, spec.runId))
             .setProgress(100, spec.progress ?: 0, spec.progress == null)
+        // BigTextStyle drops the text under the progress bar when expanded. A short text with a real bar (the "34%"
+        // of a download) is left in the standard layout so it stays above the bar; longer texts still expand.
+        if (spec.progress == null || spec.text.length > 40) b.setStyle(NotificationCompat.BigTextStyle().bigText(spec.text))
         spec.startedAtMs?.let { b.setWhen(it.coerceAtMost(System.currentTimeMillis())).setShowWhen(true).setUsesChronometer(true) }
         if (spec.stoppable) b.addAction(0, ctx.getString(R.string.gh_notif_stop_watching), stopWatchingIntent())
         if (spec.downloadId != 0L) {

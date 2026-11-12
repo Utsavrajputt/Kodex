@@ -475,8 +475,27 @@
     <string name="git_reflog_moved_from_nothing">HEAD moved: (nothing) → %1$s</string>
     <string name="git_reflog_already_here">This is where you are now.</string>
     <string name="git_reflog_go_back">Go back to this point (reset)</string>
-    <string name="git_reflog_go_back_hint">Moves your branch to %1$s, the state right after this step. You choose whether to keep your changes (Soft, Mixed) or discard them (Hard).</string>
+    <string name="git_reflog_go_back_hint">Points your branch back to %1$s, the state right after this step. Next you choose whether to keep (Soft, Mixed) or discard (Hard) your current changes.</string>
     <string name="git_reflog_copy_id">Copy commit id</string>
+    <string name="git_reflog_by">by %1$s</string>
+    <string name="git_reflog_before">Before</string>
+    <string name="git_reflog_after">After</string>
+    <string name="git_reflog_moved_to_commit">Branch moved to “%1$s”</string>
+    <string name="git_reflog_rel_diverged">Branch jumped to a different line of history: %1$s commits left it, %2$s came in</string>
+    <string name="git_reflog_rel_same">The branch stayed on the same commit.</string>
+    <plurals name="git_reflog_rel_forward">
+        <item quantity="one">Moved forward: %1$s commit added to your branch</item>
+        <item quantity="other">Moved forward: %1$s commits added to your branch</item>
+    </plurals>
+    <plurals name="git_reflog_rel_backward">
+        <item quantity="one">Moved back: %1$s commit is no longer on your branch</item>
+        <item quantity="other">Moved back: %1$s commits are no longer on your branch</item>
+    </plurals>
+    <string name="git_reflog_target_remote">Your branch was set to match its copy on the server (remote branch), so it now equals the remote.</string>
+    <string name="git_reflog_dropped_title">No longer on your branch</string>
+    <string name="git_reflog_dropped_hint">These are not deleted, Git still has them. Open the entry just below this one and tap “Go back to this point” to restore them.</string>
+    <string name="git_reflog_added_title">Now on your branch</string>
+    <string name="git_reflog_more">…and %1$s more</string>
 
     <string name="git_reflog_kind_commit">Commit</string>
     <string name="git_reflog_kind_switch">Switch</string>
@@ -493,8 +512,8 @@
 
     <string name="git_reflog_explain_commit">A commit was saved and the branch moved forward to it.</string>
     <string name="git_reflog_explain_switch">You switched to another branch (or commit). Your files changed to match it.</string>
-    <string name="git_reflog_explain_reset">The branch was moved to a different commit. Depending on the mode, your changes were kept or discarded.</string>
-    <string name="git_reflog_explain_merge">Another branch was combined into this one.</string>
+    <string name="git_reflog_explain_reset">Your branch was pointed at a different commit. Git does not record whether it was Soft, Mixed or Hard. With Hard, uncommitted file changes at that moment were thrown away.</string>
+    <string name="git_reflog_explain_merge">Another branch was combined into this one. The commits from that branch are now part of yours.</string>
     <string name="git_reflog_explain_pull">Changes from the remote were downloaded and combined into your branch.</string>
     <string name="git_reflog_explain_rebase">Commits were replayed on top of a different base. This rewrites history.</string>
     <string name="git_reflog_explain_pick">A commit from another place was copied onto this branch.</string>
@@ -502,12 +521,12 @@
     <string name="git_reflog_explain_clone">The repository was first downloaded here.</string>
     <string name="git_reflog_explain_author">A commit was rewritten with a different author. This rewrites history.</string>
     <string name="git_reflog_explain_branch">A branch was created.</string>
-    <string name="git_reflog_explain_other">HEAD moved.</string>
+    <string name="git_reflog_explain_other">Git moved your branch to another commit. This usually happens inside a reset, pull, merge or switch. The details below show exactly what changed.</string>
 
     <string name="git_reflog_t_first_commit">First commit</string>
     <string name="git_reflog_t_commit">Committed</string>
     <string name="git_reflog_t_amend">Amended</string>
-    <string name="git_reflog_t_head_updated">Branch position updated</string>
+    <string name="git_reflog_t_head_updated">Branch moved</string>
     <string name="git_reflog_t_merge_commit">Merge commit created</string>
     <string name="git_reflog_t_switch">Switched branch</string>
     <string name="git_reflog_t_reset_to">Reset to %1$s</string>
@@ -891,6 +910,9 @@
     <string name="ai_chat_chat_history">Chat history</string>
     <string name="ai_chat_chats">Chats</string>
     <string name="ai_chat_copy">Copy</string>
+    <string name="ai_chat_copy_message">Copy message</string>
+    <string name="ai_chat_select_text">Select text</string>
+    <string name="ai_chat_summary">Summary</string>
     <string name="ai_chat_delete_chat">Delete chat</string>
     <string name="ai_chat_discard">Discard</string>
     <string name="ai_chat_dismiss">Dismiss</string>
