@@ -106,15 +106,17 @@ class GhNotifier(context: Context) {
             .setSmallIcon(R.drawable.ic_stat_download)
             .setColor(accent)
             .setContentTitle(spec.title)
-            .setContentText(spec.text)
             .setOngoing(false)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setContentIntent(openApp(spec.projectPath, spec.runId))
             .setProgress(100, spec.progress ?: 0, spec.progress == null)
-        // BigTextStyle drops the text under the progress bar when expanded. A short text with a real bar (the "34%"
-        // of a download) is left in the standard layout so it stays above the bar; longer texts still expand.
-        if (spec.progress == null || spec.text.length > 40) b.setStyle(NotificationCompat.BigTextStyle().bigText(spec.text))
+        if (spec.progress != null && PERCENT_ONLY.matches(spec.text)) {
+            // A bare "34%" goes in the header line ("Kodex • 34% • 10:13pm"), the way Xmd shows its download progress.
+            b.setSubText(spec.text)
+        } else {
+            b.setContentText(spec.text).setStyle(NotificationCompat.BigTextStyle().bigText(spec.text))
+        }
         spec.startedAtMs?.let { b.setWhen(it.coerceAtMost(System.currentTimeMillis())).setShowWhen(true).setUsesChronometer(true) }
         if (spec.stoppable) b.addAction(0, ctx.getString(R.string.gh_notif_stop_watching), stopWatchingIntent())
         if (spec.downloadId != 0L) {
@@ -298,6 +300,8 @@ class GhNotifier(context: Context) {
     }
 
     companion object {
+        private val PERCENT_ONLY = Regex("""\d{1,3}%""")
+
         /** Intent extra: project whose GitHub screen the notification should open. */
         const val EXTRA_OPEN_GITHUB = "com.invictus.kodex.extra.OPEN_GITHUB"
 

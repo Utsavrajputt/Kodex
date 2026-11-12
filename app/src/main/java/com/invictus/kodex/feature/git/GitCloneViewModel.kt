@@ -50,7 +50,7 @@ class GitCloneViewModel(
         /** Cancel was requested; JGit is still unwinding and the partial folder is being removed. */
         val cancelling: Boolean = false,
         val logLines: List<GitCloneLogLine> = emptyList(),
-        /** True once a clone has finished successfully; the person confirms with Done. */
+        /** True once a clone has finished successfully (the form clears itself so the next one can start). */
         val completed: Boolean = false,
         val error: GitErrorDetails? = null,
         /** Host that just rejected an unauthenticated clone — drives the private-repo dialog. */
@@ -68,6 +68,8 @@ class GitCloneViewModel(
         val parentPath: String = "",
         val folderName: String = "",
         val branch: String = "",
+        /** The person typed the destination name themselves, so a new URL no longer renames it. */
+        val folderEdited: Boolean = false,
     )
 
     // A run still alive (or finished while the screen was closed) repopulates the form from its request.
@@ -98,6 +100,14 @@ class GitCloneViewModel(
 
     init {
         viewModelScope.launch { manager.cancelled.collect { message(R.string.clone_cancelled) } }
+        // A clone just finished: empty the form (keeping the parent folder) so the next URL can go straight in.
+        viewModelScope.launch {
+            var wasDone = false
+            manager.run.collect { run ->
+                if (run.completed && !wasDone) form.update { Form(parentPath = it.parentPath) }
+                wasDone = run.completed
+            }
+        }
         // Coming from "New repository": the repo to clone is already known, so start right away.
         pendingClone.take()?.let { p ->
             if (manager.run.value.request == null) {
@@ -112,19 +122,15 @@ class GitCloneViewModel(
             is GitCloneEvent.UrlChange -> form.update {
                 it.copy(
                     url = event.value,
-                    folderName = if (it.folderName.isBlank()) deriveFolder(event.value) else it.folderName,
+                    folderName = if (it.folderEdited && it.folderName.isNotBlank()) it.folderName else deriveFolder(event.value),
                 )
             }
             is GitCloneEvent.ParentChange -> form.update { it.copy(parentPath = event.value) }
-            is GitCloneEvent.FolderChange -> form.update { it.copy(folderName = event.value) }
+            is GitCloneEvent.FolderChange -> form.update { it.copy(folderName = event.value, folderEdited = event.value.isNotBlank()) }
             is GitCloneEvent.BranchChange -> form.update { it.copy(branch = event.value) }
             GitCloneEvent.Start -> startClone()
             GitCloneEvent.Cancel -> manager.cancel()
             GitCloneEvent.DismissError -> manager.consumeOutcome()
-            GitCloneEvent.Done -> {
-                manager.reset()
-                _effects.trySend(Effect.NavigateBack)
-            }
             is GitCloneEvent.ConfirmPrivateToken -> confirmPrivateToken(event.username, event.token)
             GitCloneEvent.DismissPrivateRepoDialog -> manager.consumeOutcome()
             GitCloneEvent.ConfigureCredentials -> {

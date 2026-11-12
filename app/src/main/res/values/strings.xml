@@ -1480,6 +1480,7 @@
     <string name="ai_comp_search_models">Search models</string>
     <string name="ai_comp_no_models_yet">No models loaded yet. Save your API key in AI settings to load the list.</string>
     <string name="ai_settings_add_custom_provider">Add custom provider</string>
+    <string name="ai_settings_show_all_providers">Show all %1$d providers</string>
     <string name="ai_settings_custom_provider_desc">Any OpenAI-compatible endpoint. Use the base URL, usually ending in /v1.</string>
     <string name="ai_settings_custom_name">Name</string>
     <string name="ai_settings_custom_base_url">Base URL</string>

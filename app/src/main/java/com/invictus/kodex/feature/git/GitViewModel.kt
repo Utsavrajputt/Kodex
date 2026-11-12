@@ -904,7 +904,7 @@ class GitViewModel(
         val host = url?.let(::normalizeHost)
         val credential = host?.let { credentialStore.get(it) }
         if (host != null && credential == null) {
-            _uiState.update { it.copy(tokenDialog = TokenDialogState(host, DEFAULT_USERNAME, action, mode)) }
+            _uiState.update { it.copy(tokenDialog = TokenDialogState(host, "", action, mode)) }
             return false
         }
         val provider = credential?.let { GitTokenCredentialsProvider(it.username, it.token) }

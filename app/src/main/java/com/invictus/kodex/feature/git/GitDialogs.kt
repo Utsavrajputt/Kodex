@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -56,7 +57,7 @@ fun IdentityDialog(
                     onValueChange = { email = it },
                     label = { Text(stringResource(R.string.git_identity_email)) },
                     singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, capitalization = KeyboardCapitalization.None, autoCorrectEnabled = true),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
@@ -145,7 +146,7 @@ fun PrivateRepoDialog(
     onCancel: () -> Unit,
     onConfigure: () -> Unit,
 ) {
-    var username by remember(host) { mutableStateOf(DEFAULT_CLONE_USERNAME) }
+    var username by remember(host) { mutableStateOf("") }
     var token by remember(host) { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onCancel,
@@ -193,8 +194,6 @@ fun PrivateRepoDialog(
         },
     )
 }
-
-private const val DEFAULT_CLONE_USERNAME = "x-access-token"
 
 @Composable
 fun GitErrorDialog(details: GitErrorDetails, onDismiss: () -> Unit) {

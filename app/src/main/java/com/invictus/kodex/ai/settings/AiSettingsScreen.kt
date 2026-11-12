@@ -443,8 +443,12 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                 SettingsSectionHeader(stringResource(R.string.ai_settings_group_model))
 
                 // ---- provider ----
+                var showAllProviders by remember { mutableStateOf(false) }
+                val topProviders = providers.take(3)
+                // The picked provider always stays visible, even when it is further down the list.
+                val shownProviders = if (showAllProviders) providers else topProviders + providers.filter { it.id == providerId && it !in topProviders }
                 SectionCard(stringResource(R.string.ai_settings_provider), XIcons.Cloud, stringResource(R.string.ai_settings_who_runs_the_model_each)) {
-                    providers.forEach { p ->
+                    shownProviders.forEach { p ->
                         SelectableRow(
                             selected = p.id == providerId,
                             onClick = { vm.selectProvider(p.id) },
@@ -469,6 +473,11 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                                     Icon(XIcons.Delete, contentDescription = stringResource(R.string.ai_settings_remove))
                                 }
                             }
+                        }
+                    }
+                    if (providers.size > topProviders.size) {
+                        TextButton(onClick = { showAllProviders = !showAllProviders }) {
+                            Text(if (showAllProviders) stringResource(R.string.ai_settings_show_fewer) else stringResource(R.string.ai_settings_show_all_providers, providers.size))
                         }
                     }
                     TextButton(onClick = { showAddProvider = true }) {

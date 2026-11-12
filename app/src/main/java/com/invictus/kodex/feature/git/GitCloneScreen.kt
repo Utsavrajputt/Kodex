@@ -102,7 +102,7 @@ fun GitCloneScreen(
         }
     }
 
-    val fieldsLocked = state.cloning || state.completed
+    val fieldsLocked = state.cloning
 
     state.error?.let { details ->
         GitErrorDialog(details = details, onDismiss = { viewModel.onEvent(GitCloneEvent.DismissError) })
@@ -145,19 +145,12 @@ fun GitCloneScreen(
                     }
                 },
                 actions = {
-                    if (!state.cloning && !state.completed) {
+                    if (!state.cloning) {
                         IconButton(onClick = onNewRepo) {
                             Icon(XIcons.Add, contentDescription = stringResource(R.string.new_repo_title))
                         }
                     }
                     when {
-                        state.completed -> ActionPill(
-                            text = stringResource(R.string.clone_finish_button),
-                            icon = XIcons.Check,
-                            brush = pal.installBrush,
-                            content = pal.onInstall,
-                            enabled = true,
-                        ) { viewModel.onEvent(GitCloneEvent.Done) }
                         state.cloning -> ActionPill(
                             text = stringResource(if (state.cancelling) R.string.clone_cancelling else R.string.clone_cancel),
                             icon = XIcons.Close,
@@ -196,7 +189,7 @@ fun GitCloneScreen(
     }
 }
 
-/** Compact pill in the top bar: Clone / Cancel / Done. */
+/** Compact pill in the top bar: Clone / Cancel. */
 @Composable
 internal fun ActionPill(
     text: String,

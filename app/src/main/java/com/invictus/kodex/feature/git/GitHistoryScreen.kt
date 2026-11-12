@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -82,6 +83,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -126,6 +128,8 @@ class GitHistoryViewModel(
         // "Change author"
         val authorTarget: GitCommitSummary? = null,
         val rewriting: Boolean = false,
+        /** Bumped whenever [commits] is replaced (reload / search / mode change) so the list jumps back to the newest commit. */
+        val scrollToTopTick: Int = 0,
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -145,7 +149,12 @@ class GitHistoryViewModel(
             _ui.update { it.copy(loading = it.commits.isEmpty()) }
             when (val r = session.log(max = PAGE_SIZE, path = filePath)) {
                 is GitResult.Ok -> _ui.update {
-                    it.copy(loading = false, commits = r.value, hasMore = r.value.size >= PAGE_SIZE)
+                    it.copy(
+                        loading = false,
+                        commits = r.value,
+                        hasMore = r.value.size >= PAGE_SIZE,
+                        scrollToTopTick = it.scrollToTopTick + 1,
+                    )
                 }
                 is GitResult.Err -> _ui.update { it.copy(loading = false, error = r.error) }
             }
@@ -179,7 +188,9 @@ class GitHistoryViewModel(
         searchJob = viewModelScope.launch(io) {
             delay(250)   // debounce
             when (val r = session.searchLog(q, _ui.value.mode)) {
-                is GitResult.Ok -> _ui.update { it.copy(commits = r.value, hasMore = false) }
+                is GitResult.Ok -> _ui.update {
+                    it.copy(commits = r.value, hasMore = false, scrollToTopTick = it.scrollToTopTick + 1)
+                }
                 is GitResult.Err -> _ui.update { it.copy(error = r.error) }
             }
         }
@@ -383,6 +394,11 @@ fun GitHistoryScreen(projectPath: String, filePath: String? = null, onBack: () -
     val hashCopiedMsg = stringResource(R.string.git_history_hash_copied)
     val rows = remember(ui.commits, ui.mode) { buildRows(ui.commits, ui.mode == GitLogSearchMode.AUTHOR) }
     var menuFor by remember { mutableStateOf<String?>(null) }
+    val listState = rememberLazyListState()
+
+    // List replaced (reload / search / chip change): LazyColumn would otherwise keep anchoring to the
+    // previously visible commit key and land mid-list. Always start from the newest commit.
+    LaunchedEffect(ui.scrollToTopTick) { listState.scrollToItem(0) }
 
     LaunchedEffect(Unit) {
         vm.messages.collect { msg -> msg?.let { snackbar.showSnackbar(it); vm.messageHandled() } }
@@ -444,7 +460,7 @@ fun GitHistoryScreen(projectPath: String, filePath: String? = null, onBack: () -
                     )
                 }
             }
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.fillMaxSize(), state = listState) {
                 items(
                     rows,
                     key = { r ->
