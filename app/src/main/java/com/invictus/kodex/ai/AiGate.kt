@@ -42,6 +42,7 @@ interface AiGateImpl {
         hasChanges: Boolean,
         onFill: (String) -> Unit,
         onReplace: (String) -> Unit,
+        amend: Boolean,
         app: android.app.Application,
     )
 

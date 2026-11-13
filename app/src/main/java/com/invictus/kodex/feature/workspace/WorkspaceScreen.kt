@@ -60,7 +60,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.invictus.kodex.R
 import com.invictus.kodex.KodexApp
 import com.invictus.kodex.core.git.GitOnboardingPrefs
-import com.invictus.kodex.feature.project.OpenProjectSheet
+import com.invictus.kodex.feature.project.WorkspaceProjectSheet
 import com.invictus.kodex.feature.search.FileSearchOverlay
 import com.invictus.kodex.feature.search.SearchBus
 import com.invictus.kodex.feature.project.ProjectsEffect
@@ -280,7 +280,8 @@ fun WorkspaceScreen(
     }
 
     if (showProjectSheet) {
-        OpenProjectSheet(
+        // Change-project sheet inside the workspace: just Recents (Home keeps its own OpenProjectSheet).
+        WorkspaceProjectSheet(
             state = projectsState,
             currentRoot = state.root,
             snackbarHostState = snackbarHostState,
@@ -291,12 +292,6 @@ fun WorkspaceScreen(
             },
             onCopyPath = copyPath,
             onDismiss = { showProjectSheet = false },
-            // Inside a project there's no Home recents list visible, so keep it here.
-            showRecent = true,
-            // Change-project sheet inside the workspace: just Recents -- no search, no
-            // folder browser, no clone (Home's Open Project sheet keeps all of that).
-            showSearch = false,
-            showBrowse = false,
         )
     }
 }

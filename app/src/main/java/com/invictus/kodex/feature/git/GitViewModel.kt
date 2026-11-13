@@ -4,6 +4,7 @@ import com.invictus.kodex.github.notify.GitPushEvents
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import com.invictus.kodex.core.git.GitTrigger
+import com.invictus.kodex.core.git.GitWorkOp
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -271,7 +272,7 @@ class GitViewModel(
             }
             is GitEvent.CommitMessageChange -> onCommitMessageChange(event.text)
             is GitEvent.PasteCommitText -> onPasteCommitText(event.text)
-            is GitEvent.ReplaceCommitMessage -> _uiState.update { it.copy(commitMessage = event.text.trim()) }
+            is GitEvent.AiCommitText -> onAiCommitText(event.text, event.replace)
             GitEvent.ToggleAmend -> toggleAmend()
             GitEvent.Commit -> commit()
             GitEvent.Push -> push(force = false)
@@ -709,6 +710,21 @@ class GitViewModel(
         if (script != null) handleScript(script) else _uiState.update { it.copy(commitMessage = text) }
     }
 
+    /** AI text into the commit box. Amend ON: always added after the existing (HEAD) message, one newline apart. */
+    private fun onAiCommitText(text: String, replace: Boolean) {
+        val ai = text.trim()
+        if (_uiState.value.amend) {
+            _uiState.update {
+                val old = it.commitMessage.trimEnd()
+                it.copy(commitMessage = if (old.isEmpty()) ai else old + "\n" + ai)
+            }
+        } else if (replace) {
+            _uiState.update { it.copy(commitMessage = ai) }
+        } else {
+            onPasteCommitText(text)
+        }
+    }
+
     private fun onPasteCommitText(text: String) {
         val script = parseGitScript(text)
         if (script != null) handleScript(script) else _uiState.update { it.copy(commitMessage = it.commitMessage + text) }
@@ -909,6 +925,7 @@ class GitViewModel(
         }
         val provider = credential?.let { GitTokenCredentialsProvider(it.username, it.token) }
         _uiState.update { it.copy(networkOp = action, progressTask = "") }
+        var failure: GitErrorDetails? = null
         val ok = when (val result = call(provider)) {
             is GitResult.Ok -> {
                 if (action == GitPendingAction.PUSH) GitPushEvents.emit(projectPath)
@@ -925,6 +942,7 @@ class GitViewModel(
                 true
             }
             is GitResult.Err -> {
+                failure = result.error
                 if (host != null && result.error.authFailure.isAuthError()) {
                     _uiState.update {
                         it.copy(
@@ -953,16 +971,33 @@ class GitViewModel(
         _uiState.update { it.copy(networkOp = null, progressTask = "") }
         // Finished while the app was not on screen: say so (GitRemoteWork skips it when the app is visible).
         if (announce || !ok) {
-            GitRemoteWork.notifyDone(
-                text = when {
-                    !ok -> R.string.git_work_failed
-                    action == GitPendingAction.PUSH -> R.string.git_work_done_push
-                    action == GitPendingAction.PULL -> R.string.git_work_done_pull
-                    else -> R.string.git_work_done_fetch
-                },
-                project = File(projectPath).name,
-                ok = ok,
-            )
+            val err = failure
+            if (!ok && err != null) {
+                // Says what it was and why (pull first / fetch first / sign-in), with a button when one fixes it.
+                val snap = _uiState.value.snapshot
+                GitRemoteWork.notifyFailure(
+                    op = when (action) {
+                        GitPendingAction.PUSH -> GitWorkOp.PUSH
+                        GitPendingAction.PULL -> GitWorkOp.PULL
+                        else -> GitWorkOp.FETCH
+                    },
+                    error = err,
+                    workTree = File(projectPath),
+                    remote = remote,
+                    branch = snap?.trackingInfo?.branch ?: snap?.headName,
+                )
+            } else {
+                GitRemoteWork.notifyDone(
+                    text = when {
+                        !ok -> R.string.git_work_failed
+                        action == GitPendingAction.PUSH -> R.string.git_work_done_push
+                        action == GitPendingAction.PULL -> R.string.git_work_done_pull
+                        else -> R.string.git_work_done_fetch
+                    },
+                    project = File(projectPath).name,
+                    ok = ok,
+                )
+            }
         }
         touchOwnActivity()
         return ok

@@ -75,6 +75,7 @@ fun CommitMessageAi(
     hasChanges: Boolean,
     onFill: (String) -> Unit,
     onReplace: (String) -> Unit,
+    amend: Boolean,
     app: Application,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -216,8 +217,10 @@ fun CommitMessageAi(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.width(6.dp))
+                // Amend ON: the message is always added after the current one, so the switch is parked (off, disabled).
                 Switch(
-                    checked = replace,
+                    checked = replace && !amend,
+                    enabled = !amend,
                     onCheckedChange = { replace = it; scope.launch { prefs.setCommitReplace(it) } },
                 )
             }
@@ -260,7 +263,13 @@ fun CommitMessageAi(
                 ) { Text(stringResource(R.string.ai_commit_use_message)) }
             }
             Text(
-                stringResource(if (replace) R.string.ai_commit_replace_on else R.string.ai_commit_replace_off),
+                stringResource(
+                    when {
+                        amend -> R.string.ai_commit_replace_amend
+                        replace -> R.string.ai_commit_replace_on
+                        else -> R.string.ai_commit_replace_off
+                    },
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

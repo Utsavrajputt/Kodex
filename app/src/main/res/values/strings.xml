@@ -96,6 +96,9 @@
     <string name="menu_open_project">Open project</string>
     <string name="menu_backup_project">Back up as ZIP</string>
     <string name="sheet_title">Recent projects</string>
+    <string name="ws_sheet_subtitle">Switch to another project</string>
+    <string name="ws_sheet_others">Other projects</string>
+    <string name="ws_sheet_empty">No other recent projects yet. Projects you open show up here.</string>
     <string name="sheet_subtitle">Choose a folder or search for a path.</string>
     <string name="sheet_search_hint">Search, or type a path (/storage/…)</string>
     <string name="sheet_open_path">Open this path</string>
@@ -458,6 +461,15 @@
     <string name="git_work_done_pull">Pulled %1$s</string>
     <string name="git_work_done_fetch">Fetched %1$s</string>
     <string name="git_work_failed">%1$s: Git didn\'t finish — open Kodex to see why</string>
+    <string name="git_work_failed_push">%1$s: Push didn\'t finish — open Kodex to see why</string>
+    <string name="git_work_failed_pull">%1$s: Pull didn\'t finish — open Kodex to see why</string>
+    <string name="git_work_failed_fetch">%1$s: Fetch didn\'t finish — open Kodex to see why</string>
+    <string name="git_work_failed_push_rejected">%1$s: Push rejected — the remote has newer commits. Pull first, then push again.</string>
+    <string name="git_work_failed_fetch_first">%1$s: Push stopped — fetch %2$s first, then push again.</string>
+    <string name="git_work_failed_auth">%1$s: Git sign-in needed — open Kodex to update the token.</string>
+    <string name="git_work_action_pull_push">Pull &amp; push</string>
+    <string name="git_work_action_fetch">Fetch</string>
+    <string name="git_work_done_pull_push">Pulled and pushed %1$s</string>
 
     <!-- Reflog -->
     <string name="git_reflog_title">Reflog</string>
@@ -981,6 +993,7 @@
     <string name="ai_commit_replace_short">Replace</string>
     <string name="ai_commit_replace_on">The AI message replaces what is in the commit box.</string>
     <string name="ai_commit_replace_off">The AI message is added after what is in the commit box.</string>
+    <string name="ai_commit_replace_amend">Amend is on: the AI message is added after the current commit message, on a new line.</string>
     <string name="ai_comp_a_custom_model_id_is">A custom model id is set in Settings. Picking a model here clears it.</string>
     <string name="ai_comp_choose_model">Choose model</string>
     <string name="ai_comp_context_full">" — nearly full, consider a new chat"</string>
