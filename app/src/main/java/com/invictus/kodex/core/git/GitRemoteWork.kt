@@ -1,22 +1,22 @@
 package com.invictus.kodex.core.git
 
+import kotlinx.coroutines.delay
+import androidx.core.app.ServiceCompat
+import android.os.IBinder
+import android.content.pm.ServiceInfo
+import android.app.Service
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.os.Build
-import android.os.IBinder
-import android.widget.RemoteViews
 import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.invictus.kodex.KodexApp
 import com.invictus.kodex.R
@@ -29,7 +29,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -55,15 +54,20 @@ object GitRemoteWork {
 
     const val NOTIF_ID = 7410
     private const val RESULT_ID = 7411
-    private const val CHANNEL = "git_remote_work"
+    /** Created blocked (NONE): the foreground service runs, but nothing shows in the shade. */
+    private const val CHANNEL = "git_remote_work_hidden"
     private const val CHANNEL_RESULT = "git_remote_result"
+    private const val OLD_CHANNEL = "git_remote_work"
+    private const val STOP_DELAY_MS = 1_500L
 
     fun init(context: Context) {
         appContext = context.applicationContext
     }
 
     /**
-     * Starts [block] (a network operation on the repository at [workTree]) so it outlives the caller.
+     * Starts [block] (a network operation on the repository at [workTree]) so it outlives the caller (the screen):
+     * a foreground service keeps the process alive while anything runs, even when the app is minimized. Its
+     * notification sits on a blocked channel, so nothing is shown; only a failure notifies ([notifyFailure]).
      * [label] is a string taking the project name, e.g. "Pushing %1$s".
      */
     fun launch(@StringRes label: Int, workTree: File, block: suspend () -> Unit): Job {
@@ -72,7 +76,7 @@ object GitRemoteWork {
         val id = synchronized(lock) {
             val i = ++nextId
             active[i] = text
-            if (active.size == 1) startService(ctx) else refreshNotification(ctx)
+            if (active.size == 1) startService(ctx)
             i
         }
         // The screen's own reference may be released while this runs; this one keeps the repository open.
@@ -84,7 +88,6 @@ object GitRemoteWork {
                 GitSessionRegistry.release(workTree)
                 val idle = synchronized(lock) {
                     active.remove(id)
-                    if (active.isNotEmpty()) refreshNotification(ctx)
                     active.isEmpty()
                 }
                 if (idle) {
@@ -181,13 +184,13 @@ object GitRemoteWork {
      * The notification's Pull & push / Fetch button: runs it in the background like the screen would (credentials
      * from the token store), and reports the outcome the same way (toast on success, notification on failure).
      */
-    fun retry(kind: GitRetryKind, workTree: File, remote: String, branch: String?) {
-        val ctx = appContext ?: return
-        val container = (ctx as? KodexApp)?.container ?: return
+    fun retry(kind: GitRetryKind, workTree: File, remote: String, branch: String?): Job? {
+        val ctx = appContext ?: return null
+        val container = (ctx as? KodexApp)?.container ?: return null
         NotificationManagerCompat.from(ctx).cancel(RESULT_ID)
         // Opened with the app-wide identity first, so a pull's merge commit is authored properly.
         val session = GitSessionRegistry.acquire(workTree, container.gitGlobalIdentityFile)
-        launch(if (kind == GitRetryKind.PULL_THEN_PUSH) R.string.git_work_pull else R.string.git_work_fetch, workTree) {
+        return launch(if (kind == GitRetryKind.PULL_THEN_PUSH) R.string.git_work_pull else R.string.git_work_fetch, workTree) {
             try {
                 val host = session.remoteUrl(remote)?.let(::normalizeHost)
                 val credential = host?.let { container.gitCredentialStore.get(it) }
@@ -231,33 +234,20 @@ object GitRemoteWork {
         )
     }
 
+    /** The foreground-service notification (never shown: its channel is blocked). */
     internal fun notification(ctx: Context): Notification {
         ensureChannels(ctx)
-        val text = synchronized(lock) {
-            when (active.size) {
-                0 -> ""
-                1 -> active.values.first()
-                else -> ctx.getString(R.string.git_work_multi, active.size)
-            }
-        }
-        val title = ctx.getString(R.string.git_work_title)
-        // Own body so the progress bar sits above the text (the stock progress style always draws it below).
-        val body = RemoteViews(ctx.packageName, R.layout.notif_git_progress).apply {
-            setTextViewText(R.id.git_title, title)
-            setTextViewText(R.id.git_text, text)
-        }
+        val text = synchronized(lock) { active.values.joinToString(" · ") }.ifEmpty { ctx.getString(R.string.git_work_title) }
         return NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_download)
             .setColor(ContextCompat.getColor(ctx, R.color.notif_accent))
-            .setContentTitle(title)
+            .setContentTitle(ctx.getString(R.string.git_work_title))
             .setContentText(text)
-            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
-            .setCustomContentView(body)
-            .setCustomBigContentView(body)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setContentIntent(openApp(ctx))
             .build()
     }
@@ -271,16 +261,12 @@ object GitRemoteWork {
         }
     }
 
-    private fun refreshNotification(ctx: Context?) {
-        ctx ?: return
-        post(ctx, NOTIF_ID, notification(ctx))
-    }
-
     private fun ensureChannels(ctx: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
+        nm.deleteNotificationChannel(OLD_CHANNEL)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL, ctx.getString(R.string.git_work_channel), NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CHANNEL, ctx.getString(R.string.git_work_channel), NotificationManager.IMPORTANCE_NONE),
         )
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_RESULT, ctx.getString(R.string.git_work_channel_result), NotificationManager.IMPORTANCE_DEFAULT),
@@ -299,7 +285,6 @@ object GitRemoteWork {
         return PendingIntent.getActivity(ctx, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
-    private const val STOP_DELAY_MS = 1_500L
 }
 
 /** Keeps the process alive while [GitRemoteWork] has something running, even when the app is minimized. */
@@ -330,7 +315,10 @@ class GitRetryReceiver : android.content.BroadcastReceiver() {
         val kind = intent.getStringExtra(EXTRA_KIND)?.let { runCatching { GitRetryKind.valueOf(it) }.getOrNull() } ?: return
         val path = intent.getStringExtra(EXTRA_PATH) ?: return
         val remote = intent.getStringExtra(EXTRA_REMOTE) ?: return
-        GitRemoteWork.retry(kind, File(path), remote, intent.getStringExtra(EXTRA_BRANCH))
+        // Keep the receiver (and so the process) alive until the pull/fetch is done.
+        val pending = goAsync()
+        val job = GitRemoteWork.retry(kind, File(path), remote, intent.getStringExtra(EXTRA_BRANCH))
+        if (job == null) pending.finish() else job.invokeOnCompletion { pending.finish() }
     }
 
     companion object {

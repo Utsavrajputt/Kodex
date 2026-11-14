@@ -242,14 +242,22 @@ class GitBranchesViewModel(
             _messages.value = "No branches fetched for '${_ui.value.createRemote}' yet"
             return
         }
+        if (_ui.value.busy) return
+        // Close the dialog on tap; the busy overlay shows the progress while the branch is made.
+        _ui.update { it.copy(showCreate = false, busy = true, progressTask = "") }
         viewModelScope.launch(io) {
-            when (val r = session.createBranch(name, checkout, start)) {
+            val result = try {
+                session.createBranch(name, checkout, start)
+            } finally {
+                _ui.update { it.copy(busy = false, progressTask = "") }
+            }
+            when (result) {
                 is GitResult.Ok -> {
-                    _ui.update { it.copy(showCreate = false, createName = "") }
+                    _ui.update { it.copy(createName = "") }
                     _messages.value = "Branch '$name' created"
                     load()
                 }
-                is GitResult.Err -> _ui.update { it.copy(error = r.error) }
+                is GitResult.Err -> _ui.update { it.copy(error = result.error) }
             }
         }
     }

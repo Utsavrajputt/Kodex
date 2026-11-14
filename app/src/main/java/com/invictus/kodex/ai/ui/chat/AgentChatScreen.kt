@@ -190,7 +190,6 @@ fun AgentChatContent(
     val status by vm.status.collectAsState()
     val contextUsed by vm.contextUsed.collectAsState()
     val changes by vm.changes.collectAsState()
-    val undo by vm.lastApplied.collectAsState()
     val reviewOpen by vm.reviewOpen.collectAsState()
     val applyError by vm.applyError.collectAsState()
     val index by vm.fileIndex.collectAsState()
@@ -385,21 +384,6 @@ fun AgentChatContent(
                             modifier = Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 10.dp),
                         )
                         IconButton(onClick = { vm.dismissNotice() }) { Icon(XIcons.Close, contentDescription = stringResource(R.string.ai_chat_dismiss)) }
-                    }
-                }
-            }
-            undo?.let { u ->
-                Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.tertiaryContainer, modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(XIcons.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(20.dp))
-                        Text(
-                            if (u.entries.size == 1) stringResource(R.string.ai_chat_applied_one) else stringResource(R.string.ai_chat_applied_many, u.entries.size),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
-                        )
-                        TextButton(onClick = { vm.undoLast() }) { Text(stringResource(R.string.ai_chat_undo)) }
-                        IconButton(onClick = { vm.dismissUndo() }) { Icon(XIcons.Close, contentDescription = stringResource(R.string.ai_chat_dismiss)) }
                     }
                 }
             }

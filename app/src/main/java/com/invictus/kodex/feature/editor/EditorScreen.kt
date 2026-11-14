@@ -378,14 +378,56 @@ fun EditorScreen(
                         // Preview never applies to a paged large file -- PreviewRouter only routes
                         // markdown/html, and a file that size is never one of those in practice,
                         // but the guard keeps the two M4/M5 features from ever fighting over `key`.
+                        // The editor / preview / split on its own; the AI panel (when open) is added under it below, so the
+                        // panel shows in every preview mode and the part above just gets shorter.
+                        val body: @Composable (Modifier) -> Unit = { m ->
+                            if (previewType == PreviewType.NONE || previewMode == PreviewMode.EDITOR || buffer.isPaged) {
+                                editorContent(m)
+                            } else if (previewMode == PreviewMode.PREVIEW) {
+                                PreviewPane(
+                                    buffer = buffer,
+                                    previewType = previewType,
+                                    revision = state.activeContentRevision,
+                                    darkTheme = darkTheme,
+                                    projectRoot = viewModel.projectRoot,
+                                    onSetHtmlJsEnabled = { viewModel.onEvent(EditorEvent.SetHtmlJsEnabled(path, it)) },
+                                    onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+                                    modifier = m,
+                                )
+                            } else { // SPLIT: editor on top, drag handle, preview below (M5 decision).
+                                BoxWithConstraints(m) {
+                                    val totalHeightPx = with(density) { maxHeight.toPx() }
+                                    var ratio by remember(path) { mutableFloatStateOf(buffer.previewSplitRatio) }
+                                    Column(Modifier.fillMaxSize()) {
+                                        editorContent(Modifier.weight(ratio).fillMaxWidth())
+                                        SplitDragHandle(onClose = { viewModel.onEvent(EditorEvent.ClosePreview(path)) }, onDragDeltaPx = { deltaY ->
+                                            if (totalHeightPx > 0f) {
+                                                ratio = (ratio + deltaY / totalHeightPx).coerceIn(0.15f, 0.85f)
+                                                viewModel.onEvent(EditorEvent.SetSplitRatio(path, ratio))
+                                            }
+                                        })
+                                        PreviewPane(
+                                            buffer = buffer,
+                                            previewType = previewType,
+                                            revision = state.activeContentRevision,
+                                            darkTheme = darkTheme,
+                                            projectRoot = viewModel.projectRoot,
+                                            onSetHtmlJsEnabled = { viewModel.onEvent(EditorEvent.SetHtmlJsEnabled(path, it)) },
+                                            onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+                                            modifier = Modifier.weight(1f - ratio).fillMaxWidth(),
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         val aiGate = AiGate
-                        if (showAi && aiGate != null && (previewType == PreviewType.NONE || previewMode == PreviewMode.EDITOR || buffer.isPaged)) {
-                            // AI split: editor on top, drag handle, AI panel below (mirrors the M5 preview split).
+                        if (showAi && aiGate != null) {
+                            // AI split: content on top, drag handle, AI panel below (mirrors the M5 preview split).
                             BoxWithConstraints(Modifier.fillMaxSize()) {
                                 val totalHeightPx = with(density) { maxHeight.toPx() }
                                 var aiRatio by remember(path) { mutableFloatStateOf(0.5f) }
                                 Column(Modifier.fillMaxSize()) {
-                                    editorContent(Modifier.weight(aiRatio).fillMaxWidth())
+                                    body(Modifier.weight(aiRatio).fillMaxWidth())
                                     SplitDragHandle(onClose = { showAi = false }, onDragDeltaPx = { deltaY ->
                                         if (totalHeightPx > 0f) {
                                             aiRatio = (aiRatio + deltaY / totalHeightPx).coerceIn(0.2f, 0.8f)
@@ -396,43 +438,8 @@ fun EditorScreen(
                                     }
                                 }
                             }
-                        } else if (previewType == PreviewType.NONE || previewMode == PreviewMode.EDITOR || buffer.isPaged) {
-                            editorContent(Modifier.fillMaxSize())
-                        } else if (previewMode == PreviewMode.PREVIEW) {
-                            PreviewPane(
-                                buffer = buffer,
-                                previewType = previewType,
-                                revision = state.activeContentRevision,
-                                darkTheme = darkTheme,
-                                projectRoot = viewModel.projectRoot,
-                                onSetHtmlJsEnabled = { viewModel.onEvent(EditorEvent.SetHtmlJsEnabled(path, it)) },
-                                onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        } else { // SPLIT: editor on top, drag handle, preview below (M5 decision).
-                            BoxWithConstraints(Modifier.fillMaxSize()) {
-                                val totalHeightPx = with(density) { maxHeight.toPx() }
-                                var ratio by remember(path) { mutableFloatStateOf(buffer.previewSplitRatio) }
-                                Column(Modifier.fillMaxSize()) {
-                                    editorContent(Modifier.weight(ratio).fillMaxWidth())
-                                    SplitDragHandle(onClose = { viewModel.onEvent(EditorEvent.ClosePreview(path)) }, onDragDeltaPx = { deltaY ->
-                                        if (totalHeightPx > 0f) {
-                                            ratio = (ratio + deltaY / totalHeightPx).coerceIn(0.15f, 0.85f)
-                                            viewModel.onEvent(EditorEvent.SetSplitRatio(path, ratio))
-                                        }
-                                    })
-                                    PreviewPane(
-                                        buffer = buffer,
-                                        previewType = previewType,
-                                        revision = state.activeContentRevision,
-                                        darkTheme = darkTheme,
-                                        projectRoot = viewModel.projectRoot,
-                                        onSetHtmlJsEnabled = { viewModel.onEvent(EditorEvent.SetHtmlJsEnabled(path, it)) },
-                                        onMessage = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
-                                        modifier = Modifier.weight(1f - ratio).fillMaxWidth(),
-                                    )
-                                }
-                            }
+                        } else {
+                            body(Modifier.fillMaxSize())
                         }
                     }
                 }

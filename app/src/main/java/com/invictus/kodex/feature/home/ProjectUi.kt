@@ -68,6 +68,20 @@ private val ProjectPalette = listOf(
 internal fun projectColor(name: String): Color =
     ProjectPalette[(name.hashCode() and Int.MAX_VALUE) % ProjectPalette.size]
 
+/**
+ * Colors for a vertical list of folders/projects: each name's own [projectColor], moved to the next palette
+ * entry when it would match the row above, so two neighbours never get the same tile color.
+ */
+internal fun projectColorsFor(names: List<String>): List<Color> {
+    var previous = -1
+    return names.map { name ->
+        var index = (name.hashCode() and Int.MAX_VALUE) % ProjectPalette.size
+        if (index == previous) index = (index + 1) % ProjectPalette.size
+        previous = index
+        ProjectPalette[index]
+    }
+}
+
 /** Case-insensitive match on project name or path. */
 internal fun RecentItem.matches(query: String): Boolean {
     val q = query.trim()
@@ -134,10 +148,12 @@ internal fun ProjectCardRow(
     onBackup: () -> Unit,
     isBackingUp: Boolean,
     modifier: Modifier = Modifier,
+    /** Tile color picked by the list (see [projectColorsFor]); null = the project's own color. */
+    tileColor: Color? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(20.dp)
-    val accent = if (item.exists) projectColor(item.file.name) else MaterialTheme.colorScheme.outline
+    val accent = if (item.exists) tileColor ?: projectColor(item.file.name) else MaterialTheme.colorScheme.outline
     Surface(
         modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
         shape = shape,

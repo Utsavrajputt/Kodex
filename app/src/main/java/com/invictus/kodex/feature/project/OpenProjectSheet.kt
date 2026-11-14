@@ -45,6 +45,7 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Surface
 import com.invictus.kodex.feature.home.projectColor
+import com.invictus.kodex.feature.home.projectColorsFor
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -128,6 +129,11 @@ fun OpenProjectSheet(
     val recents = state.recents.filter { matches(it.file, needle) }
     val shortcuts = state.shortcuts.filter { matches(it.file, needle) }
     val entries = state.browseEntries.filter { matches(it, needle) }
+    // Neighbouring rows never share a tile color.
+    val recentColors = recents.map { it.file.path }.zip(projectColorsFor(recents.map { it.file.name })).toMap()
+    val shortcutColors = shortcuts.map { it.file.path }
+        .zip(projectColorsFor(shortcuts.map { it.label?.asString() ?: it.file.name })).toMap()
+    val entryColors = entries.map { it.path }.zip(projectColorsFor(entries.map { it.name })).toMap()
 
     // Query ke saath, jo bhi shortcut/subfolder khula ho, hamesha poore Internal Storage root se
     // recursively folders dhoondte hain — sirf currently-browsed folder ke direct children tak
@@ -240,6 +246,7 @@ fun OpenProjectSheet(
                 if (recents.isNotEmpty() && showRecent && (showBrowse || state.browseDir == null)) {
                     items(items = recents, key = { "r:" + it.file.path }) { item ->
                         RecentRow(
+                            tileColor = recentColors[item.file.path],
                             item = item,
                             isCurrent = item.file.path == currentRoot.path,
                             isBackingUp = item.file.path in state.backingUp,
@@ -274,6 +281,7 @@ fun OpenProjectSheet(
                     if (browseDir == null) {
                         items(items = shortcuts, key = { "s:" + it.file.path }) { shortcut ->
                             FolderRow(
+                                tileColor = shortcutColors[shortcut.file.path],
                                 name = shortcut.label?.asString() ?: shortcut.file.name,
                                 file = shortcut.file,
                                 onEnter = { onEvent(ProjectsEvent.Browse(shortcut.file)) },
@@ -297,6 +305,7 @@ fun OpenProjectSheet(
                         }
                         items(items = entries, key = { "b:" + it.path }) { dir ->
                             FolderRow(
+                                tileColor = entryColors[dir.path],
                                 name = dir.name,
                                 file = dir,
                                 onEnter = { onEvent(ProjectsEvent.Browse(dir)) },
@@ -576,8 +585,18 @@ private fun FolderSearchResultRow(
 
 /** Tap enters the folder; the trailing button opens it as the workspace. */
 @Composable
-private fun FolderRow(name: String, file: File, onEnter: () -> Unit, onOpen: () -> Unit, onCopyPath: (File) -> Unit) {
-    FolderEntryRow(name = name, file = file, subtitle = file.path, onEnter = onEnter, onOpen = onOpen, onCopyPath = onCopyPath)
+private fun FolderRow(
+    name: String,
+    file: File,
+    onEnter: () -> Unit,
+    onOpen: () -> Unit,
+    onCopyPath: (File) -> Unit,
+    tileColor: Color? = null,
+) {
+    FolderEntryRow(
+        name = name, file = file, subtitle = file.path, onEnter = onEnter, onOpen = onOpen,
+        onCopyPath = onCopyPath, tileColor = tileColor,
+    )
 }
 
 /** Colored folder tile, name + path, tonal Open button and a overflow menu (same look as Home). */
@@ -589,9 +608,10 @@ private fun FolderEntryRow(
     onEnter: () -> Unit,
     onOpen: () -> Unit,
     onCopyPath: (File) -> Unit,
+    tileColor: Color? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val accent = projectColor(name)
+    val accent = tileColor ?: projectColor(name)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -649,6 +669,7 @@ private fun RecentRow(
     onOpen: () -> Unit,
     onEvent: (ProjectsEvent) -> Unit,
     onCopyPath: (File) -> Unit,
+    tileColor: Color? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var pressOffset by remember { mutableStateOf(Offset.Zero) }
@@ -681,7 +702,7 @@ private fun RecentRow(
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val accent = if (item.exists) projectColor(file.name) else MaterialTheme.colorScheme.outline
+            val accent = if (item.exists) tileColor ?: projectColor(file.name) else MaterialTheme.colorScheme.outline
             Box(
                 modifier = Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(accent.copy(alpha = 0.2f)),
                 contentAlignment = Alignment.Center,

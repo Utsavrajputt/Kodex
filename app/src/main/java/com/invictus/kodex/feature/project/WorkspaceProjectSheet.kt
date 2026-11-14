@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.invictus.kodex.R
 import com.invictus.kodex.feature.home.projectColor
+import com.invictus.kodex.feature.home.projectColorsFor
 import com.invictus.kodex.ui.icons.XIcons
 import java.io.File
 
@@ -72,6 +73,10 @@ fun WorkspaceProjectSheet(
     val current = state.recents.firstOrNull { it.file.path == currentRoot.path }
         ?: RecentItem(currentRoot, exists = true, isDeviceStorage = currentRoot.path == StorageRootPath)
     val others = state.recents.filter { it.file.path != currentRoot.path }
+    // The open project sits on top of the list: colors of neighbouring cards never match.
+    val colors = projectColorsFor((listOf(current) + others).map { it.file.name })
+    val currentColor = colors.first()
+    val otherColors = others.map { it.file.path }.zip(colors.drop(1)).toMap()
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -93,6 +98,7 @@ fun WorkspaceProjectSheet(
             ) {
                 item(key = "current") {
                     CurrentProjectCard(
+                        tileColor = currentColor,
                         item = current,
                         isBackingUp = current.file.path in state.backingUp,
                         onOpen = { onOpen(current.file) },
@@ -120,6 +126,7 @@ fun WorkspaceProjectSheet(
                     }
                     items(items = others, key = { "r:" + it.file.path }) { item ->
                         ProjectCard(
+                            tileColor = otherColors[item.file.path],
                             item = item,
                             isBackingUp = item.file.path in state.backingUp,
                             onOpen = { onOpen(item.file) },
@@ -148,6 +155,7 @@ private fun parentLabel(item: RecentItem, internalLabel: String): String {
 
 @Composable
 private fun CurrentProjectCard(
+    tileColor: Color,
     item: RecentItem,
     isBackingUp: Boolean,
     onOpen: () -> Unit,
@@ -156,7 +164,7 @@ private fun CurrentProjectCard(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val file = item.file
-    val accent = projectColor(file.name)
+    val accent = tileColor
     val onCard = MaterialTheme.colorScheme.onPrimaryContainer
     // Same height as the other cards; the tint is what sets it apart.
     Surface(
@@ -204,6 +212,7 @@ private fun CurrentProjectCard(
 
 @Composable
 private fun ProjectCard(
+    tileColor: Color?,
     item: RecentItem,
     isBackingUp: Boolean,
     onOpen: () -> Unit,
@@ -212,7 +221,7 @@ private fun ProjectCard(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val file = item.file
-    val accent = if (item.exists) projectColor(file.name) else MaterialTheme.colorScheme.outline
+    val accent = if (item.exists) tileColor ?: projectColor(file.name) else MaterialTheme.colorScheme.outline
     Surface(
         shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,

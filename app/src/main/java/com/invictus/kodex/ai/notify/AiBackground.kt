@@ -1,5 +1,10 @@
 package com.invictus.kodex.ai.notify
 
+import androidx.core.app.ServiceCompat
+import android.os.IBinder
+import android.content.pm.ServiceInfo
+import android.content.Intent
+import android.app.Service
 import android.Manifest
 import android.app.Activity
 import android.app.Application
@@ -7,45 +12,34 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.Service
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.Bundle
-import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.invictus.kodex.R
 
 /**
  * Keeps an AI chat turn alive while the app is minimized: a foreground service (so Android does not kill the
- * process mid-answer) with a "Kodex AI is working" notification, counted so several chats share one service.
+ * process mid-answer), counted so several chats share one service. Its notification sits on a channel that is
+ * created blocked, so nothing shows in the shade: the work runs, it just does not announce itself.
  */
 object AiBackground {
     private var active = 0
-    private var lastProject = ""
 
     fun isRunning(): Boolean = synchronized(this) { active > 0 }
 
-    fun workingText(): String = synchronized(this) {
-        if (active > 1) "Working on $active chats…" else "Working on $lastProject…"
-    }
-
-    fun begin(context: Context, project: String) {
+    fun begin(context: Context, @Suppress("UNUSED_PARAMETER") project: String) {
         val app = context.applicationContext
-        val first = synchronized(this) { lastProject = project; active++ == 0 }
+        val first = synchronized(this) { active++ == 0 }
         if (first) {
             try {
                 ContextCompat.startForegroundService(app, Intent(app, AiWorkService::class.java))
             } catch (_: Exception) {
                 // Not allowed right now: the turn still runs, just unprotected.
             }
-        } else {
-            AiNotifier(app).showLive()
         }
     }
 
@@ -53,7 +47,6 @@ object AiBackground {
         val app = context.applicationContext
         val left = synchronized(this) { if (active > 0) --active else 0 }
         if (left == 0) app.stopService(Intent(app, AiWorkService::class.java))
-        else AiNotifier(app).showLive()
     }
 }
 
@@ -82,9 +75,9 @@ class AiNotifier(context: Context) {
     init {
         if (Build.VERSION.SDK_INT >= 26) {
             val sys = ctx.getSystemService(NotificationManager::class.java)
-            // Android needs a notification while the chat runs in the background; MIN keeps it collapsed with no status-bar icon.
-            sys?.deleteNotificationChannel(OLD_CHANNEL_LIVE)
-            sys?.createNotificationChannel(NotificationChannel(CHANNEL_LIVE, "Kodex AI activity", NotificationManager.IMPORTANCE_MIN))
+            // The service's notification lives on a channel created blocked (NONE): the service runs, nothing shows.
+            OLD_CHANNELS_LIVE.forEach { sys?.deleteNotificationChannel(it) }
+            sys?.createNotificationChannel(NotificationChannel(CHANNEL_LIVE, "Kodex AI background work", NotificationManager.IMPORTANCE_NONE))
             sys?.createNotificationChannel(NotificationChannel(CHANNEL_DONE, "Kodex AI replies", NotificationManager.IMPORTANCE_DEFAULT))
         }
     }
@@ -94,21 +87,18 @@ class AiNotifier(context: Context) {
         return PendingIntent.getActivity(ctx, 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
-    /** The foreground-service notification. */
+    /** The foreground-service notification (never shown: its channel is blocked). */
     fun live(): Notification = NotificationCompat.Builder(ctx, CHANNEL_LIVE)
         .setSmallIcon(R.drawable.ic_stat_ai)
         .setColor(ContextCompat.getColor(ctx, R.color.notif_accent))
         .setContentTitle("Kodex AI")
-        .setContentText(AiBackground.workingText())
-        .setOngoing(false)
+        .setContentText("Working…")
+        .setOngoing(true)
         .setOnlyAlertOnce(true)
         .setSilent(true)
         .setPriority(NotificationCompat.PRIORITY_MIN)
         .setContentIntent(openApp())
-        .setProgress(0, 0, true)
         .build()
-
-    fun showLive() = post(LIVE_ID, live())
 
     /** A finished answer while the app is not visible. Tapping opens the app. */
     fun done(project: String, text: String, ok: Boolean) {
@@ -134,8 +124,8 @@ class AiNotifier(context: Context) {
     }
 
     companion object {
-        const val CHANNEL_LIVE = "ai_agent_live_quiet"
-        private const val OLD_CHANNEL_LIVE = "ai_agent_live"
+        const val CHANNEL_LIVE = "ai_agent_live_hidden"
+        private val OLD_CHANNELS_LIVE = listOf("ai_agent_live", "ai_agent_live_quiet")
         const val CHANNEL_DONE = "ai_agent_done"
         const val LIVE_ID = 7300
         const val DONE_ID = 7301

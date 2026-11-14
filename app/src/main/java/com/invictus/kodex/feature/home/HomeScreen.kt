@@ -296,6 +296,7 @@ fun HomeScreen(
                 }
             }
             val shown = if (searching) filtered else filtered.take(HomeRecentLimit)
+            val tileColors = shown.map { it.file.path }.zip(projectColorsFor(shown.map { it.file.name })).toMap()
             if (shown.isEmpty()) {
                 item(key = "empty") {
                     Text(
@@ -308,6 +309,7 @@ fun HomeScreen(
             } else {
                 items(items = shown, key = { "r:" + it.file.path }) { item ->
                     ProjectCardRow(
+                        tileColor = tileColors[item.file.path],
                         item = item,
                         onOpen = { openProject(item.file) },
                         onRemove = { projectsViewModel.onEvent(ProjectsEvent.RemoveRecent(item.file.path)) },

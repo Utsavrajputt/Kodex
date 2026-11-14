@@ -1131,7 +1131,7 @@
 
         <receiver android:name=".github.notify.DownloadActionReceiver" android:exported="false" />
 
-        <!-- Kodex AI: keeps an answer running while the app is minimized. -->
+        <!-- Kodex AI: keeps an answer running while the app is minimized (its notification channel is blocked: silent). -->
         <service
             android:name=".ai.notify.AiWorkService"
             android:exported="false"
@@ -1143,7 +1143,7 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Git push/pull/fetch: keeps them running when the screen is closed or the app is minimized. -->
+        <!-- Git push/pull/fetch: keeps them running when the screen is closed or the app is minimized (silent channel). -->
         <service
             android:name=".core.git.GitWorkService"
             android:exported="false"
