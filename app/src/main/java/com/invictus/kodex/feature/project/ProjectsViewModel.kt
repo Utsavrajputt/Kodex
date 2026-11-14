@@ -114,7 +114,7 @@ class ProjectsViewModel(
             ProjectsEvent.ToggleShowHidden -> toggleShowHidden()
             is ProjectsEvent.SaveShortcuts ->
                 viewModelScope.launch { settingsStore.setBrowseShortcuts(event.prefs) }
-            is ProjectsEvent.CreateProject -> createProject(event.parent, event.name)
+            is ProjectsEvent.CreateProject -> createProject(event.parent, event.name, event.options)
             ProjectsEvent.DismissCreateError -> _uiState.update { it.copy(createError = null) }
         }
     }
@@ -333,14 +333,16 @@ class ProjectsViewModel(
         )
     }
 
-    private fun createProject(parent: File, name: String) {
+    private fun createProject(parent: File, name: String, options: NewProjectOptions) {
         viewModelScope.launch {
             // The default location (storage/Projects) may not exist yet.
             withContext(io) { if (!parent.exists()) parent.mkdirs() }
             when (val result = fileOps.createFolder(parent, name)) {
                 is FsResult.Ok -> {
                     _uiState.update { it.copy(createError = null) }
-                    _effects.send(ProjectsEffect.ProjectCreated(result.value))
+                    withContext(io) { ProjectScaffold.write(result.value, name, options) }
+                    if (!options.open) _effects.send(ProjectsEffect.Message(UiText(R.string.msg_project_created, listOf(result.value.name))))
+                    _effects.send(ProjectsEffect.ProjectCreated(result.value, options.open))
                 }
                 is FsResult.Err -> _uiState.update { it.copy(createError = result.toUiText()) }
             }

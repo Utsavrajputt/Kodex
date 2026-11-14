@@ -83,7 +83,7 @@ sealed interface ProjectsEvent {
     data object ToggleShowHidden : ProjectsEvent
     data class SaveShortcuts(val prefs: List<ShortcutPref>) : ProjectsEvent
     /** Create folder [name] inside [parent]; on success a [ProjectsEffect.ProjectCreated] follows. */
-    data class CreateProject(val parent: File, val name: String) : ProjectsEvent
+    data class CreateProject(val parent: File, val name: String, val options: NewProjectOptions = NewProjectOptions()) : ProjectsEvent
     data object DismissCreateError : ProjectsEvent
 }
 
@@ -97,5 +97,5 @@ sealed interface ProjectsEffect {
     data class ProjectDeleted(val dir: File) : ProjectsEffect
 
     /** A new project folder was created; the home screen opens it right away. */
-    data class ProjectCreated(val dir: File) : ProjectsEffect
+    data class ProjectCreated(val dir: File, val open: Boolean = true) : ProjectsEffect
 }

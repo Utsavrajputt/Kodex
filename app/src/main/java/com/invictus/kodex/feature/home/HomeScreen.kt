@@ -167,7 +167,7 @@ fun HomeScreen(
                     fileTreeViewModel.onEvent(FileTreeEvent.ProjectMoved(effect.old, effect.new))
                 is ProjectsEffect.ProjectDeleted ->
                     fileTreeViewModel.onEvent(FileTreeEvent.ProjectDeleted(effect.dir))
-                is ProjectsEffect.ProjectCreated -> latestOpen(effect.dir)
+                is ProjectsEffect.ProjectCreated -> if (effect.open) latestOpen(effect.dir) else showNewSheet = false
             }
         }
     }
@@ -349,7 +349,7 @@ fun HomeScreen(
         NewProjectSheet(
             defaultParent = File(Environment.getExternalStorageDirectory(), "Projects"),
             error = projectsState.createError,
-            onCreate = { parent, name -> projectsViewModel.onEvent(ProjectsEvent.CreateProject(parent, name)) },
+            onCreate = { parent, name, options -> projectsViewModel.onEvent(ProjectsEvent.CreateProject(parent, name, options)) },
             onDismissError = { projectsViewModel.onEvent(ProjectsEvent.DismissCreateError) },
             onDismiss = {
                 showNewSheet = false

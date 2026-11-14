@@ -855,6 +855,17 @@
     <string name="new_project_create">Create</string>
     <string name="new_project_subtitle">Start fresh in an empty folder</string>
     <string name="new_project_will_create">Will be created at</string>
+    <string name="new_project_template">Starter</string>
+    <string name="new_project_tpl_empty">Empty</string>
+    <string name="new_project_tpl_web">Web</string>
+    <string name="new_project_tpl_python">Python</string>
+    <string name="new_project_tpl_node">Node.js</string>
+    <string name="new_project_opt_readme">README.md</string>
+    <string name="new_project_opt_gitignore">.gitignore</string>
+    <string name="new_project_opt_git">Initialize Git repository</string>
+    <string name="new_project_opt_open">Open after creating</string>
+    <string name="new_project_exists">A folder named \"%1$s\" already exists here</string>
+    <string name="msg_project_created">Created \"%1$s\"</string>
     <string name="new_project_or">or</string>
     <string name="new_project_clone_subtitle">Download a project from GitHub or any Git URL</string>
 

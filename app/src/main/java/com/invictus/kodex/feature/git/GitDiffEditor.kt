@@ -1,5 +1,6 @@
 package com.invictus.kodex.feature.git
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.relocation.BringIntoViewResponder
+import androidx.compose.foundation.relocation.bringIntoViewResponder
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -23,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -38,6 +42,7 @@ import androidx.compose.ui.unit.dp
  * [addedLines] are 0-based line indexes that differ from HEAD. As the user types, the set is
  * remapped (prefix/suffix of the edit) so tints follow their lines and edited lines get tinted too.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun GitDiffEditor(
     text: String,
@@ -87,12 +92,30 @@ internal fun GitDiffEditor(
     val v = rememberScrollState()
     val h = rememberScrollState()
 
+    // When the text field last changed its text. Tapping, focusing and the keyboard opening all ask the parents
+    // to bring the caret into view, and inside this horizontal scroller that threw the view back to the left.
+    // So only typing may move the view sideways; everything else just keeps the caret's line on screen.
+    val lastEditNs = remember { LongArray(1) }
+
     BoxWithConstraints(modifier.fillMaxSize()) {
         val minWidth = maxWidth
+        val viewportPx = with(density) { minWidth.toPx() }
+        val keepSideways = remember(h, viewportPx) {
+            object : BringIntoViewResponder {
+                override fun calculateRectForParent(localRect: Rect): Rect {
+                    if (System.nanoTime() - lastEditNs[0] < FOLLOW_TYPING_NS) return localRect
+                    // The window that is already visible (the Row starts at the scroll content's origin).
+                    return Rect(h.value.toFloat(), localRect.top, h.value + viewportPx, localRect.bottom)
+                }
+
+                override suspend fun bringChildIntoView(localRect: () -> Rect?) = Unit
+            }
+        }
         Box(Modifier.fillMaxSize().verticalScroll(v)) {
             Box(Modifier.horizontalScroll(h)) {
                 Row(
                     Modifier
+                        .bringIntoViewResponder(keepSideways)
                         .widthIn(min = minWidth)
                         .drawBehind {
                             muted.forEach { line ->
@@ -124,6 +147,7 @@ internal fun GitDiffEditor(
                         onValueChange = { new ->
                             if (new.text != value.text && accept?.invoke(new.text) == false) return@BasicTextField
                             if (new.text != value.text) {
+                                lastEditNs[0] = System.nanoTime()
                                 onAddedLinesChange(remapAdded(value.text, new.text, currentAdded))
                                 onTextChange(new.text)
                             }
@@ -138,6 +162,9 @@ internal fun GitDiffEditor(
         }
     }
 }
+
+/** After an edit the view may follow the caret sideways for this long (typing past the right edge). */
+private const val FOLLOW_TYPING_NS = 600_000_000L
 
 /**
  * Moves tinted line indexes through one edit. Unchanged prefix lines keep their index, suffix

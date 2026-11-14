@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,12 +15,16 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,6 +52,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.invictus.kodex.R
+import com.invictus.kodex.feature.project.NewProjectOptions
+import com.invictus.kodex.feature.project.ProjectTemplate
 import com.invictus.kodex.feature.workspace.UiText
 import com.invictus.kodex.feature.workspace.asString
 import com.invictus.kodex.ui.components.expressiveClickable
@@ -54,16 +62,16 @@ import com.invictus.kodex.ui.icons.XIcons
 import java.io.File
 
 /**
- * Bottom sheet for starting a project: a name and the folder to create it in.
- * Layout: icon badge + title, name field, location card with a live "will be created at" preview,
- * and a tall Create button.
+ * Bottom sheet for starting a project: a name, a starter (Empty / Web / Python / Node.js), a few
+ * one-tap extras (README, .gitignore, git init, open afterwards) and the folder to create it in.
+ * The name is checked live against the folder, so a clash shows before Create is pressed.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NewProjectSheet(
     defaultParent: File,
     error: UiText?,
-    onCreate: (parent: File, name: String) -> Unit,
+    onCreate: (parent: File, name: String, options: NewProjectOptions) -> Unit,
     onDismissError: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -72,7 +80,18 @@ fun NewProjectSheet(
     val pickFolder = rememberFolderPickerLauncher { parentPath = it }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
-    val submit = { if (name.isNotBlank()) onCreate(File(parentPath), name) }
+    var template by rememberSaveable { mutableStateOf(ProjectTemplate.EMPTY) }
+    var readme by rememberSaveable { mutableStateOf(true) }
+    var gitignore by rememberSaveable { mutableStateOf(true) }
+    var gitInit by rememberSaveable { mutableStateOf(true) }
+    var openAfter by rememberSaveable { mutableStateOf(true) }
+    // Live: a folder with this name is already there (Create would only fail).
+    val exists = name.isNotBlank() && File(parentPath, name.trim()).exists()
+    val submit = {
+        if (name.isNotBlank() && !exists) {
+            onCreate(File(parentPath), name, NewProjectOptions(template, readme, gitignore, gitInit, openAfter))
+        }
+    }
     val cs = MaterialTheme.colorScheme
 
     ModalBottomSheet(
@@ -81,6 +100,7 @@ fun NewProjectSheet(
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp).padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -117,12 +137,54 @@ fun NewProjectSheet(
                 leadingIcon = { Icon(XIcons.Folder, contentDescription = null) },
                 singleLine = true,
                 shape = RoundedCornerShape(18.dp),
-                isError = error != null,
-                supportingText = { Text(error?.asString() ?: stringResource(R.string.new_project_name_hint)) },
+                isError = error != null || exists,
+                supportingText = {
+                    Text(
+                        error?.asString()
+                            ?: if (exists) stringResource(R.string.new_project_exists, name.trim())
+                            else stringResource(R.string.new_project_name_hint),
+                    )
+                },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { submit() }),
                 modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
             )
+
+            // Starter: what the new folder starts with.
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.new_project_template),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = cs.onSurfaceVariant,
+                )
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ProjectTemplate.values().forEach { t ->
+                        FilterChip(
+                            selected = template == t,
+                            onClick = { template = t },
+                            label = {
+                                Text(
+                                    stringResource(
+                                        when (t) {
+                                            ProjectTemplate.EMPTY -> R.string.new_project_tpl_empty
+                                            ProjectTemplate.WEB -> R.string.new_project_tpl_web
+                                            ProjectTemplate.PYTHON -> R.string.new_project_tpl_python
+                                            ProjectTemplate.NODE -> R.string.new_project_tpl_node
+                                        },
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                }
+                // One-tap extras.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ExtraChip(R.string.new_project_opt_readme, readme) { readme = it }
+                    ExtraChip(R.string.new_project_opt_gitignore, gitignore) { gitignore = it }
+                    ExtraChip(R.string.new_project_opt_git, gitInit) { gitInit = it }
+                    ExtraChip(R.string.new_project_opt_open, openAfter) { openAfter = it }
+                }
+            }
 
             // Location card with the resulting path underneath.
             Surface(
@@ -171,7 +233,7 @@ fun NewProjectSheet(
 
             Button(
                 onClick = submit,
-                enabled = name.isNotBlank(),
+                enabled = name.isNotBlank() && !exists,
                 shape = RoundedCornerShape(18.dp),
                 modifier = Modifier.fillMaxWidth().height(56.dp),
             ) {
@@ -181,4 +243,19 @@ fun NewProjectSheet(
             }
         }
     }
+}
+
+/** A toggle chip: filled with a check when on. */
+@Composable
+private fun ExtraChip(label: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
+    FilterChip(
+        selected = checked,
+        onClick = { onChange(!checked) },
+        label = { Text(stringResource(label)) },
+        leadingIcon = if (checked) {
+            { Icon(XIcons.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+        } else {
+            null
+        },
+    )
 }
