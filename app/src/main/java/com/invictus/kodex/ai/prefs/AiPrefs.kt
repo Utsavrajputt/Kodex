@@ -29,6 +29,7 @@ class AiPrefs(private val context: Context) {
         val AUTO_APPLY = booleanPreferencesKey("ai.auto_apply")
         val GLOBAL_INSTRUCTIONS = stringPreferencesKey("ai.global_instructions")
         val MEMORY_ENABLED = booleanPreferencesKey("ai.memory_enabled")
+        val NOTIFY_DONE = booleanPreferencesKey("ai.notify_done")
         fun model(p: String) = stringPreferencesKey("ai.model.$p")
         fun recent(p: String) = stringPreferencesKey("ai.recent.$p")
     }
@@ -94,6 +95,10 @@ class AiPrefs(private val context: Context) {
     /** On = the chat agent may save notes to the project's memory on its own. */
     val memoryEnabled: Flow<Boolean> = context.aiPrefsStore.data.map { it[K.MEMORY_ENABLED] ?: true }
     suspend fun setMemoryEnabled(v: Boolean) { context.aiPrefsStore.edit { it[K.MEMORY_ENABLED] = v } }
+
+    /** On = a notification when a chat answer finishes (or fails) while the app is minimized. Off by default. */
+    val notifyOnDone: Flow<Boolean> = context.aiPrefsStore.data.map { it[K.NOTIFY_DONE] ?: false }
+    suspend fun setNotifyOnDone(v: Boolean) { context.aiPrefsStore.edit { it[K.NOTIFY_DONE] = v } }
 
     /** Rewrites a saved Gemini model that Google has retired to the current default. Idempotent. */
     suspend fun migrateRetiredModels() {

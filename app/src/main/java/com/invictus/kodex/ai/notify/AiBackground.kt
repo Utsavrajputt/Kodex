@@ -82,7 +82,9 @@ class AiNotifier(context: Context) {
     init {
         if (Build.VERSION.SDK_INT >= 26) {
             val sys = ctx.getSystemService(NotificationManager::class.java)
-            sys?.createNotificationChannel(NotificationChannel(CHANNEL_LIVE, "Kodex AI activity", NotificationManager.IMPORTANCE_LOW))
+            // Android needs a notification while the chat runs in the background; MIN keeps it collapsed with no status-bar icon.
+            sys?.deleteNotificationChannel(OLD_CHANNEL_LIVE)
+            sys?.createNotificationChannel(NotificationChannel(CHANNEL_LIVE, "Kodex AI activity", NotificationManager.IMPORTANCE_MIN))
             sys?.createNotificationChannel(NotificationChannel(CHANNEL_DONE, "Kodex AI replies", NotificationManager.IMPORTANCE_DEFAULT))
         }
     }
@@ -101,6 +103,7 @@ class AiNotifier(context: Context) {
         .setOngoing(false)
         .setOnlyAlertOnce(true)
         .setSilent(true)
+        .setPriority(NotificationCompat.PRIORITY_MIN)
         .setContentIntent(openApp())
         .setProgress(0, 0, true)
         .build()
@@ -131,7 +134,8 @@ class AiNotifier(context: Context) {
     }
 
     companion object {
-        const val CHANNEL_LIVE = "ai_agent_live"
+        const val CHANNEL_LIVE = "ai_agent_live_quiet"
+        private const val OLD_CHANNEL_LIVE = "ai_agent_live"
         const val CHANNEL_DONE = "ai_agent_done"
         const val LIVE_ID = 7300
         const val DONE_ID = 7301

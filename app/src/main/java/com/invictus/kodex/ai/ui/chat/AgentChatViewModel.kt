@@ -503,7 +503,7 @@ class AgentChatViewModel(private val app: Application, val projectPath: String) 
                 refreshStatus()
                 AiBackground.end(app)
                 // Finished (or failed) while the app is minimized: tell the user. A Stop by the user stays silent.
-                if (!cancelled && !AppVisibility.visible) {
+                if (!cancelled && !AppVisibility.visible && prefs.notifyOnDone.first()) {
                     val reply = _messages.value.lastOrNull { it.role == "assistant" }?.text.orEmpty()
                     AiNotifier(app).done(root.name, reply, ok = !failed && _error.value == null && _failure.value == null)
                 }

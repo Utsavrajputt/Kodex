@@ -1037,6 +1037,10 @@
     <string name="ai_settings_allow_ai_in_projects">Allow AI in projects</string>
     <string name="ai_settings_editing">Editing</string>
     <string name="ai_settings_editing_sub">How the chat agent changes your files.</string>
+    <string name="ai_settings_notifications">Notifications</string>
+    <string name="ai_settings_notifications_sub">Hear back when you are in another app</string>
+    <string name="ai_settings_notify_done">Notify when the AI finishes</string>
+    <string name="ai_settings_notify_done_desc">Off by default. On: a notification when an answer is ready (or fails) while Kodex is minimized.</string>
     <string name="ai_settings_auto_apply">Apply edits directly</string>
     <string name="ai_settings_auto_apply_desc">Off: changes wait for your review. On: the AI writes the files right away, tells you what it did, and an Undo bar appears.</string>
     <string name="ai_settings_api_key_connection">API key &amp; connection</string>

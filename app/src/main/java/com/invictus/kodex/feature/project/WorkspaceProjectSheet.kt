@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -159,7 +158,7 @@ private fun CurrentProjectCard(
     val file = item.file
     val accent = projectColor(file.name)
     val onCard = MaterialTheme.colorScheme.onPrimaryContainer
-    // Same height as the other cards; the tint and the "Open now" pill are what set it apart.
+    // Same height as the other cards; the tint is what sets it apart.
     Surface(
         shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.primaryContainer,
@@ -174,33 +173,14 @@ private fun CurrentProjectCard(
             FolderTile(accent = accent, size = 44, iconSize = 24, corner = 14)
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = if (item.isDeviceStorage) stringResource(R.string.workspace_root_internal) else file.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = onCard,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Surface(shape = CircleShape, color = onCard.copy(alpha = 0.14f)) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(XIcons.Check, contentDescription = null, tint = onCard, modifier = Modifier.size(12.dp))
-                            Spacer(Modifier.width(3.dp))
-                            Text(
-                                text = stringResource(R.string.sheet_current),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = onCard,
-                                maxLines = 1,
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = if (item.isDeviceStorage) stringResource(R.string.workspace_root_internal) else file.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onCard,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(
                     text = parentLabel(item, stringResource(R.string.workspace_root_internal)),
                     style = MaterialTheme.typography.bodySmall,

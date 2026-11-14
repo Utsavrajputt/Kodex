@@ -124,6 +124,7 @@ class AiSettingsViewModel(
     val globs: StateFlow<String> = prefs.excludeGlobs.stateIn(viewModelScope, SharingStarted.Eagerly, "")
     val autoApply: StateFlow<Boolean> = prefs.autoApply.stateIn(viewModelScope, SharingStarted.Eagerly, false)
     val memoryEnabled: StateFlow<Boolean> = prefs.memoryEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val notifyOnDone: StateFlow<Boolean> = prefs.notifyOnDone.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** Universal memory + instructions (not tied to any project), edited in the sheet opened from the settings row. */
     val globalDocs: MemoryDocs = GlobalMemoryDocs(app, prefs, viewModelScope)
@@ -219,6 +220,10 @@ class AiSettingsViewModel(
 
     fun setAutoApply(v: Boolean) {
         viewModelScope.launch { prefs.setAutoApply(v) }
+    }
+
+    fun setNotifyOnDone(v: Boolean) {
+        viewModelScope.launch { prefs.setNotifyOnDone(v) }
     }
 
     fun setMemoryEnabled(v: Boolean) {
@@ -317,6 +322,7 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
     val globs by vm.globs.collectAsState()
     val autoApply by vm.autoApply.collectAsState()
     val memoryEnabled by vm.memoryEnabled.collectAsState()
+    val notifyOnDone by vm.notifyOnDone.collectAsState()
     var showGlobalMemory by remember { mutableStateOf(false) }
     val aiEnabled = com.invictus.kodex.ai.AiSwitch.enabled
     val appContext = LocalContext.current.applicationContext
@@ -648,6 +654,21 @@ fun AiSettingsScreen(vm: AiSettingsViewModel, onBack: () -> Unit) {
                             )
                         }
                         Switch(checked = autoApply, onCheckedChange = { vm.setAutoApply(it) })
+                    }
+                }
+
+                // ---- notifications ----
+                SectionCard(stringResource(R.string.ai_settings_notifications), XIcons.Notifications, stringResource(R.string.ai_settings_notifications_sub)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.ai_settings_notify_done), style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                stringResource(R.string.ai_settings_notify_done_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = notifyOnDone, onCheckedChange = { vm.setNotifyOnDone(it) })
                     }
                 }
 

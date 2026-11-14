@@ -1291,35 +1291,53 @@ private fun SendStopButton(busy: Boolean, canSend: Boolean, onSend: () -> Unit, 
     }
 }
 
-/** A picture the agent made: preview + Save (PNG, and SVG when it is vector art) + Use as app icon. */
+/** A picture the agent made: small preview beside its actions: Use as app icon, download PNG (and SVG when it is vector art). */
 @Composable
 private fun GeneratedImageCard(g: GeneratedImage, onSave: (svg: Boolean) -> Unit, onApplyIcon: () -> Unit, onMoreLikeThis: (() -> Unit)?) {
     val cs = MaterialTheme.colorScheme
+    val tight = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = cs.surfaceContainerHigh,
         border = BorderStroke(1.dp, cs.outlineVariant.copy(alpha = 0.5f)),
         modifier = Modifier.padding(top = 10.dp).fillMaxWidth(),
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(g.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             AsyncImage(
                 model = File(g.path),
                 contentDescription = g.title,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .clip(RoundedCornerShape(if (g.isIcon) 36.dp else 14.dp))
+                    .size(112.dp)
+                    .clip(RoundedCornerShape(if (g.isIcon) 24.dp else 12.dp))
                     .background(cs.surfaceContainerHighest),
             )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (g.isIcon) {
-                    Button(onClick = onApplyIcon) { Text("Use as app icon") }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(g.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (g.isIcon) {
+                        Button(onClick = onApplyIcon, contentPadding = tight, modifier = Modifier.height(36.dp)) {
+                            Text("Use as app icon", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                    if (onMoreLikeThis != null) {
+                        OutlinedButton(onClick = onMoreLikeThis, contentPadding = tight, modifier = Modifier.height(36.dp)) {
+                            Text("More like this", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                    OutlinedButton(onClick = { onSave(false) }, contentPadding = tight, modifier = Modifier.height(36.dp)) {
+                        Icon(XIcons.Download, contentDescription = "Download PNG", modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("PNG", style = MaterialTheme.typography.labelLarge)
+                    }
+                    if (g.svgPath != null) {
+                        OutlinedButton(onClick = { onSave(true) }, contentPadding = tight, modifier = Modifier.height(36.dp)) {
+                            Icon(XIcons.Download, contentDescription = "Download SVG", modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("SVG", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
                 }
-                if (onMoreLikeThis != null) OutlinedButton(onClick = onMoreLikeThis) { Text("More like this") }
-                OutlinedButton(onClick = { onSave(false) }) { Text("Save PNG") }
-                if (g.svgPath != null) OutlinedButton(onClick = { onSave(true) }) { Text("Save SVG") }
             }
         }
     }
