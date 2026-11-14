@@ -99,7 +99,7 @@
     <string name="split_err_too_many">That would be more than 999 parts. Choose a bigger part size</string>
     <string name="split_err_failed">Splitting failed: %1$s</string>
     <string name="split_cancelled">Cancelled</string>
-    <string name="tools_what_to_add">What to add</string>
+    <string name="tools_what_to_add">What to add \u00b7 tap to choose one, long-press to add more</string>
     <string name="tools_chip_keystore">Keystore</string>
     <string name="tools_chip_custom">Custom</string>
     <string name="preset_play">Play Store</string>

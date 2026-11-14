@@ -105,12 +105,29 @@ class KeystoreToolViewModel(
 
     fun regeneratePassword() = edit { copy(password = RepoSigning.newPassword()) }
 
-    fun toggleKeystore() = edit { copy(keystoreOn = !keystoreOn) }
-    fun togglePreset(id: String) = edit { copy(presetsOn = if (id in presetsOn) presetsOn - id else presetsOn + id) }
+    // The chips are single-choice: picking one switches to it and turns the others off. Values typed into the
+    // others are kept, so switching back does not lose anything.
+    fun toggleKeystore() = edit { copy(keystoreOn = true, presetsOn = emptySet(), customOn = false) }
+    fun togglePreset(id: String) = edit { copy(keystoreOn = false, presetsOn = setOf(id), customOn = false) }
     fun toggleCustom() = edit {
-        val on = !customOn
-        copy(customOn = on, extras = if (on && extras.isEmpty()) listOf(ExtraSecret(++extraId)) else extras)
+        copy(
+            keystoreOn = false, presetsOn = emptySet(), customOn = true,
+            extras = if (extras.isEmpty()) listOf(ExtraSecret(++extraId)) else extras,
+        )
     }
+    /** Long-press on a chip: adds it to what is chosen (or takes it off again), but never leaves nothing chosen. */
+    fun toggleAlso(id: String) = edit {
+        val next = when (id) {
+            "keystore" -> copy(keystoreOn = !keystoreOn)
+            "custom" -> copy(
+                customOn = !customOn,
+                extras = if (!customOn && extras.isEmpty()) listOf(ExtraSecret(++extraId)) else extras,
+            )
+            else -> copy(presetsOn = if (id in presetsOn) presetsOn - id else presetsOn + id)
+        }
+        if (!next.keystoreOn && next.presetsOn.isEmpty() && !next.customOn) this else next
+    }
+
     fun setPresetValue(name: String, value: String) = edit { copy(presetValues = presetValues + (name to value)) }
 
     /** Fills a preset field from a text file (a service-account or google-services JSON). */
@@ -129,7 +146,8 @@ class KeystoreToolViewModel(
     }
     fun removeExtra(id: Long) = edit {
         val left = extras.filterNot { it.id == id }
-        copy(extras = left, customOn = if (left.isEmpty()) false else customOn)
+        // Removing the last custom row leaves nothing chosen, so fall back to the keystore chip.
+        if (left.isEmpty()) copy(extras = left, customOn = false, keystoreOn = true) else copy(extras = left)
     }
 
     // ---- repositories ------------------------------------------------------------------------

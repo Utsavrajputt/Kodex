@@ -79,7 +79,9 @@ internal fun flashRegion(editor: CodeEditor, startLine: Int, startCol: Int, endL
                     if (cursor.isSelected && cursor.leftLine == startLine && cursor.leftColumn == startCol &&
                         cursor.rightLine == endLine && cursor.rightColumn == endCol
                     ) {
-                        editor.setSelection(line, start)
+                        // Drop the highlight where it is: the caret stays at the end of the region and the view must NOT
+                        // scroll (the old setSelection(start) jumped the screen back to the top of the block).
+                        editor.setSelection(endLine, endCol, false)
                     }
                     editor.invalidate()
                 }

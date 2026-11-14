@@ -7,6 +7,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -116,9 +123,11 @@ fun KeystoreToolScreen(
             // ---- 1. what to add ----
             Text(stringResource(R.string.tools_what_to_add), style = MaterialTheme.typography.labelLarge, color = cs.onSurfaceVariant)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SecretChip(stringResource(R.string.tools_chip_keystore), s.keystoreOn, !s.busy, vm::toggleKeystore)
-                SECRET_PRESETS.forEach { p -> SecretChip(stringResource(p.title), p.id in s.presetsOn, !s.busy) { vm.togglePreset(p.id) } }
-                SecretChip(stringResource(R.string.tools_chip_custom), s.customOn, !s.busy, vm::toggleCustom)
+                SecretChip(stringResource(R.string.tools_chip_keystore), s.keystoreOn, !s.busy, vm::toggleKeystore) { vm.toggleAlso("keystore") }
+                SECRET_PRESETS.forEach { p ->
+                    SecretChip(stringResource(p.title), p.id in s.presetsOn, !s.busy, { vm.togglePreset(p.id) }) { vm.toggleAlso(p.id) }
+                }
+                SecretChip(stringResource(R.string.tools_chip_custom), s.customOn, !s.busy, vm::toggleCustom) { vm.toggleAlso("custom") }
             }
 
             // ---- 2. the chosen ones ----
@@ -363,12 +372,34 @@ private fun RepoPickerDialog(s: KeystoreToolViewModel.UiState, vm: KeystoreToolV
     }
 }
 
+/**
+ * Tap = choose only this one. Long-press = add it to (or take it off) what is already chosen.
+ * FilterChip has no long-press, so a see-through layer on top carries both gestures.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SecretChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected, enabled = enabled, onClick = onClick, label = { Text(label) },
-        leadingIcon = if (selected) ({ Icon(XIcons.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null,
-    )
+private fun SecretChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    Box {
+        FilterChip(
+            selected = selected, enabled = enabled, onClick = {}, label = { Text(label) },
+            leadingIcon = if (selected) ({ Icon(XIcons.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }) else null,
+        )
+        Box(
+            Modifier
+                .matchParentSize()
+                .clip(FilterChipDefaults.shape)
+                .combinedClickable(
+                    enabled = enabled,
+                    role = Role.Checkbox,
+                    onClick = onClick,
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onLongClick()
+                    },
+                ),
+        )
+    }
 }
 
 @Composable
