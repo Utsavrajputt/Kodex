@@ -1,5 +1,17 @@
 package com.invictus.kodex.feature.git
 
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import android.text.format.DateUtils
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
@@ -319,7 +331,7 @@ fun GitReflogScreen(projectPath: String, onBack: () -> Unit) {
                                 dayLabel(context, row.ms),
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 2.dp),
+                                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 4.dp),
                             )
                             is ReflogRow.Item -> ReflogItem(row.entry, row.isCurrent) { vm.select(row.entry) }
                         }
@@ -375,42 +387,126 @@ fun GitReflogScreen(projectPath: String, onBack: () -> Unit) {
 
 @Composable
 private fun ReflogIntro() {
-    Text(
-        stringResource(R.string.git_reflog_intro_tip),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    val cs = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = cs.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-    )
+    ) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(XIcons.Info, contentDescription = null, tint = cs.primary, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            Text(
+                stringResource(R.string.git_reflog_intro_tip),
+                style = MaterialTheme.typography.bodyMedium,
+                color = cs.onSurfaceVariant,
+            )
+        }
+    }
 }
 
+/** Colour and icon that say at a glance what kind of move an entry was. */
+@Composable
+private fun kindColor(kind: ReflogKind): Color {
+    val cs = MaterialTheme.colorScheme
+    return when (kind) {
+        ReflogKind.COMMIT, ReflogKind.PULL -> cs.primary
+        ReflogKind.SWITCH, ReflogKind.REBASE, ReflogKind.AUTHOR, ReflogKind.BRANCH -> cs.tertiary
+        ReflogKind.MERGE, ReflogKind.PICK, ReflogKind.CLONE -> cs.secondary
+        ReflogKind.RESET, ReflogKind.REVERT -> cs.error
+        ReflogKind.OTHER -> cs.onSurfaceVariant
+    }
+}
+
+private fun kindIcon(kind: ReflogKind): ImageVector = when (kind) {
+    ReflogKind.COMMIT -> XIcons.Commit
+    ReflogKind.SWITCH, ReflogKind.BRANCH -> XIcons.Branch
+    ReflogKind.RESET -> XIcons.Undo
+    ReflogKind.MERGE -> XIcons.Merge
+    ReflogKind.PULL -> XIcons.CloudDownload
+    ReflogKind.REBASE -> XIcons.Rebase
+    ReflogKind.PICK -> XIcons.ContentCopy
+    ReflogKind.REVERT -> XIcons.Restore
+    ReflogKind.CLONE -> XIcons.Clone
+    ReflogKind.AUTHOR -> XIcons.Person
+    ReflogKind.OTHER -> XIcons.Info
+}
+
+/**
+ * One reflog entry as a card: a coloured icon for the kind, the kind's name over the plain-words line
+ * (a commit shows its message), and under it the time and the commit ids HEAD moved between.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ReflogItem(entry: GitReflogEntry, isCurrent: Boolean, onClick: () -> Unit) {
     val context = LocalContext.current
+    val cs = MaterialTheme.colorScheme
     val text = remember(entry.message) { describeReflog(entry.message) }
-    // One line of what happened (for a commit: its message), and the time under it. Details are in the sheet.
-    Column(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+    val accent = kindColor(text.kind)
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        color = if (isCurrent) cs.primaryContainer.copy(alpha = 0.45f) else cs.surfaceContainerLow,
+        border = if (isCurrent) BorderStroke(1.dp, cs.primary.copy(alpha = 0.5f)) else null,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
-        Text(
-            lineOf(text),
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                timeLabel(context, entry.timeMs),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (isCurrent) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
+            Box(
+                modifier = Modifier.size(40.dp).clip(CircleShape).background(accent.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(kindIcon(text.kind), contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(text.kind.label),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accent,
+                    )
+                    if (isCurrent) {
+                        Spacer(Modifier.width(8.dp))
+                        Surface(shape = CircleShape, color = cs.primary) {
+                            Text(
+                                stringResource(R.string.git_reflog_current),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 1.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = cs.onPrimary,
+                            )
+                        }
+                    }
+                }
                 Text(
-                    "  ·  " + stringResource(R.string.git_reflog_current),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    lineOf(text),
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        timeLabel(context, entry.timeMs),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = cs.onSurfaceVariant,
+                    )
+                    Surface(shape = RoundedCornerShape(8.dp), color = cs.surfaceContainerHighest) {
+                        Text(
+                            if (entry.fromNothing || text.kind == ReflogKind.COMMIT) {
+                                entry.shortNew
+                            } else {
+                                entry.shortOld + " → " + entry.shortNew
+                            },
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                            color = cs.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         }
     }

@@ -1,16 +1,18 @@
 package com.invictus.kodex.feature.settings
 
+import com.invictus.kodex.ui.theme.ThemeSettings
+import com.invictus.kodex.ui.theme.AppTheme
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,9 +45,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -153,7 +152,10 @@ fun AboutScreen(
     }
 }
 
-/** Animated gradient identity card: icon, name, tagline, version pill and the two action buttons. */
+/**
+ * Identity card on the same animated dark backdrop as xmd's About: icon with a soft glow, name, tagline,
+ * version pill and two translucent, outlined action buttons.
+ */
 @Composable
 private fun AboutHero(
     versionText: String,
@@ -161,39 +163,16 @@ private fun AboutHero(
     onGithubClick: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val transition = rememberInfiniteTransition(label = "about_hero")
-    val fraction by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 5000),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "about_hero_fraction",
-    )
-    val heroCornerRadius = 28.dp
+    // Aurora keeps its fixed blue/violet; every other theme tints the scene from its own colours.
+    val aurora = ThemeSettings.theme == AppTheme.Aurora
+    val heroPrimary = if (aurora) Color(0xFF5B93FF) else cs.primary
+    val heroTertiary = if (aurora) Color(0xFF9B7BFF) else cs.tertiary
+    val heroText = Color.White
+    val heroShape = RoundedCornerShape(28.dp)
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .drawWithCache {
-                val cx = size.width - size.width * fraction
-                val cy = size.height * fraction
-                val gradient = Brush.radialGradient(
-                    colors = listOf(cs.primaryContainer, cs.tertiaryContainer),
-                    center = Offset(cx, cy),
-                    radius = 800f,
-                )
-                onDrawBehind {
-                    drawRoundRect(
-                        brush = gradient,
-                        cornerRadius = CornerRadius(heroCornerRadius.toPx(), heroCornerRadius.toPx()),
-                    )
-                }
-            }
-            .padding(20.dp),
-    ) {
-        Column {
+    Box(modifier = Modifier.fillMaxWidth().clip(heroShape)) {
+        AboutHeaderBackground(heroPrimary, heroTertiary, Modifier.matchParentSize())
+        Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val context = LocalContext.current
                 val appIconBitmap = remember {
@@ -201,36 +180,44 @@ private fun AboutHero(
                         .toBitmap()
                         .asImageBitmap()
                 }
-                Image(
-                    bitmap = appIconBitmap,
-                    contentDescription = stringResource(R.string.app_name),
-                    modifier = Modifier.size(64.dp),
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.size(80.dp).background(
+                            Brush.radialGradient(listOf(heroPrimary.copy(alpha = 0.45f), Color.Transparent)),
+                            CircleShape,
+                        ),
+                    )
+                    Image(
+                        bitmap = appIconBitmap,
+                        contentDescription = stringResource(R.string.app_name),
+                        modifier = Modifier.size(64.dp),
+                    )
+                }
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = stringResource(R.string.app_name),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        color = cs.onPrimaryContainer,
+                        color = heroText,
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.about_tagline),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = cs.onPrimaryContainer.copy(alpha = 0.85f),
+                        color = heroText.copy(alpha = 0.7f),
                     )
                     Spacer(Modifier.height(8.dp))
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = cs.primary.copy(alpha = 0.16f),
+                        color = heroPrimary.copy(alpha = 0.16f),
                     ) {
                         Text(
                             text = versionText,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color = cs.onPrimaryContainer,
+                            color = heroText,
                         )
                     }
                 }
@@ -242,11 +229,16 @@ private fun AboutHero(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                val colors = ButtonDefaults.buttonColors(containerColor = cs.primary, contentColor = cs.onPrimary)
+                val colors = ButtonDefaults.buttonColors(
+                    containerColor = cs.surfaceContainerHigh.copy(alpha = 0.6f),
+                    contentColor = heroText,
+                )
+                val border = BorderStroke(1.dp, heroPrimary.copy(alpha = 0.35f))
                 Button(
                     onClick = onLibrariesClick,
                     modifier = Modifier.weight(1f).height(56.dp),
                     shape = RoundedCornerShape(16.dp),
+                    border = border,
                     colors = colors,
                 ) {
                     Icon(
@@ -266,6 +258,7 @@ private fun AboutHero(
                     onClick = onGithubClick,
                     modifier = Modifier.weight(1f).height(56.dp),
                     shape = RoundedCornerShape(16.dp),
+                    border = border,
                     colors = colors,
                 ) {
                     Icon(

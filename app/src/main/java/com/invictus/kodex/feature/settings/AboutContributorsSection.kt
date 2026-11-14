@@ -32,7 +32,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,8 +52,8 @@ private sealed interface ContributorsUiState {
 }
 
 /**
- * About screen's "Developers" section: the repo's GitHub contributors (avatar, login, commit
- * count), top [MAX_VISIBLE_CONTRIBUTORS] with a "View all" link to GitHub's contributors graph.
+ * About screen's "Developers" section: the repo's GitHub contributors (avatar and login, no commit
+ * counts), top [MAX_VISIBLE_CONTRIBUTORS] with a "View all" link to GitHub's contributors graph.
  * The list is cached on disk for 72h by [GitHubContributorsRepository].
  */
 @Composable
@@ -161,15 +160,6 @@ private fun ContributorRow(contributor: GitHubContributor, onClick: () -> Unit) 
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = pluralStringResource(
-                    R.plurals.about_contributor_commits,
-                    contributor.contributions,
-                    contributor.contributions,
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Icon(
