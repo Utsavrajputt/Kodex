@@ -50,6 +50,8 @@ class EditorSettingsStore(private val context: Context) {
         val FILE_TREE_HSCROLL = booleanPreferencesKey("file_tree_hscroll_long_names")
         val BROWSE_SHORTCUTS = stringPreferencesKey("browse_shortcuts")
         val KEYBINDINGS = stringPreferencesKey("editor_keybindings")
+        val LINE_SPACING_MULT = floatPreferencesKey("editor_line_spacing_mult")
+        val HIGHLIGHT_CURRENT_LINE = booleanPreferencesKey("editor_highlight_current_line")
     }
 
     /** Settings backup: every stored entry whose key passes [accept], as typed JSON. */
@@ -289,6 +291,20 @@ class EditorSettingsStore(private val context: Context) {
 
     suspend fun resetKeybindings() {
         context.editorSettingsDataStore.edit { it.remove(Keys.KEYBINDINGS) }
+    }
+
+    val lineSpacingMultiplier: Flow<Float> = context.editorSettingsDataStore.data
+        .map { (it[Keys.LINE_SPACING_MULT] ?: 1.0f).coerceIn(1.0f, 2.0f) }
+
+    suspend fun setLineSpacingMultiplier(mult: Float) {
+        context.editorSettingsDataStore.edit { it[Keys.LINE_SPACING_MULT] = mult.coerceIn(1.0f, 2.0f) }
+    }
+
+    val highlightCurrentLine: Flow<Boolean> = context.editorSettingsDataStore.data
+        .map { it[Keys.HIGHLIGHT_CURRENT_LINE] ?: true }
+
+    suspend fun setHighlightCurrentLine(enabled: Boolean) {
+        context.editorSettingsDataStore.edit { it[Keys.HIGHLIGHT_CURRENT_LINE] = enabled }
     }
 
     private fun encodeShortcuts(list: List<ShortcutPref>): String =

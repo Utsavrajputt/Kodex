@@ -58,6 +58,8 @@ fun CodeEditorView(
     themeId: String = EditorThemes.DEFAULT_ID,
     autocompleteEnabled: Boolean = true,
     magnifierEnabled: Boolean = true,
+    lineSpacingMultiplier: Float = 1.0f,
+    highlightCurrentLine: Boolean = true,
     handle: EditorHandle,
     onEdited: () -> Unit,
     onViewState: (line: Int, column: Int, textSizePx: Float, scrollX: Int, scrollY: Int) -> Unit,
@@ -102,6 +104,8 @@ fun CodeEditorView(
                 val density = context.resources.displayMetrics.density
                 setLineNumberMarginLeft(12f * density)
                 setDividerMargin(7f * density, 8f * density)
+                setLineSpacing(0f, lineSpacingMultiplier)
+                isHighlightCurrentLine = highlightCurrentLine
                 typefaceText = Typeface.MONOSPACE
                 setTextSize(DEFAULT_TEXT_SIZE_SP)
                 setScaleTextSizes(MIN_PINCH_TEXT_SIZE_PX, MAX_PINCH_TEXT_SIZE_PX)
@@ -113,7 +117,10 @@ fun CodeEditorView(
                 // TextMate schemes listen to the global ThemeRegistry and reset their colours whenever
                 // any editor switches theme, which silently wiped our selection colour. Re-assert it.
                 val selfEditor = this
-                subscribeEvent(SelectionChangeEvent::class.java) { _, _ -> enforceSelectionColor(selfEditor) }
+                subscribeEvent(SelectionChangeEvent::class.java) { _, _ ->
+                    enforceSelectionColor(selfEditor)
+                    enforceCurrentLineColor(selfEditor, selfEditor.isHighlightCurrentLine)
+                }
 
                 // Same Content object as last time, so undo/redo history comes along.
                 setText(buffer.content)
@@ -162,8 +169,16 @@ fun CodeEditorView(
                 applyLook(editor, buffer, textMate, darkTheme, highlightReady, themeId)
             }
             enforceSelectionColor(editor)
+            if (editor.isHighlightCurrentLine != highlightCurrentLine) {
+                editor.isHighlightCurrentLine = highlightCurrentLine
+                editor.invalidate()
+            }
+            enforceCurrentLineColor(editor, highlightCurrentLine)
             editor.getComponent(EditorAutoCompletion::class.java).isEnabled = autocompleteEnabled
             editor.getComponent(Magnifier::class.java).isEnabled = magnifierEnabled
+            if (editor.lineSpacingMultiplier != lineSpacingMultiplier) {
+                editor.setLineSpacing(0f, lineSpacingMultiplier)
+            }
             val wordsVersion = textMate.userWords.version
             if (appliedWordsVersion[editor] != wordsVersion) {
                 appliedWordsVersion[editor] = wordsVersion
@@ -253,13 +268,18 @@ private fun applyLook(
     editor.tag = Look(dark, highlightReady, themeId)
     val isDark = EditorThemes.resolve(themeId, dark)?.isDark ?: dark
     selectionColors[editor] = if (isDark) SELECTION_DARK else SELECTION_LIGHT
+    currentLineColors[editor] = if (isDark) CURRENT_LINE_DARK else CURRENT_LINE_LIGHT
     enforceSelectionColor(editor)
+    enforceCurrentLineColor(editor, editor.isHighlightCurrentLine)
 }
 
 /** Opaque, clearly visible selection fill per editor (TextMate themes often ship near-invisible ones). */
 private const val SELECTION_DARK = 0xFF3F6FCF.toInt()
 private const val SELECTION_LIGHT = 0xFF9CC3FF.toInt()
+private const val CURRENT_LINE_DARK = 0x1AFFFFFF.toInt()
+private const val CURRENT_LINE_LIGHT = 0x12000000.toInt()
 private val selectionColors = java.util.WeakHashMap<CodeEditor, Int>()
+private val currentLineColors = java.util.WeakHashMap<CodeEditor, Int>()
 
 private fun enforceSelectionColor(editor: CodeEditor) {
     if (isFlashing(editor)) return
@@ -267,6 +287,16 @@ private fun enforceSelectionColor(editor: CodeEditor) {
     val scheme = editor.colorScheme
     if (scheme.getColor(EditorColorScheme.SELECTED_TEXT_BACKGROUND) != wanted) {
         scheme.setColor(EditorColorScheme.SELECTED_TEXT_BACKGROUND, wanted)
+        editor.invalidate()
+    }
+}
+
+private fun enforceCurrentLineColor(editor: CodeEditor, enabled: Boolean) {
+    if (!enabled) return
+    val wanted = currentLineColors[editor] ?: return
+    val scheme = editor.colorScheme
+    if (scheme.getColor(EditorColorScheme.CURRENT_LINE) != wanted) {
+        scheme.setColor(EditorColorScheme.CURRENT_LINE, wanted)
         editor.invalidate()
     }
 }

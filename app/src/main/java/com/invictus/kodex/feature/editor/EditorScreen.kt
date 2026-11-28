@@ -135,6 +135,8 @@ fun EditorScreen(
     val autocompleteEnabled by viewModel.autocompleteEnabled.collectAsStateWithLifecycle()
     val magnifierEnabled by viewModel.magnifierEnabled.collectAsStateWithLifecycle()
     val pairCursorEnabled by viewModel.pairCursorEnabled.collectAsStateWithLifecycle()
+    val lineSpacingMultiplier by viewModel.lineSpacingMultiplier.collectAsStateWithLifecycle()
+    val highlightCurrentLine by viewModel.highlightCurrentLine.collectAsStateWithLifecycle()
     var showSymbolCustomize by remember { mutableStateOf(false) }
     // "Run file": saves, then runs the active file in a visible Termux session (same folder).
     val termuxProblem: () -> Unit = {
@@ -620,6 +622,8 @@ fun EditorScreen(
                                         themeId = themeId,
                                         autocompleteEnabled = autocompleteEnabled,
                                         magnifierEnabled = magnifierEnabled,
+                                        lineSpacingMultiplier = lineSpacingMultiplier,
+                                        highlightCurrentLine = highlightCurrentLine,
                                         handle = handle,
                                         onEdited = {
                                             viewModel.onEdited(path)
