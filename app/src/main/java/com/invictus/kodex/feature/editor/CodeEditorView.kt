@@ -99,6 +99,9 @@ fun CodeEditorView(
         modifier = modifier,
         factory = { context ->
             CodeEditor(context).apply {
+                val density = context.resources.displayMetrics.density
+                setLineNumberMarginLeft(12f * density)
+                setDividerMargin(7f * density, 8f * density)
                 typefaceText = Typeface.MONOSPACE
                 setTextSize(DEFAULT_TEXT_SIZE_SP)
                 setScaleTextSizes(MIN_PINCH_TEXT_SIZE_PX, MAX_PINCH_TEXT_SIZE_PX)

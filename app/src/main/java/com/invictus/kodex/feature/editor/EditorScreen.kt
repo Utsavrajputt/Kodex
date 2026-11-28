@@ -62,6 +62,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -1045,12 +1046,24 @@ private fun EditorTab(
     onCloseAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val indicatorColor = MaterialTheme.colorScheme.primary
     Surface(
         color = if (selected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainer,
         shape = MaterialTheme.shapes.small.copy(bottomStart = CornerSize(0.dp), bottomEnd = CornerSize(0.dp)),
         modifier = modifier
             .height(40.dp)
-            .clickable(onClick = onSelect),
+            .clickable(onClick = onSelect)
+            .drawWithContent {
+                drawContent()
+                if (selected) {
+                    val strokePx = 2.5.dp.toPx()
+                    drawRect(
+                        color = indicatorColor,
+                        topLeft = androidx.compose.ui.geometry.Offset.Zero,
+                        size = androidx.compose.ui.geometry.Size(size.width, strokePx),
+                    )
+                }
+            },
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
