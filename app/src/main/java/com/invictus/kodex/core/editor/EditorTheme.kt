@@ -82,12 +82,32 @@ object EditorThemes {
         c(0xFF282C34, 0xFFABB2BF, 0xFF7F848E, 0xFF98C379, 0xFFC678DD, 0xFF61AFEF))
     private val ONE_LIGHT = EditorTheme("one-light", "One Light", "one-light", false,
         c(0xFFFAFAFA, 0xFF383A42, 0xFFA0A1A7, 0xFF50A14F, 0xFFA626A4, 0xFF4078F2))
+    private val CATPPUCCIN_MOCHA = EditorTheme("catppuccin-mocha", "Catppuccin Mocha", "catppuccin-mocha", true,
+        c(0xFF1E1E2E, 0xFFCDD6F4, 0xFF9399B2, 0xFFA6E3A1, 0xFFCBA6F7, 0xFF89B4FA))
+    private val CATPPUCCIN_LATTE = EditorTheme("catppuccin-latte", "Catppuccin Latte", "catppuccin-latte", false,
+        c(0xFFEFF1F5, 0xFF4C4F69, 0xFF7C7F93, 0xFF40A02B, 0xFF8839EF, 0xFF1E66F5))
+    private val ROSE_PINE = EditorTheme("rose-pine", "Rosé Pine", "rose-pine", true,
+        c(0xFF191724, 0xFFE0DEF4, 0xFF6E6A86, 0xFFF6C177, 0xFF31748F, 0xFFEBBCBA))
+    private val ROSE_PINE_DAWN = EditorTheme("rose-pine-dawn", "Rosé Pine Dawn", "rose-pine-dawn", false,
+        c(0xFFFAF4ED, 0xFF575279, 0xFF9893A5, 0xFFEA9D34, 0xFF286983, 0xFFD7827E))
+    private val TOKYO_NIGHT = EditorTheme("tokyo-night", "Tokyo Night", "tokyo-night", true,
+        c(0xFF1A1B26, 0xFFC0CAF5, 0xFF565F89, 0xFF9ECE6A, 0xFFBB9AF7, 0xFF7AA2F7))
+    private val TOKYO_NIGHT_DAY = EditorTheme("tokyo-night-day", "Tokyo Night Day", "tokyo-night-day", false,
+        c(0xFFE1E2E7, 0xFF3760BF, 0xFF848CB5, 0xFF587539, 0xFF9854F1, 0xFF2E7DE9))
+    private val GRUVBOX_DARK = EditorTheme("gruvbox-dark", "Gruvbox Dark", "gruvbox-dark", true,
+        c(0xFF282828, 0xFFEBDBB2, 0xFF928374, 0xFFB8BB26, 0xFFFB4934, 0xFFB8BB26))
+    private val GRUVBOX_LIGHT = EditorTheme("gruvbox-light", "Gruvbox Light", "gruvbox-light", false,
+        c(0xFFFBF1C7, 0xFF3C3836, 0xFF928374, 0xFF79740E, 0xFF9D0006, 0xFF79740E))
 
     // Picker order: System default (not listed here) -> GitHub -> VS Code -> the rest.
     val FAMILIES: List<EditorThemeFamily> = listOf(
         EditorThemeFamily("github", "GitHub", GITHUB_DARK, GITHUB_LIGHT),
         EditorThemeFamily("vscode", "VS Code", VSCODE_DARK, VSCODE_LIGHT),
         EditorThemeFamily("one-dark-pro", "One Dark Pro", ONE_DARK, ONE_LIGHT),
+        EditorThemeFamily("catppuccin", "Catppuccin", CATPPUCCIN_MOCHA, CATPPUCCIN_LATTE),
+        EditorThemeFamily("rose-pine", "Rosé Pine", ROSE_PINE, ROSE_PINE_DAWN),
+        EditorThemeFamily("tokyo-night", "Tokyo Night", TOKYO_NIGHT, TOKYO_NIGHT_DAY),
+        EditorThemeFamily("gruvbox", "Gruvbox", GRUVBOX_DARK, GRUVBOX_LIGHT),
         EditorThemeFamily("darcula", "Darcula", DARCULA, INTELLIJ_LIGHT),
         EditorThemeFamily("eclipse", "Eclipse", ECLIPSE_DARK, ECLIPSE),
         EditorThemeFamily("ayu", "Ayu", AYU_DARK, AYU_LIGHT),
