@@ -142,6 +142,10 @@ fun KodexNavHost(
             HomeScreen(
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onProjectOpened = { navController.navigate(Routes.WORKSPACE) },
+                onOpenFile = { file ->
+                    if (ArchiveReader.isArchive(file)) navController.navigate(Routes.archive(file.absolutePath))
+                    else editorViewModel.onEvent(EditorEvent.Open(file))
+                },
                 onClone = { navController.navigate(Routes.GIT_CLONE) },
                 onConnectSsh = { navController.navigate(Routes.SSH_HOSTS) },
                 onOpenTools = { navController.navigate(Routes.TOOLS) },

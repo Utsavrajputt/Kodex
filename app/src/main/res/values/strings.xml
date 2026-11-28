@@ -95,6 +95,11 @@
 
     <!-- strings_m2_part2.xml -->
     <string name="menu_open_project">Open project</string>
+    <string name="menu_open_folder">Open folder</string>
+    <string name="menu_open_file">Open file</string>
+    <string name="file_sheet_subtitle">Choose a file or search for a path.</string>
+    <string name="file_sheet_search_hint">Search files, or type a path (/storage/…)</string>
+    <string name="file_sheet_empty">No files or folders here</string>
     <string name="menu_backup_project">Back up as ZIP</string>
     <string name="sheet_title">Recent projects</string>
     <string name="ws_sheet_subtitle">Switch to another project</string>
