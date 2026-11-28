@@ -136,6 +136,10 @@
     <string name="shortcut_undo">Undo</string>
     <string name="shortcut_redo">Redo</string>
     <string name="shortcut_open_settings">Open settings</string>
+    <string name="settings_group_display">Display</string>
+    <string name="settings_highlight_current_line">Highlight current line</string>
+    <string name="settings_highlight_current_line_desc">Show a background highlight on the active line</string>
+    <string name="settings_line_spacing">Line spacing</string>
     <string name="menu_backup_project">Back up as ZIP</string>
     <string name="sheet_title">Recent projects</string>
     <string name="ws_sheet_subtitle">Switch to another project</string>

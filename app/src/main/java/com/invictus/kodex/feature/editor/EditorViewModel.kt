@@ -104,6 +104,20 @@ class EditorViewModel(
         viewModelScope.launch { settingsStore.resetKeybindings() }
     }
 
+    val lineSpacingMultiplier: StateFlow<Float> = settingsStore.lineSpacingMultiplier
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 1.0f)
+
+    fun setLineSpacingMultiplier(mult: Float) {
+        viewModelScope.launch { settingsStore.setLineSpacingMultiplier(mult) }
+    }
+
+    val highlightCurrentLine: StateFlow<Boolean> = settingsStore.highlightCurrentLine
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    fun setHighlightCurrentLine(enabled: Boolean) {
+        viewModelScope.launch { settingsStore.setHighlightCurrentLine(enabled) }
+    }
+
     /** Settings screen "Font size" slider; also the last size the user zoomed to anywhere. */
     val fontSizePx: StateFlow<Float> = settingsStore.fontSizePx
         .map(::clampFontPx)
