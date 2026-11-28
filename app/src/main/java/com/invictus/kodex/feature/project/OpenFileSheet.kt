@@ -48,7 +48,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -56,6 +60,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.invictus.kodex.R
 import com.invictus.kodex.feature.home.projectColor
@@ -247,7 +252,7 @@ fun OpenFileSheet(
                 }
 
                 LazyColumn(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).keepScrollInside(),
                     contentPadding = PaddingValues(bottom = 16.dp),
                 ) {
                     if (typedPath != null) {
@@ -338,6 +343,19 @@ private fun searchFilesUnder(root: File, query: String, showHidden: Boolean, lim
     }
     return results.sortedBy { it.name.lowercase() }
 }
+
+@Composable
+private fun Modifier.keepScrollInside(): Modifier = nestedScroll(
+    remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
+                if (available.y < 0f) available else Offset.Zero
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
+                if (available.y < 0f) available else Velocity.Zero
+        }
+    },
+)
 
 @Composable
 private fun FileSheetHint(text: String) {

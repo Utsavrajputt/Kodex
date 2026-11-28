@@ -290,36 +290,44 @@ fun HomeScreen(
                                 .fillMaxWidth()
                                 .widthIn(max = 480.dp),
                         )
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .widthIn(max = 480.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Button(
-                                onClick = { showProjectSheet = true },
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier.weight(1f),
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(XIcons.FolderOpen, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.home_open_project))
+                                Button(
+                                    onClick = { showProjectSheet = true },
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Icon(XIcons.FolderOpen, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(stringResource(R.string.home_open_project))
+                                }
+                                FilledTonalButton(
+                                    onClick = { showFileSheet = true },
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Icon(XIcons.InsertDriveFile, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(stringResource(R.string.menu_open_file))
+                                }
                             }
                             FilledTonalButton(
-                                onClick = { showFileSheet = true },
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Icon(XIcons.InsertDriveFile, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.menu_open_file))
-                            }
-                            FilledTonalIconButton(
                                 onClick = { showNewSheet = true },
                                 shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Icon(XIcons.Add, contentDescription = stringResource(R.string.home_new_project))
+                                Icon(XIcons.Add, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.home_new_project))
                             }
                         }
                     }
@@ -402,23 +410,46 @@ fun HomeScreen(
                     }
                     item(key = "actions") {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Row(
-                                Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(top = HomeSectionGap, bottom = HomeSectionGap - 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                                verticalAlignment = Alignment.CenterVertically,
+                            Column(
+                                modifier = Modifier
+                                    .widthIn(max = 720.dp)
+                                    .fillMaxWidth()
+                                    .padding(horizontal = HomeEdge)
+                                    .padding(top = HomeSectionGap, bottom = HomeSectionGap - 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Button(onClick = { showProjectSheet = true }, shape = RoundedCornerShape(14.dp)) {
-                                    Icon(XIcons.FolderOpen, contentDescription = null)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(stringResource(R.string.home_open_project))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Button(
+                                        onClick = { showProjectSheet = true },
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Icon(XIcons.FolderOpen, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(stringResource(R.string.home_open_project))
+                                    }
+                                    FilledTonalButton(
+                                        onClick = { showFileSheet = true },
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Icon(XIcons.InsertDriveFile, contentDescription = null)
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(stringResource(R.string.menu_open_file))
+                                    }
                                 }
-                                FilledTonalButton(onClick = { showFileSheet = true }, shape = RoundedCornerShape(14.dp)) {
-                                    Icon(XIcons.InsertDriveFile, contentDescription = null)
+                                FilledTonalButton(
+                                    onClick = { showNewSheet = true },
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Icon(XIcons.Add, contentDescription = null)
                                     Spacer(Modifier.width(8.dp))
-                                    Text(stringResource(R.string.menu_open_file))
-                                }
-                                FilledTonalIconButton(onClick = { showNewSheet = true }, shape = RoundedCornerShape(14.dp)) {
-                                    Icon(XIcons.Add, contentDescription = stringResource(R.string.home_new_project))
+                                    Text(stringResource(R.string.home_new_project))
                                 }
                             }
                         }
