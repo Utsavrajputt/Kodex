@@ -970,6 +970,7 @@ private fun WorkspaceEmptyEditorPane(
                 text = projectRoot.name.ifEmpty { stringResource(R.string.app_name) },
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = stringResource(R.string.workspace_tablet_empty_hint),
