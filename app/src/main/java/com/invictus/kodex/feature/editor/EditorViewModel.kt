@@ -88,6 +88,22 @@ class EditorViewModel(
         viewModelScope.launch { settingsStore.setAutoPreviewEnabled(enabled) }
     }
 
+    /** External-keyboard shortcuts (customizable in Editing settings). */
+    val keybindings: StateFlow<Map<com.invictus.kodex.core.editor.KeyAction, com.invictus.kodex.core.editor.KeyCombo>> =
+        settingsStore.keybindings
+            .stateIn(viewModelScope, SharingStarted.Eagerly, com.invictus.kodex.core.editor.Keybindings.defaults)
+
+    fun setKeybinding(
+        action: com.invictus.kodex.core.editor.KeyAction,
+        combo: com.invictus.kodex.core.editor.KeyCombo,
+    ) {
+        viewModelScope.launch { settingsStore.setKeybinding(action, combo) }
+    }
+
+    fun resetKeybindings() {
+        viewModelScope.launch { settingsStore.resetKeybindings() }
+    }
+
     /** Settings screen "Font size" slider; also the last size the user zoomed to anywhere. */
     val fontSizePx: StateFlow<Float> = settingsStore.fontSizePx
         .map(::clampFontPx)

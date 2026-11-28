@@ -490,6 +490,9 @@ fun WorkspaceScreen(
                         navigationIcon = if (!sidebarOnRight) showSidebarButton else null,
                         trailingAction = if (sidebarOnRight) showSidebarButton else null,
                         onOpenTermuxSetup = onOpenTermuxSetup,
+                        onOpenFolder = { showProjectSheet = true },
+                        onToggleSidebar = { sidebarCollapsed = !sidebarCollapsed },
+                        onOpenCodeSearch = { onOpenCodeSearch(state.root) },
                     )
                 } else {
                     emptyPaneWithOptionalTerminal(showSidebarButton)
@@ -518,6 +521,9 @@ fun WorkspaceScreen(
                         onOpenSettings = onOpenSettings,
                         navigationIcon = null,
                         onOpenTermuxSetup = onOpenTermuxSetup,
+                        onOpenFolder = { showProjectSheet = true },
+                        onToggleSidebar = { sidebarCollapsed = !sidebarCollapsed },
+                        onOpenCodeSearch = { onOpenCodeSearch(state.root) },
                     )
                 } else {
                     emptyPaneWithOptionalTerminal(null)

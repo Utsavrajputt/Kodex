@@ -34,6 +34,7 @@ enum class SettingsCategory {
     Appearance,
     Editing,
     Behavior,
+    Keybindings,
     GitHub,
     Ai,
     Diagnostics,
@@ -57,6 +58,7 @@ fun SettingsRootScreen(
     onOpenAppearance: () -> Unit,
     onOpenEditing: () -> Unit,
     onOpenBehavior: () -> Unit,
+    onOpenKeybindings: () -> Unit = {},
     onOpenDiagnostics: () -> Unit,
     onOpenGitHub: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -139,6 +141,22 @@ fun SettingsRootScreen(
                                 activeSubScreen = SettingsSubScreen.None
                             } else {
                                 onOpenBehavior()
+                            }
+                        },
+                    )
+                    CategoryRowGap()
+                    CategoryRow(
+                        icon = XIcons.Tune,
+                        chevron = XIcons.ChevronRight,
+                        title = stringResource(R.string.keybindings_title),
+                        subtitle = stringResource(R.string.settings_keybindings_desc),
+                        isSelected = inTabletMode && selectedCategory == SettingsCategory.Keybindings && activeSubScreen == SettingsSubScreen.None,
+                        onClick = {
+                            if (inTabletMode) {
+                                selectedCategory = SettingsCategory.Keybindings
+                                activeSubScreen = SettingsSubScreen.None
+                            } else {
+                                onOpenKeybindings()
                             }
                         },
                     )
@@ -242,6 +260,10 @@ fun SettingsRootScreen(
                                         onBack = onBack,
                                     )
                                     SettingsCategory.Behavior -> SettingsBehaviorScreen(
+                                        viewModel = effectiveEditorVm,
+                                        onBack = onBack,
+                                    )
+                                    SettingsCategory.Keybindings -> SettingsKeybindingsScreen(
                                         viewModel = effectiveEditorVm,
                                         onBack = onBack,
                                     )

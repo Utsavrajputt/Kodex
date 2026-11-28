@@ -49,6 +49,7 @@ class EditorSettingsStore(private val context: Context) {
         val FILE_TREE_SHOW_HIDDEN = booleanPreferencesKey("file_tree_show_hidden")
         val FILE_TREE_HSCROLL = booleanPreferencesKey("file_tree_hscroll_long_names")
         val BROWSE_SHORTCUTS = stringPreferencesKey("browse_shortcuts")
+        val KEYBINDINGS = stringPreferencesKey("editor_keybindings")
     }
 
     /** Settings backup: every stored entry whose key passes [accept], as typed JSON. */
@@ -273,6 +274,21 @@ class EditorSettingsStore(private val context: Context) {
 
     suspend fun setBrowseShortcuts(list: List<ShortcutPref>) {
         context.editorSettingsDataStore.edit { it[Keys.BROWSE_SHORTCUTS] = encodeShortcuts(list) }
+    }
+
+    val keybindings: Flow<Map<KeyAction, KeyCombo>> = context.editorSettingsDataStore.data
+        .map { prefs -> prefs[Keys.KEYBINDINGS]?.let(Keybindings::decode) ?: Keybindings.defaults }
+
+    suspend fun setKeybinding(action: KeyAction, combo: KeyCombo) {
+        context.editorSettingsDataStore.edit { prefs ->
+            val updated = (prefs[Keys.KEYBINDINGS]?.let(Keybindings::decode) ?: Keybindings.defaults).toMutableMap()
+            updated[action] = combo
+            prefs[Keys.KEYBINDINGS] = Keybindings.encode(updated)
+        }
+    }
+
+    suspend fun resetKeybindings() {
+        context.editorSettingsDataStore.edit { it.remove(Keys.KEYBINDINGS) }
     }
 
     private fun encodeShortcuts(list: List<ShortcutPref>): String =
