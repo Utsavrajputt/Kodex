@@ -64,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -104,6 +105,9 @@ fun EditorScreen(
     navigationIcon: (@Composable () -> Unit)? = null,
     trailingAction: (@Composable () -> Unit)? = null,
     onOpenTermuxSetup: () -> Unit = {},
+    onOpenFolder: (() -> Unit)? = null,
+    onToggleSidebar: (() -> Unit)? = null,
+    onOpenCodeSearch: (() -> Unit)? = null,
 ) {
     val isTablet = com.invictus.kodex.ui.adaptive.isTabletLayout()
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
@@ -163,6 +167,7 @@ fun EditorScreen(
     val findState = remember { FindReplaceState() }
     val symbolBar by viewModel.symbolBar.collectAsStateWithLifecycle()
     val symbolBarVisible by viewModel.symbolBarVisible.collectAsStateWithLifecycle()
+    val keybindings by viewModel.keybindings.collectAsStateWithLifecycle()
 
     val projectRoot = viewModel.projectRoot
     var showFileSearch by remember { mutableStateOf(false) }
@@ -241,7 +246,163 @@ fun EditorScreen(
     }
 
     Scaffold(
-        modifier = modifier,
+        modifier = modifier.onPreviewKeyEvent { event ->
+            val action = com.invictus.kodex.core.editor.Keybindings.match(keybindings, event)
+                ?: return@onPreviewKeyEvent false
+            when (action) {
+                com.invictus.kodex.core.editor.KeyAction.SAVE -> {
+                    viewModel.onEvent(EditorEvent.SaveActive)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.SAVE_ALL -> {
+                    viewModel.onEvent(EditorEvent.SaveAll)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.OPEN_FILE -> {
+                    showFileSearch = true
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.OPEN_FOLDER -> onOpenFolder?.let { it(); true } ?: false
+                com.invictus.kodex.core.editor.KeyAction.FIND,
+                com.invictus.kodex.core.editor.KeyAction.REPLACE -> {
+                    showFind = true
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.SEARCH_PROJECT -> onOpenCodeSearch?.let { it(); true } ?: false
+                com.invictus.kodex.core.editor.KeyAction.CLOSE_TAB -> activePath?.let {
+                    viewModel.onEvent(EditorEvent.CloseTab(it))
+                    true
+                } ?: false
+                com.invictus.kodex.core.editor.KeyAction.NEXT_TAB -> {
+                    if (state.tabs.size > 1) {
+                        val idx = state.tabs.indexOfFirst { it.path == activePath }.coerceAtLeast(0)
+                        val next = state.tabs[(idx + 1) % state.tabs.size]
+                        viewModel.onEvent(EditorEvent.Select(next.path))
+                    }
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.PREV_TAB -> {
+                    if (state.tabs.size > 1) {
+                        val idx = state.tabs.indexOfFirst { it.path == activePath }.coerceAtLeast(0)
+                        val prev = state.tabs[(idx - 1 + state.tabs.size) % state.tabs.size]
+                        viewModel.onEvent(EditorEvent.Select(prev.path))
+                    }
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.TOGGLE_SIDEBAR -> onToggleSidebar?.let { it(); true } ?: false
+                com.invictus.kodex.core.editor.KeyAction.TOGGLE_TERMINAL -> {
+                    if (!terminalEnabled) return@onPreviewKeyEvent false
+                    if (!showTerminalSplit) {
+                        val dir = activePath?.let { File(it).parentFile } ?: viewModel.projectRoot ?: context.filesDir
+                        com.invictus.kodex.terminal.TerminalPrefs.ensure(context)
+                        com.invictus.kodex.terminal.TerminalHub.lastDir = dir
+                        if (com.invictus.kodex.terminal.TerminalHub.tabs.isEmpty()) {
+                            com.invictus.kodex.terminal.TerminalHub.newTab(context.applicationContext, dir)
+                        }
+                        if (!isTablet) isVerticalSplit = isLandscape
+                        showTerminalSplit = true
+                    } else {
+                        showTerminalSplit = false
+                    }
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.TOGGLE_PREVIEW -> {
+                    if (active?.previewType?.isTextPreview == true) {
+                        viewModel.onEvent(EditorEvent.CyclePreviewMode(active.path))
+                        true
+                    } else {
+                        false
+                    }
+                }
+                com.invictus.kodex.core.editor.KeyAction.MOVE_LINE_UP -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    com.invictus.kodex.core.editor.MoveLineUpAction.perform(editor, activePath, context)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.MOVE_LINE_DOWN -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    com.invictus.kodex.core.editor.MoveLineDownAction.perform(editor, activePath, context)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.COPY_LINE_UP -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    com.invictus.kodex.core.editor.CopyLineUpAction.perform(editor, activePath, context)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.COPY_LINE_DOWN -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    com.invictus.kodex.core.editor.DuplicateLineAction.perform(editor, activePath, context)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.DELETE_LINE -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    com.invictus.kodex.core.editor.DeleteLineAction.perform(editor, activePath, context)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.TOGGLE_COMMENT -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    com.invictus.kodex.core.editor.ToggleCommentAction.perform(editor, activePath, context)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.INSERT_LINE_BELOW -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    com.invictus.kodex.core.editor.InsertLineBelowAction.perform(editor, activePath, context)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.INSERT_LINE_ABOVE -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    com.invictus.kodex.core.editor.InsertLineAboveAction.perform(editor, activePath, context)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.INDENT_LINE -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    com.invictus.kodex.core.editor.IndentLineAction.perform(editor, activePath, context)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.OUTDENT_LINE -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    com.invictus.kodex.core.editor.OutdentLineAction.perform(editor, activePath, context)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.SELECT_LINE -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    com.invictus.kodex.core.editor.SelectLineAction.perform(editor, activePath, context)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.ZOOM_IN -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    val next = editor.textSizePx + 3f
+                    editor.setTextSizePx(next)
+                    viewModel.setFontSizePx(next)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.ZOOM_OUT -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    val next = (editor.textSizePx - 3f).coerceAtLeast(12f)
+                    editor.setTextSizePx(next)
+                    viewModel.setFontSizePx(next)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.ZOOM_RESET -> {
+                    viewModel.setFontSizePx(0f)
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.UNDO -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    if (editor.canUndo()) editor.undo()
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.REDO -> {
+                    val editor = handle.editor ?: return@onPreviewKeyEvent false
+                    if (editor.canRedo()) editor.redo()
+                    true
+                }
+                com.invictus.kodex.core.editor.KeyAction.OPEN_SETTINGS -> {
+                    onOpenSettings()
+                    true
+                }
+            }
+        },
         topBar = {
             EditorTopBar(
                 onBack = onBack,

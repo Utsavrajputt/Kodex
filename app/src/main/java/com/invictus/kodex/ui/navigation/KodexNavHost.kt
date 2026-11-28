@@ -237,6 +237,7 @@ fun KodexNavHost(
                 onOpenAppearance = { navController.navigate(Routes.SETTINGS_APPEARANCE) },
                 onOpenEditing = { navController.navigate(Routes.SETTINGS_EDITING) },
                 onOpenBehavior = { navController.navigate(Routes.SETTINGS_BEHAVIOR) },
+                onOpenKeybindings = { navController.navigate(Routes.SETTINGS_KEYBINDINGS) },
                 onOpenDiagnostics = { navController.navigate(Routes.SETTINGS_DIAGNOSTICS) },
                 onOpenGitHub = { navController.navigate(Routes.SETTINGS_GITHUB) },
                 onOpenAi = com.invictus.kodex.ai.AiFlavor.gate?.let { g -> { navController.navigate(g.settingsRoute) } },
@@ -307,6 +308,12 @@ fun KodexNavHost(
         }
         composable(Routes.SETTINGS_EDITING) {
             SettingsEditingScreen(
+                viewModel = editorViewModel,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.SETTINGS_KEYBINDINGS) {
+            com.invictus.kodex.feature.settings.SettingsKeybindingsScreen(
                 viewModel = editorViewModel,
                 onBack = { navController.popBackStack() },
             )

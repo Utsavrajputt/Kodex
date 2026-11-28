@@ -17,6 +17,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val SETTINGS_APPEARANCE = "settings/appearance"
     const val SETTINGS_EDITING = "settings/editing"
+    const val SETTINGS_KEYBINDINGS = "settings/keybindings"
     const val SETTINGS_BEHAVIOR = "settings/behavior"
     const val SETTINGS_TERMINAL = "settings/terminal"
     const val SETTINGS_DIAGNOSTICS = "settings/diagnostics"

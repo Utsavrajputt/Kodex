@@ -183,6 +183,114 @@ object DuplicateLineAction : EditorAction {
     }
 }
 
+object CopyLineUpAction : EditorAction {
+    override val id = "copy_line_up"
+    override val labelRes = R.string.shortcut_copy_line_up
+
+    override fun perform(editor: CodeEditor, filePath: String?, context: Context) {
+        try {
+            val range = selectionOrCurrentLine(editor)
+            val col = editor.cursor.leftColumn
+            val lines = linesOf(editor)
+            val block = (range.startLine..range.endLine).joinToString("\n") { lines[it] }
+            editor.text.insert(range.startLine, 0, "$block\n")
+            editor.setSelection(range.startLine, col.coerceAtMost(lines[range.startLine].length), false)
+        } catch (_: Exception) {
+        }
+    }
+}
+
+object InsertLineBelowAction : EditorAction {
+    override val id = "insert_line_below"
+    override val labelRes = R.string.shortcut_insert_line_below
+
+    override fun perform(editor: CodeEditor, filePath: String?, context: Context) {
+        try {
+            val line = editor.cursor.rightLine
+            val endCol = editor.text.getColumnCount(line)
+            editor.text.insert(line, endCol, "\n")
+            editor.setSelection(line + 1, 0, false)
+        } catch (_: Exception) {
+        }
+    }
+}
+
+object InsertLineAboveAction : EditorAction {
+    override val id = "insert_line_above"
+    override val labelRes = R.string.shortcut_insert_line_above
+
+    override fun perform(editor: CodeEditor, filePath: String?, context: Context) {
+        try {
+            val line = editor.cursor.leftLine
+            editor.text.insert(line, 0, "\n")
+            editor.setSelection(line, 0, false)
+        } catch (_: Exception) {
+        }
+    }
+}
+
+object IndentLineAction : EditorAction {
+    override val id = "indent_line"
+    override val labelRes = R.string.shortcut_indent_line
+
+    override fun perform(editor: CodeEditor, filePath: String?, context: Context) {
+        try {
+            val range = selectionOrCurrentLine(editor)
+            for (line in range.startLine..range.endLine) {
+                editor.text.insert(line, 0, "    ")
+            }
+        } catch (_: Exception) {
+        }
+    }
+}
+
+object OutdentLineAction : EditorAction {
+    override val id = "outdent_line"
+    override val labelRes = R.string.shortcut_outdent_line
+
+    override fun perform(editor: CodeEditor, filePath: String?, context: Context) {
+        try {
+            val range = selectionOrCurrentLine(editor)
+            val lines = linesOf(editor)
+            for (line in range.startLine..range.endLine) {
+                val text = lines.getOrNull(line) ?: continue
+                val removeCount = when {
+                    text.startsWith("\t") -> 1
+                    else -> text.take(4).takeWhile { it == ' ' }.length
+                }
+                if (removeCount > 0) {
+                    editor.text.replace(line, 0, line, removeCount, "")
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+}
+
+object SelectLineAction : EditorAction {
+    override val id = "select_line"
+    override val labelRes = R.string.shortcut_select_line
+
+    override fun perform(editor: CodeEditor, filePath: String?, context: Context) {
+        try {
+            val lines = linesOf(editor)
+            val cursor = editor.cursor
+            val startLine = cursor.leftLine
+            val endLine = if (cursor.isSelected && cursor.rightLine + 1 < lines.size) {
+                cursor.rightLine + 1
+            } else {
+                cursor.rightLine
+            }
+            if (endLine + 1 < lines.size) {
+                editor.setSelectionRegion(startLine, 0, endLine + 1, 0)
+            } else {
+                editor.setSelectionRegion(startLine, 0, endLine, lines[endLine].length)
+            }
+        } catch (_: Exception) {
+        }
+    }
+}
+
 object DeleteLineAction : EditorAction {
     override val id = "delete_line"
     override val labelRes = R.string.qa_delete_line
