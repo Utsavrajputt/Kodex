@@ -45,6 +45,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -80,8 +81,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.invictus.kodex.R
 import com.invictus.kodex.KodexApp
 import com.invictus.kodex.core.git.GitOnboardingPrefs
-import com.invictus.kodex.feature.project.WorkspaceProjectSheet
-import com.invictus.kodex.feature.search.FileSearchOverlay
+import com.invictus.kodex.feature.project.OpenFileSheet
+import com.invictus.kodex.feature.project.OpenProjectSheet
 import com.invictus.kodex.feature.search.SearchBus
 import com.invictus.kodex.feature.project.ProjectsEffect
 import com.invictus.kodex.feature.project.ProjectsEvent
@@ -319,6 +320,7 @@ fun WorkspaceScreen(
                     state = state,
                     onEvent = viewModel::onEvent,
                     onOpenProjectSheet = { showProjectSheet = true },
+                    onOpenFile = { showFileSearch = true },
                     onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
                     onOpenCodeSearch = { onOpenCodeSearch(state.root) },
                     onOpenGitHub = { onOpenGitHub(state.root) },
@@ -401,6 +403,8 @@ fun WorkspaceScreen(
                 Box(m) {
                     WorkspaceEmptyEditorPane(
                         projectRoot = state.root,
+                        onOpenFolder = { showProjectSheet = true },
+                        onOpenFile = { showFileSearch = true },
                         onOpenSearch = { onOpenCodeSearch(state.root) },
                         onOpenGit = if (isGitRepo) ({ onOpenGit(state.root) }) else null,
                         onOpenSettings = onOpenSettings,
@@ -557,24 +561,19 @@ fun WorkspaceScreen(
     TreeDialogHost(dialog = state.dialog, onEvent = viewModel::onEvent)
 
     if (showFileSearch) {
-        FileSearchOverlay(
+        OpenFileSheet(
             root = state.root,
+            showHidden = state.showHidden,
             onOpen = { file ->
                 showFileSearch = false
                 onOpenFile?.invoke(file)
             },
             onDismiss = { showFileSearch = false },
-            onLocateInTree = { file ->
-                showFileSearch = false
-                SearchBus.requestReveal(file)
-            },
         )
-        androidx.activity.compose.BackHandler { showFileSearch = false }
     }
 
     if (showProjectSheet) {
-        // Change-project sheet inside the workspace: just Recents (Home keeps its own OpenProjectSheet).
-        WorkspaceProjectSheet(
+        OpenProjectSheet(
             state = projectsState,
             currentRoot = state.root,
             snackbarHostState = snackbarHostState,
@@ -691,6 +690,7 @@ private fun WorkspaceTopBar(
     state: FileTreeUiState,
     onEvent: (FileTreeEvent) -> Unit,
     onOpenProjectSheet: () -> Unit,
+    onOpenFile: () -> Unit,
     onOpenGit: (() -> Unit)? = null,
     onOpenCodeSearch: () -> Unit = {},
     onOpenGitHub: () -> Unit = {},
@@ -754,6 +754,23 @@ private fun WorkspaceTopBar(
                     Icon(XIcons.MoreVert, contentDescription = stringResource(R.string.action_more))
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.menu_open_folder)) },
+                        leadingIcon = { Icon(XIcons.FolderOpen, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onOpenProjectSheet()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.menu_open_file)) },
+                        leadingIcon = { Icon(XIcons.InsertDriveFile, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onOpenFile()
+                        },
+                    )
+                    HorizontalDivider()
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.action_refresh)) },
                         leadingIcon = { Icon(XIcons.Refresh, contentDescription = null) },
@@ -906,6 +923,8 @@ private fun ClipboardBar(clipboard: Clipboard, onClear: () -> Unit) {
 @Composable
 private fun WorkspaceEmptyEditorPane(
     projectRoot: File,
+    onOpenFolder: () -> Unit,
+    onOpenFile: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenGit: (() -> Unit)?,
     onOpenSettings: () -> Unit,
@@ -958,6 +977,27 @@ private fun WorkspaceEmptyEditorPane(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Button(
+                    onClick = onOpenFolder,
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(XIcons.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.menu_open_folder))
+                }
+                FilledTonalButton(
+                    onClick = onOpenFile,
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    Icon(XIcons.InsertDriveFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.menu_open_file))
+                }
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                FilledTonalButton(
                     onClick = onOpenSearch,
                     shape = RoundedCornerShape(14.dp),
                 ) {
@@ -965,7 +1005,7 @@ private fun WorkspaceEmptyEditorPane(
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.search_code_title))
                 }
-                    if (onOpenGit != null) {
+                if (onOpenGit != null) {
                     FilledTonalButton(
                         onClick = onOpenGit,
                         shape = RoundedCornerShape(14.dp),

@@ -136,6 +136,7 @@ private val HomeSectionGap = 20.dp
 fun HomeScreen(
     onOpenSettings: () -> Unit,
     onProjectOpened: () -> Unit,
+    onOpenFile: (File) -> Unit = {},
     onClone: () -> Unit = {},
     onConnectSsh: () -> Unit = {},
     onOpenTools: () -> Unit = {},
@@ -148,6 +149,7 @@ fun HomeScreen(
     val projectsState by projectsViewModel.uiState.collectAsStateWithLifecycle()
     val treeState by fileTreeViewModel.uiState.collectAsStateWithLifecycle()
     var showProjectSheet by rememberSaveable { mutableStateOf(false) }
+    var showFileSheet by rememberSaveable { mutableStateOf(false) }
     var showNewSheet by rememberSaveable { mutableStateOf(false) }
     var searchRequested by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -305,12 +307,19 @@ fun HomeScreen(
                                 Text(stringResource(R.string.home_open_project))
                             }
                             FilledTonalButton(
+                                onClick = { showFileSheet = true },
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Icon(XIcons.InsertDriveFile, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.menu_open_file))
+                            }
+                            FilledTonalIconButton(
                                 onClick = { showNewSheet = true },
                                 shape = RoundedCornerShape(14.dp),
                             ) {
-                                Icon(XIcons.Add, contentDescription = null)
-                                Spacer(Modifier.width(6.dp))
-                                Text(stringResource(R.string.home_new_project))
+                                Icon(XIcons.Add, contentDescription = stringResource(R.string.home_new_project))
                             }
                         }
                     }
@@ -403,6 +412,11 @@ fun HomeScreen(
                                     Spacer(Modifier.width(8.dp))
                                     Text(stringResource(R.string.home_open_project))
                                 }
+                                FilledTonalButton(onClick = { showFileSheet = true }, shape = RoundedCornerShape(14.dp)) {
+                                    Icon(XIcons.InsertDriveFile, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(stringResource(R.string.menu_open_file))
+                                }
                                 FilledTonalIconButton(onClick = { showNewSheet = true }, shape = RoundedCornerShape(14.dp)) {
                                     Icon(XIcons.Add, contentDescription = stringResource(R.string.home_new_project))
                                 }
@@ -474,6 +488,26 @@ fun HomeScreen(
             onSshWorkspaceOpened = onProjectOpened,
             // Home screen already shows Recent Projects behind the sheet; no need to repeat it here.
             showRecent = false,
+        )
+    }
+
+    if (showFileSheet) {
+        com.invictus.kodex.feature.project.OpenFileSheet(
+            root = Environment.getExternalStorageDirectory(),
+            onOpen = { file ->
+                showFileSheet = false
+                val parent = file.parentFile
+                if (parent != null && !com.invictus.kodex.core.archive.ArchiveReader.isArchive(file)) {
+                    scope.launch {
+                        fileTreeViewModel.openProjectAndWait(parent, handoffOnly = true)
+                        onProjectOpened()
+                        onOpenFile(file)
+                    }
+                } else {
+                    onOpenFile(file)
+                }
+            },
+            onDismiss = { showFileSheet = false },
         )
     }
 

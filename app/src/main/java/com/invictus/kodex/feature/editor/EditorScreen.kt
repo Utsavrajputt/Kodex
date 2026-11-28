@@ -245,6 +245,7 @@ fun EditorScreen(
         topBar = {
             EditorTopBar(
                 onBack = onBack,
+                showBackButton = !isTablet,
                 navigationIcon = navigationIcon,
                 trailingAction = trailingAction,
                 actions = {
@@ -354,6 +355,7 @@ fun EditorScreen(
                     EditorOverflowMenu(
                         activePath = state.activePath,
                         anyDirty = state.tabs.any { it.dirty },
+                        onOpenFile = { showFileSearch = true },
                         onEvent = viewModel::onEvent,
                         onOpenSettings = onOpenSettings,
                     )
@@ -612,22 +614,15 @@ fun EditorScreen(
         }
     }
 
-    if (showFileSearch && projectRoot != null) {
-        com.invictus.kodex.feature.search.FileSearchOverlay(
-            root = projectRoot,
+    if (showFileSearch) {
+        com.invictus.kodex.feature.project.OpenFileSheet(
+            root = projectRoot ?: activePath?.let { File(it).parentFile } ?: android.os.Environment.getExternalStorageDirectory(),
             onOpen = { file ->
                 showFileSearch = false
                 viewModel.onEvent(EditorEvent.Open(file))
             },
             onDismiss = { showFileSearch = false },
-            onLocateInTree = { file ->
-                // Same hand-off as code search: the workspace reveals it when we pop back to it.
-                showFileSearch = false
-                com.invictus.kodex.feature.search.SearchBus.requestReveal(file)
-                onBack()
-            },
         )
-        androidx.activity.compose.BackHandler { showFileSearch = false }
     }
 
     state.pendingClose?.let { pending ->
@@ -650,6 +645,7 @@ fun EditorScreen(
 @Composable
 private fun EditorTopBar(
     onBack: () -> Unit,
+    showBackButton: Boolean,
     actions: @Composable () -> Unit,
     pinned: @Composable () -> Unit,
     overflow: @Composable () -> Unit,
@@ -666,7 +662,7 @@ private fun EditorTopBar(
         ) {
             if (navigationIcon != null) {
                 navigationIcon()
-            } else {
+            } else if (showBackButton) {
                 IconButton(onClick = onBack) {
                     Icon(XIcons.ArrowBack, contentDescription = stringResource(R.string.action_back))
                 }
@@ -705,6 +701,7 @@ private fun HistoryButton(
 private fun EditorOverflowMenu(
     activePath: String?,
     anyDirty: Boolean,
+    onOpenFile: () -> Unit,
     onEvent: (EditorEvent) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -714,6 +711,15 @@ private fun EditorOverflowMenu(
             Icon(XIcons.MoreVert, contentDescription = stringResource(R.string.action_more))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.menu_open_file)) },
+                leadingIcon = { Icon(XIcons.InsertDriveFile, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onOpenFile()
+                },
+            )
+            HorizontalDivider()
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.action_save_all)) },
                 leadingIcon = { Icon(XIcons.Save, contentDescription = null) },
